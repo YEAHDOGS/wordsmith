@@ -1,0 +1,35 @@
+{
+  "name": "wordsmith",
+  "description": "wordsmith, a notes app for ai agentic dev, made by DOGS.",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest",
+    "test:ui": "vitest run --ui",
+    "test:ui:coverage": "vitest run --ui --coverage",
+    "cloudflare:dev": "cd api && npx --yes wrangler pages dev ../dist --persist-to .wrangler/state",
+    "cloudflare:db:migrate:local": "cd api && npx --yes wrangler d1 migrations apply wordsmith-production --local --persist-to .wrangler/state",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:platforms": "node scripts/build-platforms.js android ios windows macos linux"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/svelte": "^5.4.2",
+    "jsdom": "^30.1.1",
+    "svelte": "^5.57.3",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.3",
+    "@tauri-apps/cli": "^2.12.4"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.62.0",
+    "@tauri-apps/api": "^2.12.4"
+  }
+}

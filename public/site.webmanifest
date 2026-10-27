@@ -1,0 +1,14 @@
+{
+  "name": "wordsmith",
+  "short_name": "wordsmith",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "display": "standalone"
+}
