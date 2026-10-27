@@ -9,7 +9,7 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
 // Timeline entries in note_events, written by the server on every interaction.
-export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished'];
+export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
 
 // Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
@@ -40,6 +40,12 @@ export const LOUD_PRIORITY = PRIORITY_LABELS.indexOf('High');
 // keeps the two columns in step (saveNotes in api/lib/notes.js).
 export const LEGACY_PRIORITY = [0, 0, 0, 1, 2, 3];
 export const MAX_LEGACY_PRIORITY = Math.max(...LEGACY_PRIORITY);
+// Note difficulty (notes.difficulty): 0 = unrated, then 1..5. Index = stored value. Agents triage with it: up to
+// SMALL_DIFFICULTY is a small fix that can ship in the day's batch PR; above it waits for a talk with the owner.
+export const DIFFICULTY_LABELS = ['Unrated', 'Trivial', 'Easy', 'Medium', 'Hard', 'Epic'];
+export const MAX_DIFFICULTY = DIFFICULTY_LABELS.length - 1;
+export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
+export const MAX_ANALYSIS = 20_000;
 
 /** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number }} FieldRule */
 
@@ -75,12 +81,16 @@ export const MODELS = {
     position: { type: 'real', nullable: true, default: null },
     pull_requests: { type: 'prs', max: MAX_PRS_PER_NOTE, default: [] },
     assignee: { type: 'text', max: MAX_NAME, default: '' },
+    difficulty: { type: 'int', min: 0, max: MAX_DIFFICULTY, default: 0 },
+    // An agent's triage notes (scope, files, plan, work done) and the batch it ships in. See POST /api/v1/notes/:id/analysis.
+    analysis: { type: 'text', max: MAX_ANALYSIS, default: '' },
+    batch: { type: 'text', max: MAX_NAME, default: '' },
   },
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS ={ projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at'] };
+export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests'];

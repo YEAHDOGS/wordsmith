@@ -1,5 +1,7 @@
 <script>
   // Notes as a staggered masonry (Google Keep style): two columns on phones, more as the screen widens.
+  // Toolbar: select all, then three toggles: order, grouping, and a feature-state filter (All, Requested, In progress,
+  // Complete) that shows up once the list holds features.
   // Reading order runs left to right; each note goes into the currently shortest column. Heights are estimated from
   // content, not measured, so cards never jump after they render. Two toggles: the order (newest updated, newest
   // created, highest priority, or manual) and grouping by nothing, project, or season (winter is December to February).
@@ -15,7 +17,9 @@
   import Square from '@lucide/svelte/icons/square';
   import SquareCheck from '@lucide/svelte/icons/square-check';
   import SquareMinus from '@lucide/svelte/icons/square-minus';
-  import { ui, GROUPS, ORDERS, TIME_ORDERS } from '../lib/ui.svelte.js';
+  import ListFilter from '@lucide/svelte/icons/list-filter';
+  import { ui, GROUPS, ORDERS, STATE_FILTERS, TIME_ORDERS } from '../lib/ui.svelte.js';
+  import { STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
   import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
@@ -57,6 +61,8 @@
   const DECEMBER = 11;
   const TOGGLE = 'spring press flex items-center gap-1.5 bg-app px-2.5 py-1 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   const NO_PROJECT = 'No project';
+  const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
+  const FILTERED_EMPTY = 'No features in this state.';
 
   let width = $state(0);
   const columnCount = $derived.by(() => {
@@ -93,10 +99,14 @@
     return `${group}:${group === 'project' ? projectName(note) : seasonOf(note[timeField])}`;
   }
 
+  // The state filter only matters once there are features to filter; it stays visible while set, so it can be undone.
+  const hasFeatures = $derived(ui.stateFilter !== 'all' || notes.some((note) => note.kind === 'feature'));
+  const shown = $derived(notes.filter((note) => ui.showsState(note)));
+
   const sorted = $derived.by(() => {
     const compare = COMPARE[ui.order] ?? COMPARE.updated;
-    if (group !== 'project') return [...notes].sort(compare);
-    return [...notes].sort((a, b) => {
+    if (group !== 'project') return [...shown].sort(compare);
+    return [...shown].sort((a, b) => {
       const [nameA, nameB] = [projectName(a), projectName(b)];
       if (nameA !== nameB) return nameA === NO_PROJECT ? 1 : nameB === NO_PROJECT ? -1 : nameA.localeCompare(nameB);
       return compare(a, b);
@@ -155,11 +165,11 @@
    * @param {{ key: string, notes: any[] }} section @param {any} note @param {number} index
    */
   function drop(section, note, index) {
-    const shown = section.notes.filter((other) => other.id !== note.id);
+    const others = section.notes.filter((other) => other.id !== note.id);
     const pinned = section.key === 'pinned';
     const timeOrder = TIME_ORDERS.includes(/** @type {any} */ (ui.order));
-    const list = timeOrder ? [...shown].sort(COMPARE.manual) : shown;
-    const [before, after] = [shown[index - 1], shown[index]];
+    const list = timeOrder ? [...others].sort(COMPARE.manual) : others;
+    const [before, after] = [others[index - 1], others[index]];
     const slot = !timeOrder ? index : before ? list.indexOf(before) + 1 : after ? list.indexOf(after) : list.length;
     for (const { id, patch } of placeNote(list, note, slot, ui.order === 'priority' && note.kind === 'feature')) {
       store.update('notes', id, id === note.id && Boolean(note.pinned) !== pinned ? { ...patch, pinned } : patch);
@@ -214,9 +224,9 @@
 
 <div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
   {#if notes.length}
-    <div class="flex items-center justify-end gap-2 pt-2 pb-1">
+    <div class="flex items-center justify-end gap-2 pt-2 pb-2 sm:pt-4">
       <button class="spring press mr-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-line px-2.5 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink"
-        onclick={() => ui.selectAll(notes.map((note) => note.id))} title="Select every note here to copy or archive them together">
+        onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together">
         <CheckCheck class="size-3.5" />Select all
       </button>
       <div class="flex gap-px border border-line bg-line" role="group" aria-label="Sort notes">
@@ -239,12 +249,24 @@
             {/each}
           </span>
         </button>
+        {#if hasFeatures}
+          {@const style = ui.stateFilter === 'all' ? null : STATE_STYLE[ui.stateFilter]}
+          <button class="{TOGGLE} {style ? style.text : ''}" onclick={() => ui.setStateFilter(STATE_FILTERS[(STATE_FILTERS.indexOf(ui.stateFilter) + 1) % STATE_FILTERS.length])}
+            title="Showing {STATE_FILTER_LABELS[ui.stateFilter].toLowerCase()}. Tap to cycle {STATE_FILTERS.map((option) => STATE_FILTER_LABELS[option]).join(', ')}" aria-label="Feature state: {STATE_FILTER_LABELS[ui.stateFilter]}">
+            <ListFilter class="size-3.5 shrink-0" />
+            <span class="grid">
+              {#each STATE_FILTERS as option (option)}
+                <span class="spring col-start-1 row-start-1 {ui.stateFilter === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.stateFilter !== option}>{STATE_FILTER_LABELS[option]}</span>
+              {/each}
+            </span>
+          </button>
+        {/if}
       </div>
     </div>
   {/if}
 
-  {#if !notes.length}
-    <p class="px-4 py-16 text-center text-fluid-sm text-ink-faint">{empty}</p>
+  {#if !shown.length}
+    <p class="px-4 py-16 text-center text-fluid-sm text-ink-faint">{notes.length ? FILTERED_EMPTY : empty}</p>
   {:else}
     {#each sections as section (section.key)}
       {#if section.title}

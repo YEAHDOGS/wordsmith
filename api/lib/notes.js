@@ -1,6 +1,7 @@
 // Every note write (app sync, agent API, PR poll, GitHub webhook) goes through saveNotes, which applies the
 // feature lifecycle, stamps started_at / completed_at and appends note_events in the same D1 batch.
 import { LEGACY_PRIORITY, cleanRow, newRow } from '../../src/lib/models.js';
+import { HttpError } from './http.js';
 import { upsertStatement } from './rows.js';
 
 // Autosave sends many small edits; only one "edited" event is logged per note per window.
@@ -58,6 +59,11 @@ function lifecycle(before, after, now, actor) {
   if (after.state !== STATE_COMPLETE) after.completed_at = null;
 
   if (!before) return events;
+  // Triage written or changed (POST /api/v1/notes/:id/analysis, or PATCH): stamp it and put it on the timeline.
+  if (!after.deleted_at && ((before.analysis ?? '') !== after.analysis || (before.batch ?? '') !== after.batch)) {
+    after.analyzed_at = now;
+    events.push({ type: 'analyzed', data: { difficulty: after.difficulty, batch: after.batch } });
+  }
   if (before.status !== after.status && after.status) events.push({ type: 'status', data: { text: after.status } });
   if (before.assignee !== after.assignee && after.assignee) events.push({ type: 'assigned', data: { to: after.assignee } });
   if (Boolean(before.public) !== Boolean(after.public)) events.push({ type: after.public ? 'published' : 'unpublished', data: {} });
@@ -82,14 +88,20 @@ export async function saveNotes(env, userId, actor, changes) {
   const statements = [];
   const saved = [];
   for (const { before, patch, extraEvents = [] } of changes) {
-    const cleaned = cleanRow('notes', patch);
+    // A bad field from an agent (difficulty 9, unknown state) is the caller's mistake: 400 with the reason, not a 500.
+    let cleaned;
+    try {
+      cleaned = cleanRow('notes', patch);
+    } catch (error) {
+      throw new HttpError(400, /** @type {Error} */ (error).message);
+    }
     // Publishing is the owner's call: agent tokens and GitHub can never make a note public.
     if (actor.type !== 'user') delete cleaned.public;
     const base = before ?? newRow('notes', { id: patch.id, created_at: Math.min(Number(patch.created_at) || now, now) });
     const after = { ...base, ...cleaned, user_id: userId, updated_at: now };
     if (patch.deleted_at !== undefined) after.deleted_at = patch.deleted_at ? Math.min(Number(patch.deleted_at), now) : null;
     // Deleted notes keep only their tombstone on the server.
-    if (after.deleted_at) Object.assign(after, { title: '', body: '', public: false });
+    if (after.deleted_at) Object.assign(after, { title: '', body: '', analysis: '', public: false });
     if (patch.prs_checked_at !== undefined) after.prs_checked_at = patch.prs_checked_at;
     // Two priority columns while old builds are around (migration 20261027040000): a patch without priority_level
     // comes from an old build, or a row cached before the upgrade, so a changed old-scale value is converted up.

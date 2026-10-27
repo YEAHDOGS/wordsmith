@@ -3,11 +3,16 @@
   // Desktop and tablet: side by side. Phones: swipe sideways or tap the tabs.
   // Hold and slide a card (or drag it with a mouse) to move it: within Requested it sets the claim order, taking the
   // priority of where it lands; into another column it changes state. Alt+Up/Down reorders, Alt+Left/Right changes column.
+  // Each column header has a check box that selects (or clears) every card in it, like the bands on the notes page.
   import { tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
+  import Square from '@lucide/svelte/icons/square';
+  import SquareCheck from '@lucide/svelte/icons/square-check';
+  import SquareMinus from '@lucide/svelte/icons/square-minus';
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import { store } from '../lib/store.svelte.js';
+  import { ui } from '../lib/ui.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
   import { FEATURE_STATES } from '../lib/models.js';
   import { measure, play } from '../lib/flip.js';
@@ -87,6 +92,12 @@
     };
   }
 
+  /** A column's check box: picks every card in it, or clears them when all are picked already. @param {any[]} list */
+  function toggleColumn(list) {
+    if (list.every((note) => ui.selected.has(note.id))) for (const note of list) ui.selected.delete(note.id);
+    else ui.selectAll(list.map((note) => note.id));
+  }
+
   /** Phones: tap a tab to slide to its lane. @param {string} state */
   function showLane(state) {
     activeTab = state;
@@ -119,9 +130,14 @@
     {#each columns as column (column.state)}
       {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (column.state)]}
       {@const shown = drag.arrange(column.shown, column.state)}
+      {@const picked = column.all.filter((note) => ui.selected.has(note.id)).length}
       <section class="flex min-h-0 snap-start flex-col bg-app spring {drag.id && drag.zone === column.state ? 'bg-surface-raised' : ''}" aria-label={style.label}
         use:dropzone={zoneFor(column)}>
         <header class="hidden items-center gap-2 border-b border-line px-4 py-2.5 md:flex">
+          <button class="spring press -m-1 p-1 disabled:opacity-40 {picked ? 'text-accent' : 'text-ink-faint hover:text-ink'}" role="checkbox" disabled={!column.all.length}
+            aria-checked={picked && picked === column.all.length ? 'true' : picked ? 'mixed' : 'false'} aria-label="Select all in {style.label}" title="Select all in {style.label}" onclick={() => toggleColumn(column.all)}>
+            {#if picked && picked === column.all.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}
+          </button>
           <span class="size-2 rounded-full {style.dot}"></span>
           <h2 class="text-sm tv:text-xl font-semibold {style.text}">{style.label}</h2>
           <span class="ml-auto font-mono text-xs text-ink-faint">{column.all.length}</span>

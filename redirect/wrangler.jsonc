@@ -1,0 +1,16 @@
+{
+  // wordsmith-redirect: the short domains, each a permanent redirect to wordsmith.dogs.red (see worker.js).
+  // Deployed by scripts/deploy.js right after the app, on every push to master. Custom domains create their own DNS
+  // records on the dogs.red zone. Requests here are rare (only typed short links), so they barely touch the quota.
+  "name": "wordsmith-redirect",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-27",
+  "routes": [
+    { "pattern": "ws.dogs.red", "custom_domain": true },
+    { "pattern": "word.dogs.red", "custom_domain": true },
+    { "pattern": "smith.dogs.red", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": false }
+}

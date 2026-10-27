@@ -7,6 +7,7 @@
   import { fade, fly } from 'svelte/transition';
   import { store } from '../lib/store.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
+  import { DIFFICULTY_LABELS } from '../lib/models.js';
   import { clockTime, dayLabel, duration, fullTime } from '../lib/time.js';
 
   /** @type {{ note: any }} */
@@ -58,6 +59,7 @@
       case 'detached': return `removed ${data.name}`;
       case 'published': return 'made it public';
       case 'unpublished': return 'made it private';
+      case 'analyzed': return `triaged it: ${DIFFICULTY_LABELS[data.difficulty] ?? DIFFICULTY_LABELS[0]}${data.batch ? `, batch ${data.batch}` : ''}`;
       default: return event.type;
     }
   }
