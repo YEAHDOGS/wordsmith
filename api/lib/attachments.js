@@ -1,6 +1,6 @@
 // Attachment storage in R2 with hard caps kept below R2's free tier (10 GB stored, 1M Class A writes and 10M Class B reads
 // per month). That allowance is shared by the whole Cloudflare account (other buckets, and wordsmith's staging and production),
-// so each environment gets its own slice via R2_MAX_GB / R2_MAX_MONTHLY_WRITES / R2_MAX_MONTHLY_READS in api/wrangler.jsonc.
+// so each environment gets its own slice via R2_MAX_GB / R2_MAX_MONTHLY_WRITES / R2_MAX_MONTHLY_READS in wrangler.jsonc.
 // When a cap is reached the request is refused with 507 instead of costing money. The bucket is private: every byte goes through here.
 import { IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_FILE_NAME, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, VIDEO_TYPES } from '../../src/lib/models.js';
 import { HttpError } from './http.js';

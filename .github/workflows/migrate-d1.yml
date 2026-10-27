@@ -36,14 +36,12 @@ jobs:
           cache: npm
       - name: Apply staging D1 migrations
         if: inputs.environment == 'staging'
-        working-directory: api
         run: npx --yes wrangler d1 migrations apply "$PROJECT_NAME-staging" --remote --env preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Apply production D1 migrations
         if: inputs.environment == 'production'
-        working-directory: api
         run: npx --yes wrangler d1 migrations apply "$PROJECT_NAME-production" --remote
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

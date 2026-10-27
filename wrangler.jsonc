@@ -1,9 +1,13 @@
 {
-  // wordsmith runs as one Worker: static assets from ../dist (free, never invoke the Worker) plus /api/* through worker.js.
+  // wordsmith runs as one Worker: static assets from dist/ (free, never invoke the Worker) plus /api/* through api/worker.js.
   // Top level is PRODUCTION: Workers Builds' `npx wrangler deploy` on master deploys exactly this.
+  // This file lives at the repo root so `npx wrangler deploy` finds it whatever directory the build runs from
+  // (Wrangler searches upward). Without it, Wrangler auto-detects Vite and ships dist/ alone, with no API or bindings.
   // `wrangler dev` uses these bindings too, but only as local Miniflare copies under .wrangler/state, never the remote ones.
   "name": "wordsmith",
-  "main": "worker.js",
+  "main": "api/worker.js",
+  // Every deploy builds the web app first, so dist/ is never stale or missing whatever the Builds build command is.
+  "build": { "command": "npm run build", "cwd": ".", "watch_dir": "src" },
   "compatibility_date": "2026-10-27",
   // Production answers only on its custom domain: OAuth callbacks are built from the request's origin, so a second
   // address (workers.dev) would send sign-ins to a callback GitHub doesn't know.
@@ -12,7 +16,7 @@
   // Per-version preview links would run untested versions against production data, so they stay off.
   "preview_urls": false,
   "assets": {
-    "directory": "../dist",
+    "directory": "./dist",
     "binding": "ASSETS",
     // Client-side routes (#/...) and deep links fall back to index.html.
     "not_found_handling": "single-page-application",
@@ -21,7 +25,7 @@
   },
   "observability": { "enabled": true },
   "d1_databases": [
-    { "binding": "DB", "database_name": "wordsmith-production", "database_id": "d8ad86e0-ab1d-49d3-a72f-7951c1518503", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "wordsmith-production", "database_id": "d8ad86e0-ab1d-49d3-a72f-7951c1518503", "migrations_dir": "api/migrations" }
   ],
   "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments" }],
   // R2's free allowance (10 GB, 1M writes, 10M reads a month) is shared account-wide. dogs-data already uses ~5.75 GB,
@@ -33,13 +37,13 @@
       "workers_dev": true,
       "preview_urls": false,
       "assets": {
-        "directory": "../dist",
+        "directory": "./dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
         "run_worker_first": ["/api/*"]
       },
       "d1_databases": [
-        { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "migrations" }
+        { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }
       ],
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
       "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }

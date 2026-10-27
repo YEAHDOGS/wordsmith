@@ -14,7 +14,7 @@ const REDIRECT_STATUS = 303;
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1'];
 
 /**
- * The dev-only login button: needs DEV_LOGIN=true (set only in api/.dev.vars) AND a localhost request,
+ * The dev-only login button: needs DEV_LOGIN=true (set only in .dev.vars) AND a localhost request,
  * so it can never switch on in preview or production.
  * @param {Request} request
  * @param {Record<string, any>} env

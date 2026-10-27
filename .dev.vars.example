@@ -1,5 +1,5 @@
-# Copy to api/.dev.vars for local `wrangler pages dev`. Never commit .dev.vars.
-# In preview and production set these as Pages secrets (wrangler pages secret put NAME), never as plain vars.
+# Copy to .dev.vars (repo root, next to wrangler.jsonc) for local `wrangler dev`. Never commit .dev.vars.
+# In preview and production set these as Worker secrets (npx wrangler secret put NAME), never as plain vars.
 
 # Local only: shows a "Local dev" sign-in button on localhost so you can work before OAuth apps exist.
 DEV_LOGIN=true

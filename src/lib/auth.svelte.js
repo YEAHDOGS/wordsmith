@@ -93,7 +93,7 @@ class Auth {
     this.device = null;
   }
 
-  /** Local development only (DEV_LOGIN in api/.dev.vars on localhost). */
+  /** Local development only (DEV_LOGIN in .dev.vars on localhost). */
   async devSignIn() {
     const { token } = await api('/api/auth/dev', { method: 'POST' });
     if (IS_NATIVE) sessionToken.set(token);

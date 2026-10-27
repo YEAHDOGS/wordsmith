@@ -20,14 +20,14 @@ Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Sett
 ## Getting started (local)
 ```
 npm install
-cp api/.dev.vars.example api/.dev.vars    # DEV_LOGIN=true gives a "Local dev" sign-in on localhost
+cp .dev.vars.example .dev.vars            # DEV_LOGIN=true gives a "Local dev" sign-in on localhost
 npm run build
 npm run cloudflare:db:migrate:local
 npm run cloudflare:dev                     # http://localhost:8788, the Worker + local D1 + local R2
 ```
 For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to :8788.
 
-`api/package.json` marks `api/` as Wrangler's project root, so local state lands in `api/.wrangler/`.
+`wrangler.jsonc` sits at the repo root, so run Wrangler from there; local state lands in `.wrangler/`.
 
 ## Cost guards (free tier)
 
@@ -39,14 +39,14 @@ For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to 
 ## Layout
 
 - `src/`: the Svelte web app (the product).
-- `api/`: the Cloudflare Worker. `worker.js` serves `dist/` as static assets and routes `/api/*` to the handlers in `functions/`. Also SQL migrations (`migrations/`) and `wrangler.jsonc`. Run Wrangler from this folder.
+- `api/`: the Cloudflare Worker. `worker.js` serves `dist/` as static assets and routes `/api/*` to the handlers in `functions/`. Also SQL migrations (`migrations/`). Its config is `wrangler.jsonc` at the repo root.
 - `src/tauri/`: the Tauri 2 native shell, when native platforms are selected.
 
 ## The three environments
 
 Never use production data in local development or staging. Staging contains synthetic test data only. Native apps call Cloudflare APIs and never connect directly to D1.
 
-- **Local (your laptop)**: Run the Worker with `npm run cloudflare:dev` (`npx wrangler dev` from `api/`). Wrangler uses Miniflare to simulate the Worker, D1 and R2. Local D1 uses a SQLite file under `api/.wrangler/state/`; it stays on your machine and is ignored by Git. Use SQL migrations and test data.
+- **Local (your laptop)**: Run the Worker with `npm run cloudflare:dev` (`npx wrangler dev` from the repo root). Wrangler uses Miniflare to simulate the Worker, D1 and R2. Local D1 uses a SQLite file under `.wrangler/state/`; it stays on your machine and is ignored by Git. Use SQL migrations and test data.
 - **Staging / Preview (pull requests and testing)**: Deploy the separate `wordsmith-preview` Worker by hand with `npm run cloudflare:deploy:preview`. All previews share a dedicated staging D1 database with synthetic test data; keep migrations additive and do not reset shared staging data.
 - **Production (live users)**: the `wordsmith` Worker serves production traffic on Cloudflare's edge and uses a separate production D1 database. Workers Builds deploys the `wordsmith` Worker on every push to `master`.
 
@@ -54,11 +54,11 @@ Configure separate preview and production D1 bindings in Cloudflare. Set a least
 
 ### Before the first deploy
 
-Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through **Workers Builds**: root directory `api`, build command `cd .. && npm ci && npm run build`, deploy command `npx wrangler deploy`. Every push to `master` deploys it. Static assets are served without invoking the Worker (`run_worker_first` is `/api/*` only), so only API calls count toward the free 100k requests/day. Staging is a separate Worker, `wordsmith-preview`, deployed by hand with `npm run cloudflare:deploy:preview`. Secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per Worker with `npx wrangler secret put NAME` (add `--env preview` for staging).
+Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through **Workers Builds**: root directory `/` (repo root, where `wrangler.jsonc` lives), build command `npm ci`, deploy command `npx wrangler deploy`, non-production branch deploy command `npx wrangler versions upload`. `wrangler.jsonc` runs `npm run build` before every deploy, so `dist/` is always fresh. Never put `wrangler deploy` in the build command or use `wrangler pages deploy`: production is a Worker, not a Pages project. Never deploy production by hand; it ships only from a push to `master`. Every push to `master` deploys it. Static assets are served without invoking the Worker (`run_worker_first` is `/api/*` only), so only API calls count toward the free 100k requests/day. Staging is a separate Worker, `wordsmith-preview`, deployed by hand with `npm run cloudflare:deploy:preview`. Secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per Worker with `npx wrangler secret put NAME` (add `--env preview` for staging).
 
 Builds never run migrations. Apply them before pushing code that needs them, staging first: `npx wrangler d1 migrations apply wordsmith-staging --remote --env preview`, then `npx wrangler d1 migrations apply wordsmith-production --remote`, or run the manual **Migrate Cloudflare D1** workflow (needs `CLOUDFLARE_API_TOKEN` with D1 edit and `CLOUDFLARE_ACCOUNT_ID` as repo secrets).
 
-For the local Worker and D1, run `npm install`, `npm run build`, then `npm run cloudflare:dev`. Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
+For the local Worker and D1, run `npm install`, then `npm run cloudflare:dev` (it builds `dist/` first). Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
 
 ## Browser support
 - **The app** runs on Chrome/Edge 99+, Firefox 97+ and Safari 15.4+. Vite lowers JS and CSS to these targets in `vite.config.js`.

@@ -1,5 +1,5 @@
 // POST /api/auth/dev - local development only (see devLoginEnabled). Signs in a fixed local user so the app
-// can be exercised under `wrangler pages dev` before any OAuth app exists. Returns 404 everywhere else.
+// can be exercised under `wrangler dev` before any OAuth app exists. Returns 404 everywhere else.
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, cookie, createSession } from '../../../lib/auth.js';
 import { HttpError, json } from '../../../lib/http.js';
 import { devLoginEnabled } from '../../../lib/login.js';

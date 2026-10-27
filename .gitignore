@@ -38,5 +38,5 @@ src/tauri/gen/
 *.sw?
 
 # Local Worker secrets
-api/.dev.vars
+.dev.vars
 
