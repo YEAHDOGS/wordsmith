@@ -1,5 +1,5 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, columnOf, isId, parsePullRequestUrl } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
@@ -30,32 +30,59 @@ export async function resolveProject(env, userId, ref) {
   return toApi(row);
 }
 
-/** Labels and projects keyed by id, for readable agent output. @param {Record<string, any>} env @param {string} userId */
+/** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */
 async function lookups(env, userId) {
-  const [projects, labels] = await env.DB.batch([
+  const [projects, labels, boards] = await env.DB.batch([
     env.DB.prepare('SELECT id, name, repo FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
-    env.DB.prepare('SELECT id, name FROM labels WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
+    env.DB.prepare('SELECT id, name, color FROM labels WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
+    env.DB.prepare('SELECT scope, columns FROM boards WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at').bind(userId),
   ]);
+  /** @type {Map<string, { id: string, name: string, state: string }[]>} */
+  const columns = new Map();
+  // First board per scope wins, the same as the app (src/lib/board.js columnsFor).
+  for (const row of boards.results) if (!columns.has(row.scope)) columns.set(row.scope, safeJson(row.columns, DEFAULT_COLUMNS));
   return {
     projects: new Map(projects.results.map((/** @type {any} */ row) => [row.id, row])),
     labels: new Map(labels.results.map((/** @type {any} */ row) => [row.id, row.name])),
+    labelRows: labels.results,
+    columns,
   };
 }
 
+/** The columns of a note's board: its project's, or the Features page's. @param {Awaited<ReturnType<typeof lookups>>} maps @param {string | null} projectId */
+function boardOf(maps, projectId) {
+  const scope = projectId || FEATURES_SCOPE;
+  return { scope, columns: maps.columns.get(scope) ?? DEFAULT_COLUMNS };
+}
+
 /**
- * A note as agents see it: project and label names inlined, and priority on the 0..5 scale (the same value as
- * priority_level; the old 0..3 column that older app builds still use is not shown to agents).
+ * A note as agents see it: project, label and board column names inlined, and priority on the 0..5 scale (the same
+ * value as priority_level; the old 0..3 column that older app builds still use is not shown to agents).
  * @param {Record<string, any>} note
  * @param {Awaited<ReturnType<typeof lookups>>} maps
  */
 function present(note, maps) {
   const project = note.project_id ? maps.projects.get(note.project_id) : null;
+  const column = columnOf(note, boardOf(maps, note.project_id).columns);
   return {
     ...note,
     priority: note.priority_level,
     project: project ? { id: project.id, name: project.name, repo: project.repo } : null,
     labels: note.label_ids.map((/** @type {string} */ id) => maps.labels.get(id)).filter(Boolean),
+    column: column ? { id: column.id, name: column.name, state: column.state } : null,
   };
+}
+
+/** Every board: the Features page and each project, with its columns (the default three if never edited). @param {Record<string, any>} env @param {string} userId */
+export async function listBoards(env, userId) {
+  const maps = await lookups(env, userId);
+  const scopes = [{ scope: FEATURES_SCOPE, project: null }, ...[...maps.projects.values()].map((project) => ({ scope: project.id, project: { id: project.id, name: project.name } }))];
+  return scopes.map(({ scope, project }) => ({ scope, project, custom: maps.columns.has(scope), columns: maps.columns.get(scope) ?? DEFAULT_COLUMNS }));
+}
+
+/** Every label. @param {Record<string, any>} env @param {string} userId */
+export async function listLabels(env, userId) {
+  return (await lookups(env, userId)).labelRows;
 }
 
 /**
@@ -169,6 +196,14 @@ export async function updateNote(env, userId, actor, id, input) {
   if (input.priority !== undefined) patch.priority_level = input.priority;
   if (typeof input.body_append === 'string') patch.body = `${patch.body ?? before.body}\n\n${input.body_append}`.trim();
   if (input.project !== undefined) patch.project_id = (await resolveProject(env, userId, input.project))?.id ?? null;
+  // Move to a column (id or name) on the note's board, its project's or the Features page's; the column's role sets the state.
+  if (input.column !== undefined) {
+    const { columns } = boardOf(await lookups(env, userId), patch.project_id !== undefined ? patch.project_id : before.project?.id ?? null);
+    const wanted = String(input.column).toLowerCase();
+    const column = columns.find((entry) => entry.id === input.column || entry.name.toLowerCase() === wanted);
+    if (!column) throw new HttpError(400, `No column "${input.column}" on this board. GET /api/v1/boards lists them.`);
+    Object.assign(patch, { column_id: column.id, state: column.state });
+  }
   const ids = await labelIds(env, userId, input.labels);
   if (ids) patch.label_ids = ids;
 

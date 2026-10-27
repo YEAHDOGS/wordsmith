@@ -16,7 +16,8 @@
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
-  import { columnOf, columnsFor } from '../lib/board.js';
+  import { columnOf } from '../lib/models.js';
+  import { columnsFor } from '../lib/board.js';
   import { measure, play } from '../lib/flip.js';
   import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
 

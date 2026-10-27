@@ -130,6 +130,17 @@ export function parsePullRequestUrl(url) {
   return { url: `https://github.com/${match[1]}/pull/${match[2]}`, repo: match[1], number: Number(match[2]) };
 }
 
+/**
+ * The column a feature sits in: the one it was put in, while that column exists and plays the feature's state;
+ * otherwise the first column for its state (an agent moved it, or its column was deleted or changed role).
+ * @param {any} note @param {{ id: string, name: string, state: string }[]} columns
+ */
+export function columnOf(note, columns) {
+  const own = columns.find((column) => column.id === note.column_id);
+  if (own?.state === note.state) return own;
+  return columns.find((column) => column.state === note.state) ?? columns[0];
+}
+
 /** @param {unknown} value */
 export const isId = (value) => typeof value === 'string' && ID_PATTERN.test(value);
 
