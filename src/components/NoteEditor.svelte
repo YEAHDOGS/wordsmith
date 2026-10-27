@@ -23,7 +23,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
-  import { FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_PRIORITY, MAX_STATUS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
+  import { FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
   import { copyText, noteMarkdown } from '../lib/export.js';
   import { renderMarkdown } from '../lib/markdown.js';
@@ -34,7 +34,6 @@
 
   const SAVE_DEBOUNCE_MS = 400;
   const COPIED_MS = 1200;
-  const PRIORITY_LABELS = ['Normal', 'High', 'Urgent', 'Critical'];
   const FIELD = 'w-full border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none';
   const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
 
@@ -199,7 +198,7 @@
             <div class="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
               <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
               <select class="{FIELD} sm:w-auto" aria-label="Priority" value={note.priority} onchange={(event) => set({ priority: Number(event.currentTarget.value) })}>
-                {#each PRIORITY_LABELS.slice(0, MAX_PRIORITY + 1) as label, value (label)}<option {value}>{label}</option>{/each}
+                {#each PRIORITY_LABELS as label, value (label)}<option {value}>{label}</option>{/each}
               </select>
               <input value={note.assignee} maxlength={MAX_NAME} placeholder="Assignee" aria-label="Assignee" class="{FIELD} sm:w-32"
                 onchange={(event) => set({ assignee: event.currentTarget.value.trim() })} />

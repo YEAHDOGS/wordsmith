@@ -2,8 +2,8 @@
 // One note is a "# Title" section; several are joined with horizontal rules.
 import { store } from './store.svelte.js';
 import { STATE_STYLE } from './colors.js';
+import { PRIORITY_LABELS } from './models.js';
 
-const PRIORITY_LABELS = ['Normal', 'High', 'Urgent', 'Critical'];
 const NOTE_SEPARATOR = '\n\n---\n\n';
 const UNTITLED = 'Untitled note';
 

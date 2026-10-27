@@ -16,12 +16,14 @@
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
+  import { PRIORITY_LABELS } from '../lib/models.js';
 
   /** @type {{ note: any, showProject?: boolean, draggable?: boolean }} */
   let { note, showProject = true, draggable = false } = $props();
 
   const BODY_PREVIEW_CHARS = 600;
-  const PRIORITY_MARKS = ['', '!', '!!', '!!!'];
+  // Title marks per priority value (index = value). Low and Normal stay unmarked; High and up get louder.
+  const PRIORITY_MARKS = ['', '', '', '!', '!!', '!!!'];
   const HOLD_MS = 450;
   const HOLD_SLOP_PX = 10;
 
@@ -117,7 +119,7 @@
   <div class="flex items-start gap-2">
     {#if note.title}
       <h3 class="min-w-0 flex-1 text-fluid-sm font-semibold leading-snug text-ink">
-        {#if note.priority}<span class="mr-1 font-mono text-accent" aria-label="Priority {note.priority}">{PRIORITY_MARKS[note.priority]}</span>{/if}{note.title}
+        {#if PRIORITY_MARKS[note.priority]}<span class="mr-1 font-mono text-accent" aria-label="{PRIORITY_LABELS[note.priority]} priority">{PRIORITY_MARKS[note.priority]}</span>{/if}{note.title}
       </h3>
     {:else}
       <span class="flex-1"></span>

@@ -60,6 +60,10 @@ Builds never run migrations. Apply them before pushing code that needs them, sta
 
 For the local Worker and D1, run `npm install`, then `npm run cloudflare:dev` (it builds `dist/` first). Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
 
+## Versioning
+
+The app version is `v1.0.0.NN`: `NN` (two digits, zero-padded, growing past 99) goes up by one for every pull request merged into `master`. Nothing is committed on merge and no workflow runs on push. Instead `scripts/version.js` works it out during `npm run build` (which Workers Builds runs on every push to `master`): it counts merged PRs into `master` through the GitHub API, using `GITHUB_PR_TOKEN` or `GITHUB_TOKEN` when set (add the same build secret to production builds to avoid the unauthenticated rate limit) and anonymous requests otherwise. Offline, it counts first-parent merge commits with git; failing that the version is `1.0.0.dev`. It never fails the build. The app reads the result as `APP_VERSION` and `LATEST_PR` from `src/lib/version.js`. Run `node scripts/version.js` to see what a build would use. `package.json` and `tauri.conf.json` keep plain three-part semver.
+
 ## Browser support
 - **The app** runs on Chrome/Edge 99+, Firefox 97+ and Safari 15.4+. Vite lowers JS and CSS to these targets in `vite.config.js`.
 - **Static fallback**: older browsers (down to Chrome 40) and visitors with JS off get the plain HTML page in `index.html`, styled by `src/styles/legacy-fallback.css`.

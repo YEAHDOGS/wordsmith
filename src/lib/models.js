@@ -29,9 +29,11 @@ export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;
 export const MAX_SYNC_BATCH = 200;
-export const MAX_PRIORITY = 3;
+// Note priority: 0 = none, then 1..5 where 5 is the most important. Index = stored value; every UI reads these.
+export const PRIORITY_LABELS = ['None', 'Low', 'Normal', 'High', 'Urgent', 'Critical'];
+export const MAX_PRIORITY = PRIORITY_LABELS.length - 1;
 
-/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number }} FieldRule */
+/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number }} FieldRule */
 
 /** Writable fields per synced table, with defaults for new rows. @type {Record<string, Record<string, FieldRule & { default: any }>>} */
 export const MODELS = {
@@ -59,6 +61,8 @@ export const MODELS = {
     state: { type: 'enum', values: FEATURE_STATES, default: 'requested' },
     status: { type: 'text', max: MAX_STATUS, default: '' },
     priority: { type: 'int', min: 0, max: MAX_PRIORITY, default: 0 },
+    // Manual order from hold-and-drag. Lower sorts first; null = never placed by hand (fall back to the active sort).
+    position: { type: 'real', nullable: true, default: null },
     pull_requests: { type: 'prs', max: MAX_PRS_PER_NOTE, default: [] },
     assignee: { type: 'text', max: MAX_NAME, default: '' },
   },
@@ -111,6 +115,11 @@ function cleanField(name, rule, value) {
     const number = Number(value);
     if (!Number.isInteger(number) || number < rule.min || number > rule.max) throw new Error(`${name} must be ${rule.min}-${rule.max}`);
     return number;
+  }
+  if (rule.type === 'real') {
+    if (value === null && rule.nullable) return null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${name} must be a number`);
+    return value;
   }
   if (rule.type === 'id') {
     if (value === null && rule.nullable) return null;
