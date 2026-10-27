@@ -32,12 +32,14 @@ import * as v1NoteClaim from './functions/api/v1/notes/[id]/claim.js';
 import * as v1NoteAnalysis from './functions/api/v1/notes/[id]/analysis.js';
 import * as v1Batches from './functions/api/v1/batches.js';
 import * as sharedNote from './functions/n/[id].js';
-import { SHARE_PATH } from '../src/lib/models.js';
+import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
 const API_PREFIX = '/api';
 const READ_METHODS = ['GET', 'HEAD'];
 const NOT_FOUND = 404;
 const METHOD_NOT_ALLOWED = 405;
+// 308 keeps the method and body, so an API call to a short name isn't turned into a GET.
+const PERMANENT_REDIRECT = 308;
 const METHOD_EXPORTS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut', DELETE: 'onRequestDelete', HEAD: 'onRequestHead', OPTIONS: 'onRequestOptions' };
 
 // [pattern, handler module, runs the /api/v1 middleware]. ":name" segments become params, like the [name] in handler file names.
@@ -97,6 +99,8 @@ export default {
    */
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // Short names (ws., word., smith.dogs.red) send API and share-link requests on to the real address.
+    if (SHORT_HOSTS.includes(url.hostname)) return Response.redirect(`https://${APP_HOST}${url.pathname}${url.search}`, PERMANENT_REDIRECT);
     // Public notes (/n/<id>) are server-rendered pages, outside the API's CORS and JSON error handling.
     if (url.pathname.startsWith(SHARE_PATH) && READ_METHODS.includes(request.method)) {
       // Ids are URL-safe already, so the raw segment is used as is (isId rejects anything else).
