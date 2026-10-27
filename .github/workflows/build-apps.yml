@@ -1,8 +1,9 @@
 name: Build apps
 
 # Manual only: Actions → Build apps → Run workflow, then tick the platforms you want.
-# Every platform's installers land in one "build" artifact per platform, named like build/wordsmith-win-x64.exe.
-# Tick "release" to also publish them as a GitHub release tagged v<app version>; the app's Settings → Install app reads it.
+# Every installer is published unzipped as its own asset on a GitHub release tagged v<app version>
+# (e.g. wordsmith-win-x64.exe), listed in the release notes; the app's Settings → Install app reads it.
+# The per-platform Actions artifacts only carry files from the build jobs to the release job and expire after a day.
 on:
   workflow_dispatch:
     inputs:
@@ -34,10 +35,7 @@ on:
         description: API origin native apps call, e.g. https://wordsmith.dogs.red (blank = repo variable WORDSMITH_API_BASE)
         type: string
         default: ''
-      release:
-        description: Publish a GitHub release (tag v<app version>) with every installer built above. Settings → Install app downloads from the latest one.
-        type: boolean
-        default: false
+
 
 permissions:
   contents: read
@@ -154,13 +152,15 @@ jobs:
           name: ${{ matrix.platform }}
           path: build/*
           if-no-files-found: error
+          retention-days: 1
 
-  # Optional: gathers every platform's build/ files into one GitHub release tagged with the app version
-  # (scripts/version.js, e.g. v1.0.0.02). Runs when at least one native build succeeded; failed platforms are skipped.
+  # Gathers every platform's build/ files into one GitHub release tagged with the app version
+  # (scripts/version.js, e.g. v1.0.0.02), each file its own unzipped asset. Runs when at least one native build
+  # succeeded; failed platforms are skipped. Re-running at the same version replaces that release's files and list.
   release:
     name: Release
     needs: [plan, native]
-    if: ${{ !cancelled() && inputs.release && needs.plan.outputs.matrix != '[]' && contains(fromJSON('["success","failure"]'), needs.native.result) }}
+    if: ${{ !cancelled() && needs.plan.outputs.matrix != '[]' && contains(fromJSON('["success","failure"]'), needs.native.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -190,9 +190,21 @@ jobs:
           version=$(node -e 'import("./scripts/version.js").then(async (m) => console.log((await m.readVersion()).version))')
           case "$version" in *.dev) echo "Could not work out the app version; not releasing."; exit 1;; esac
           tag="v${version}"
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          {
+            echo "## Downloads"
+            echo
+            for f in "${files[@]}"; do
+              name=$(basename "$f")
+              size=$(awk -v b="$(stat -c %s "$f")" 'BEGIN { printf "%.1f MB", b / 1048576 }')
+              echo "- [${name}](${repo_url}/releases/download/${tag}/${name}) (${size})"
+            done
+          } > notes.md
           echo "Releasing ${tag} with: ${files[*]}"
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
+            gh release edit "$tag" --notes-file notes.md
           else
-            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --title "wordsmith ${version}" --generate-notes --latest
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --title "wordsmith ${version}" --notes-file notes.md --generate-notes --latest
           fi
+          { echo "# wordsmith ${version}"; echo; echo "Release: ${repo_url}/releases/tag/${tag}"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"
