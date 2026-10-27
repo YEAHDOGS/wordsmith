@@ -1,0 +1,121 @@
+/* Rendered Markdown inside the app (the note editor's Preview), from src/lib/markdown.js via {@html}.
+   Tailwind can't reach into injected HTML, so the element styles live here. Colors are theme tokens. */
+
+.markdown {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 1.4em 0 0.4em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.markdown h1 {
+  font-size: 1.6em;
+}
+
+.markdown h2 {
+  font-size: 1.35em;
+}
+
+.markdown h3 {
+  font-size: 1.15em;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote {
+  margin: 0 0 0.9em;
+}
+
+.markdown ul {
+  padding-left: 1.4em;
+  list-style: disc;
+}
+
+.markdown ol {
+  padding-left: 1.6em;
+  list-style: decimal;
+}
+
+.markdown ul ul {
+  list-style: circle;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.2em 0;
+}
+
+.markdown li.task {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.markdown li.task input {
+  accent-color: var(--color-accent);
+  vertical-align: -0.1em;
+}
+
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.markdown code {
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line);
+}
+
+.markdown pre {
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+}
+
+.markdown pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-ink-muted);
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  margin: 1.2em 0;
+}
+
+.markdown strong {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.markdown del {
+  color: var(--color-ink-faint);
+}

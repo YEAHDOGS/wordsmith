@@ -1,15 +1,19 @@
 <script>
   // One note or feature in a grid or board column. Click opens the editor; drag moves it between board columns.
+  // Selecting: the check button, Ctrl/Cmd/Shift+click or touch-and-hold picks a card; while anything is picked,
+  // a plain click or tap toggles cards instead of opening them.
   import Pin from '@lucide/svelte/icons/pin';
   import Bot from '@lucide/svelte/icons/bot';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import Folder from '@lucide/svelte/icons/folder';
   import Paperclip from '@lucide/svelte/icons/paperclip';
+  import CircleCheck from '@lucide/svelte/icons/circle-check';
   import AttachmentMedia from './AttachmentMedia.svelte';
   import StateBadge from './StateBadge.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
+  import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
 
@@ -18,6 +22,17 @@
 
   const BODY_PREVIEW_CHARS = 600;
   const PRIORITY_MARKS = ['', '!', '!!', '!!!'];
+  const HOLD_MS = 450;
+  const HOLD_SLOP_PX = 10;
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let holdTimer;
+  let holdStart = { x: 0, y: 0 };
+  /** Set when touch-and-hold just selected the card, so the click that follows doesn't undo it. */
+  let held = false;
+
+  const selected = $derived(ui.selected.has(note.id));
+  const selecting = $derived(ui.selected.size > 0);
 
   const project = $derived(showProject && note.project_id ? store.find('projects', note.project_id) : null);
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.deleted_at));
@@ -38,6 +53,40 @@
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
   }
 
+  /** @param {MouseEvent | KeyboardEvent} event */
+  function activate(event) {
+    if (held) {
+      held = false;
+      return;
+    }
+    if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) ui.toggleSelected(note.id);
+    else router.openNote(note.id);
+  }
+
+  /** @param {PointerEvent} event */
+  function onpointerdown(event) {
+    held = false;
+    if (event.pointerType === 'mouse') return;
+    holdStart = { x: event.clientX, y: event.clientY };
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      held = true;
+      ui.toggleSelected(note.id);
+      navigator.vibrate?.(10);
+    }, HOLD_MS);
+  }
+
+  /** Scrolling or dragging cancels the hold. @param {PointerEvent} event */
+  function onpointermove(event) {
+    if (Math.hypot(event.clientX - holdStart.x, event.clientY - holdStart.y) > HOLD_SLOP_PX) clearTimeout(holdTimer);
+  }
+
+  /** @param {MouseEvent} event */
+  function toggleSelect(event) {
+    event.stopPropagation();
+    ui.toggleSelected(note.id);
+  }
+
   /** @param {MouseEvent} event */
   function togglePin(event) {
     event.stopPropagation();
@@ -46,14 +95,19 @@
 </script>
 
 <div
-  class="spring group relative flex h-full min-h-28 cursor-pointer flex-col gap-2 p-4 short:p-3 tv:p-6 outline-none hover:bg-surface-raised focus-visible:bg-surface-raised {TINT_BG[/** @type {keyof typeof TINT_BG} */ (note.color)] || TINT_BG.default}"
+  class="spring group relative flex h-full min-h-28 cursor-pointer flex-col gap-2 p-4 short:p-3 tv:p-6 outline-none hover:bg-surface-raised focus-visible:bg-surface-raised {TINT_BG[/** @type {keyof typeof TINT_BG} */ (note.color)] || TINT_BG.default} {selected ? 'ring-2 ring-inset ring-accent' : ''}"
   role="button"
   tabindex="0"
-  aria-label={note.title || 'Untitled note'}
+  aria-label="{note.title || 'Untitled note'}{selected ? ', selected' : ''}"
   {draggable}
   {ondragstart}
-  onclick={() => router.openNote(note.id)}
-  onkeydown={(event) => (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), router.openNote(note.id))}
+  onclick={activate}
+  onkeydown={(event) => (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), activate(event))}
+  {onpointerdown}
+  {onpointermove}
+  onpointerup={() => clearTimeout(holdTimer)}
+  onpointercancel={() => clearTimeout(holdTimer)}
+  oncontextmenu={(event) => held && event.preventDefault()}
 >
   {#if cover}
     <div class="-mx-4 -mt-4 mb-1 short:-mx-3 short:-mt-3 tv:-mx-6 tv:-mt-6 aspect-video overflow-hidden">
@@ -68,6 +122,8 @@
     {:else}
       <span class="flex-1"></span>
     {/if}
+    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+      aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
     <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
   </div>

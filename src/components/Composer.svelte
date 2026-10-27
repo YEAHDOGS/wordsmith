@@ -6,6 +6,8 @@
   import { slide } from 'svelte/transition';
   import { store } from '../lib/store.svelte.js';
   import { MAX_BODY, MAX_TITLE } from '../lib/models.js';
+  import { markdownKeys } from '../lib/markdown-input.js';
+  import MarkdownToolbar from './MarkdownToolbar.svelte';
 
   /** @type {{ projectId?: string | null, labelId?: string | null, defaultKind?: 'note' | 'feature' }} */
   let { projectId = null, labelId = null, defaultKind = 'note' } = $props();
@@ -17,6 +19,8 @@
   let flash = $state(false);
   /** @type {HTMLElement | undefined} */
   let root = $state();
+  /** @type {HTMLTextAreaElement | undefined} */
+  let details = $state();
   const FLASH_MS = 400;
 
   $effect.pre(() => {
@@ -65,11 +69,13 @@
   </div>
   {#if expanded}
     <div transition:slide={{ duration: 150 }}>
-      <textarea bind:value={body} maxlength={MAX_BODY} rows="3" placeholder={kind === 'feature' ? 'Details, acceptance criteria, links… agents read all of it' : 'Write anything'} aria-label="Details"
+      <textarea bind:this={details} bind:value={body} use:markdownKeys maxlength={MAX_BODY} rows="3" placeholder={kind === 'feature' ? 'Details, acceptance criteria, links… agents read all of it' : 'Write anything'} aria-label="Details"
         class="block max-h-60 w-full resize-y border-t border-line bg-transparent px-4 py-3 text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
-      <div class="flex items-center justify-between border-t border-line px-2 py-1.5">
-        <span class="px-2 font-mono text-[11px] text-ink-faint">Enter to save · Esc to close</span>
-        <button class="spring press bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={!title.trim() && !body.trim()} onclick={save}>
+      <div class="flex items-center justify-between gap-2 border-t border-line px-1 py-1">
+        <span class="hidden shrink-0 px-2 font-mono text-[11px] text-ink-faint lg:inline">Enter to save · Esc to close</span>
+        <!-- Formatting sits in the bottom-right corner, beside Save -->
+        <MarkdownToolbar textarea={details} class="ml-auto" />
+        <button class="spring press shrink-0 bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={!title.trim() && !body.trim()} onclick={save}>
           {kind === 'feature' ? 'Request' : 'Save'}
         </button>
       </div>

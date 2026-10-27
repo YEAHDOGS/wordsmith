@@ -20,10 +20,12 @@
     "binding": "ASSETS",
     // Client-side routes (#/...) and deep links fall back to index.html.
     "not_found_handling": "single-page-application",
-    // Only the API costs Worker requests; everything else is served straight from the asset store.
-    "run_worker_first": ["/api/*"]
+    // Only the API and public note pages (/n/*) cost Worker requests; everything else is served straight from the asset store.
+    "run_worker_first": ["/api/*", "/n/*"]
   },
   "observability": { "enabled": true },
+  // The public note page (api/functions/n/[id].js) inlines src/styles/public-note.css, imported as a text module.
+  "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": true }],
   "d1_databases": [
     { "binding": "DB", "database_name": "wordsmith-production", "database_id": "d8ad86e0-ab1d-49d3-a72f-7951c1518503", "migrations_dir": "api/migrations" }
   ],
@@ -40,7 +42,7 @@
         "directory": "./dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"]
+        "run_worker_first": ["/api/*", "/n/*"]
       },
       "d1_databases": [
         { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }

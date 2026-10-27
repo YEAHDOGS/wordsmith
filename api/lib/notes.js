@@ -60,6 +60,7 @@ function lifecycle(before, after, now, actor) {
   if (!before) return events;
   if (before.status !== after.status && after.status) events.push({ type: 'status', data: { text: after.status } });
   if (before.assignee !== after.assignee && after.assignee) events.push({ type: 'assigned', data: { to: after.assignee } });
+  if (Boolean(before.public) !== Boolean(after.public)) events.push({ type: after.public ? 'published' : 'unpublished', data: {} });
   if (before.archived !== after.archived) events.push({ type: after.archived ? 'archived' : 'unarchived', data: {} });
   if (!before.deleted_at && after.deleted_at) events.push({ type: 'deleted', data: {} });
   if (before.deleted_at && !after.deleted_at) events.push({ type: 'restored', data: {} });
@@ -82,11 +83,13 @@ export async function saveNotes(env, userId, actor, changes) {
   const saved = [];
   for (const { before, patch, extraEvents = [] } of changes) {
     const cleaned = cleanRow('notes', patch);
+    // Publishing is the owner's call: agent tokens and GitHub can never make a note public.
+    if (actor.type !== 'user') delete cleaned.public;
     const base = before ?? newRow('notes', { id: patch.id, created_at: Math.min(Number(patch.created_at) || now, now) });
     const after = { ...base, ...cleaned, user_id: userId, updated_at: now };
     if (patch.deleted_at !== undefined) after.deleted_at = patch.deleted_at ? Math.min(Number(patch.deleted_at), now) : null;
     // Deleted notes keep only their tombstone on the server.
-    if (after.deleted_at) Object.assign(after, { title: '', body: '' });
+    if (after.deleted_at) Object.assign(after, { title: '', body: '', public: false });
     if (patch.prs_checked_at !== undefined) after.prs_checked_at = patch.prs_checked_at;
 
     const events = [...extraEvents, ...lifecycle(before, after, now, actor)];

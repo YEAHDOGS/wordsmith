@@ -88,6 +88,11 @@ class Store {
     return this[table].find((row) => row.id === id);
   }
 
+  /** True while a local change to this row hasn't reached the server. Reads `pending` so callers stay reactive. @param {Table} table @param {string} id */
+  isPending(table, id) {
+    return this.pending > 0 && this.#outbox.has(`${table}:${id}`);
+  }
+
   /** @param {Table} table @param {any} row */
   #upsertLocal(table, row) {
     const list = this[table];

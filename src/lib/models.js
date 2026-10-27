@@ -9,7 +9,7 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
 // Timeline entries in note_events, written by the server on every interaction.
-export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached'];
+export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished'];
 
 // Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
@@ -54,6 +54,8 @@ export const MODELS = {
     label_ids: { type: 'ids', max: MAX_LABELS_PER_NOTE, default: [] },
     pinned: { type: 'bool', default: false },
     archived: { type: 'bool', default: false },
+    // Readable by anyone at /n/<id>. Only the signed-in app may change it (see saveNotes in api/lib/notes.js).
+    public: { type: 'bool', default: false },
     state: { type: 'enum', values: FEATURE_STATES, default: 'requested' },
     status: { type: 'text', max: MAX_STATUS, default: '' },
     priority: { type: 'int', min: 0, max: MAX_PRIORITY, default: 0 },
@@ -68,7 +70,9 @@ export const SERVER_FIELDS ={ projects: [], labels: [], notes: ['started_at', 'c
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests'];
-export const BOOL_FIELDS = ['pinned', 'archived'];
+export const BOOL_FIELDS = ['pinned', 'archived', 'public'];
+// Public notes are served at this path on the app's origin.
+export const SHARE_PATH = '/n/';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const PR_URL_PATTERN = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)\/?$/;
