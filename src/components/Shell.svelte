@@ -63,7 +63,7 @@
   const visible = $derived.by(() => {
     if (route.view === 'features' || (project && projectTab === 'board')) return view.features ?? [];
     if (project && projectTab === 'prs') return [];
-    return view.notes ?? [];
+    return (view.notes ?? []).filter((note) => ui.showsState(note));
   });
 
   /** Escape closes the phone drawer; Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
@@ -130,10 +130,10 @@
           {:else if route.view === 'project' || route.view === 'features'}
             {#if project}<ProjectHeader {project} features={view.features ?? []} tab={projectTab} ontab={(tab) => (projectTab = tab)} />{/if}
             {#if route.view !== 'project' || projectTab === 'board'}
-              <div class="{CONTENT} px-2 py-1.5 sm:p-3 short:hidden">
+              <div class="{CONTENT} p-2 sm:p-4 short:hidden">
                 <Composer projectId={project?.id ?? null} defaultKind="feature" />
               </div>
-              <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-3 sm:pb-3">
+              <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-4 sm:pb-4">
                 <FeatureBoard features={view.features ?? []} showProject={!project} />
               </div>
             {:else if projectTab === 'prs' && project}
@@ -146,14 +146,14 @@
               </div>
             {:else}
               <div class="min-h-0 flex-1 overflow-y-auto">
-                <div class="{CONTENT} p-2 sm:p-4"><Composer projectId={project?.id ?? null} defaultKind="note" /></div>
+                <div class="{CONTENT} px-2 pt-2 sm:px-4 sm:pt-4"><Composer projectId={project?.id ?? null} defaultKind="note" /></div>
                 <div class="{CONTENT} pb-6 sm:px-4"><NoteGrid notes={view.notes ?? []} showProject={false} empty="No notes in this project yet." /></div>
               </div>
             {/if}
           {:else}
             <div class="min-h-0 flex-1 overflow-y-auto">
               {#if route.view !== 'archive'}
-                <div class="{CONTENT} p-2 sm:p-4"><Composer labelId={label?.id ?? null} /></div>
+                <div class="{CONTENT} px-2 pt-2 sm:px-4 sm:pt-4"><Composer labelId={label?.id ?? null} /></div>
               {/if}
               <div class="{CONTENT} pb-6 sm:px-4">
                 <NoteGrid notes={view.notes ?? []} empty={ui.query ? 'No matches.' : route.view === 'archive' ? 'Nothing archived.' : 'Capture your first idea above.'} />

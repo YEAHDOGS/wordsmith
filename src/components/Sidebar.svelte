@@ -1,7 +1,8 @@
 <script>
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
-  // Top: logo, wordmark and the sync icon. Bottom: the Made by DOGS sticker, then the app version, the archive (with a count
-  // badge) and a settings cog; the rail stacks the two buttons.
+  // Top: logo, wordmark and the sync icon, the same height as the top bar so their bottom lines meet. Bottom: the app
+  // version, the archive (with a count badge) and a settings cog; the rail stacks the two buttons. The Made by DOGS
+  // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
   import Archive from '@lucide/svelte/icons/archive';
@@ -15,7 +16,6 @@
   import { scale, slide } from 'svelte/transition';
   import { backOut } from 'svelte/easing';
   import logo from '../assets/dogs-logo-cropped.png';
-  import madeByDogs from '../assets/made-by-dogs-small.png';
   import SyncStatus from './SyncStatus.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
@@ -39,8 +39,8 @@
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
   const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
-  const DOGS_URL = 'https://dogs.red';
-  const MADE_BY = 'This product was made by DOGS';
+  // Same heights as the TopBar header (h-12 sm:h-14 tv:h-20).
+  const HEADER_HEIGHT = 'h-12 sm:h-14 tv:h-20';
   const FOOTER_BUTTON = 'spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised';
   const MAX_BADGE = 99;
   const BADGE_IN = { start: 0.3, duration: 200, easing: backOut };
@@ -96,8 +96,9 @@
 </script>
 
 <nav class="flex h-full min-h-0 flex-col bg-app" aria-label="Main">
-  <div class="relative z-20 flex shrink-0 items-center border-b border-line {compact ? 'flex-col justify-center gap-1 py-2' : 'gap-2.5 py-2 pr-2 pl-4 short:py-1'}">
-    <img src={logo} alt="DOGS logo" class="size-7 object-contain spring hover:rotate-12" />
+  <!-- HEADER_HEIGHT matches TopBar's header, so the two bottom borders form one line across the screen -->
+  <div class="relative z-20 flex shrink-0 items-center border-b border-line {HEADER_HEIGHT} {compact ? 'flex-col justify-center' : 'gap-2.5 pr-2 pl-4'}">
+    <img src={logo} alt="DOGS logo" class="{compact ? 'size-6' : 'size-7'} object-contain spring hover:rotate-12 tv:size-9" />
     {#if !compact}
       <span class="min-w-0 flex-1 truncate text-base tv:text-2xl font-black tracking-tight">word<span class="text-accent">smith</span></span>
     {/if}
@@ -191,12 +192,6 @@
   </div>
 
   <div class="shrink-0 border-t border-line">
-    {#if !compact}
-      <a href={DOGS_URL} target="_blank" rel="noopener noreferrer" class="group block w-fit px-4 pt-3 pb-1 short:hidden" title="DOGS" aria-label="{MADE_BY} (opens dogs.red in a new tab)">
-        <img src={madeByDogs} alt="" width="480" height="159"
-          class="h-9 w-auto -rotate-3 shadow-md spring group-hover:rotate-0 group-hover:scale-105 group-active:scale-95 tv:h-14" />
-      </a>
-    {/if}
     <div class="flex items-center {compact ? 'flex-col justify-center gap-0.5 py-1' : 'gap-0.5 py-1 pr-1.5 pl-4'}">
       {#if !compact}<span class="mr-auto font-mono text-[0.6875rem] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
       <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}

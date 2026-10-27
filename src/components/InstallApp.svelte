@@ -1,7 +1,9 @@
 <script>
-  // Settings → About: the running version (linked to the PR it shipped with) and, on the web, installers for
-  // every platform from the latest GitHub release, the visitor's own platform first. Hidden inside the native app.
+  // Settings → About: the Made by DOGS sticker, the running version (linked to the PR it shipped with) and, on the web,
+  // installers for every platform from the latest GitHub release, the visitor's own platform first. Installers are
+  // hidden inside the native app.
   import Download from '@lucide/svelte/icons/download';
+  import madeByDogs from '../assets/made-by-dogs-small.png';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import Smartphone from '@lucide/svelte/icons/smartphone';
@@ -12,6 +14,7 @@
   import { BOX, BUTTON, HEADING, HINT, SUBHEADING } from './settings-styles.js';
   import TEXT from './settings.json';
 
+  const DOGS_URL = 'https://dogs.red';
   const MB_DECIMALS = 1;
   const STAGGER_MS = 40;
   const ENTER = { y: 8, duration: 220 };
@@ -36,7 +39,13 @@
   });
 </script>
 
-<h2 class={HEADING}>{TEXT.about}</h2>
+<div class="flex items-start justify-between gap-3">
+  <h2 class={HEADING}>{TEXT.about}</h2>
+  <a href={DOGS_URL} target="_blank" rel="noopener noreferrer" class="group -mt-1 shrink-0" title="DOGS" aria-label={TEXT.madeByDogs}>
+    <img src={madeByDogs} alt="" width="480" height="159"
+      class="h-9 w-auto -rotate-3 shadow-md spring group-hover:rotate-0 group-hover:scale-105 group-active:scale-95 tv:h-14" />
+  </a>
+</div>
 <p class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-fluid-sm text-ink-muted">
   <span>{TEXT.version} <span class="selectable font-mono text-ink">{APP_VERSION}</span></span>
   {#if LATEST_PR}

@@ -1,17 +1,21 @@
 // UI preferences and transient UI state shared across components: theme, search, the mobile drawer, selected notes.
 import { SvelteSet } from 'svelte/reactivity';
 import { appearance, crossfade } from './appearance.svelte.js';
+import { FEATURE_STATES } from './models.js';
 
 const THEME_KEY = 'ws_theme';
 export const THEMES = /** @type {const} */ (['system', 'dark', 'light']);
 const SORT_KEY = 'ws_sort';
 const GROUP_KEY = 'ws_group';
+const STATE_FILTER_KEY = 'ws_state_filter';
 // Note grid controls: the left button cycles the order, the right one cycles the grouping.
 // manual = the order notes were dragged into (notes.position); priority = highest first, manual order within a level.
 export const ORDERS = /** @type {const} */ (['updated', 'created', 'priority', 'manual']);
 /** Orders a drag can't express: picking a card up switches to manual so the drop sticks. */
 export const TIME_ORDERS = /** @type {const} */ (['updated', 'created']);
 export const GROUPS = /** @type {const} */ (['all', 'project', 'season']);
+// Third toggle: every note, or only the features in one state (plain notes have no state, so they hide).
+export const STATE_FILTERS = /** @type {const} */ (['all', ...FEATURE_STATES]);
 // Before grouping existed, "project" was a sort; carry that choice over.
 const LEGACY_PROJECT_SORT = 'project';
 
@@ -25,6 +29,8 @@ class Ui {
   /** @type {'all' | 'project' | 'season'} */
   group = $state(/** @type {any} */ (localStorage.getItem(SORT_KEY) === LEGACY_PROJECT_SORT ? 'project'
     : GROUPS.includes(/** @type {any} */ (localStorage.getItem(GROUP_KEY))) ? localStorage.getItem(GROUP_KEY) : 'all'));
+  /** @type {'all' | 'requested' | 'in_progress' | 'complete'} */
+  stateFilter = $state(/** @type {any} */ (STATE_FILTERS.includes(/** @type {any} */ (localStorage.getItem(STATE_FILTER_KEY))) ? localStorage.getItem(STATE_FILTER_KEY) : 'all'));
   /** The project just created from the sidebar: its page opens the GitHub repo picker once. */
   newProjectId = $state('');
   /** Ids of the notes picked for bulk actions (copy, archive). Non-empty = selection mode. */
@@ -68,6 +74,17 @@ class Ui {
   setGroup(group) {
     this.group = group;
     localStorage.setItem(GROUP_KEY, group);
+  }
+
+  /** @param {'all' | 'requested' | 'in_progress' | 'complete'} filter */
+  setStateFilter(filter) {
+    this.stateFilter = filter;
+    localStorage.setItem(STATE_FILTER_KEY, filter);
+  }
+
+  /** Whether a note passes the state filter. Shared by the note grid and Ctrl+A. @param {any} note */
+  showsState(note) {
+    return this.stateFilter === 'all' || (note.kind === 'feature' && note.state === this.stateFilter);
   }
 
   /** @param {string} id */
