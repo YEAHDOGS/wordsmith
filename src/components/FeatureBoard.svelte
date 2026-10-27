@@ -5,14 +5,17 @@
   // Hold and slide a card (or drag it with a mouse) to move it: within a Requested-role column it sets the claim order,
   // taking the priority of where it lands; into another column it moves there (and changes state if the role differs).
   // Alt+Up/Down reorders, Alt+Left/Right changes column. Each column header has a check box that selects (or clears)
-  // every card in it, like the bands on the notes page.
+  // every card in it, like the bands on the notes page. In a project, cards in a note group (src/lib/groups.js) sit at the
+  // top of their column under the group's header, which folds them away; the claim order underneath is unchanged.
   import { tick } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
+  import { fade, scale, slide } from 'svelte/transition';
   import Square from '@lucide/svelte/icons/square';
   import SquareCheck from '@lucide/svelte/icons/square-check';
   import SquareMinus from '@lucide/svelte/icons/square-minus';
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
+  import GroupHeader from './GroupHeader.svelte';
+  import { groupsIn, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
@@ -29,6 +32,7 @@
   const COMPLETE = 'complete';
   const BOARD_GROUP = 'board';
   const FADE_MS = 150;
+  const FOLD_MS = 200;
   // Requested runs in claim order: priority first, then manual order (oldest first until moved), the same order the
   // agent API uses for /features/next. The other two roles follow what agents did, newest first.
   const SORTS = {
@@ -52,6 +56,9 @@
   }));
   // The feature an agent would claim next: claim order across every Requested-role column.
   const nextUp = $derived(features.filter((note) => note.state === REQUESTED).sort(SORTS.requested)[0]?.id);
+  // Groups belong to a project; the all-projects Features page (scope FEATURES_SCOPE) has none.
+  const noteGroups = $derived(groupsIn(scope));
+  const groupTotals = $derived(new Map(noteGroups.map((group) => [group.id, features.filter((note) => note.group_id === group.id).length])));
   const currentTab = $derived(columns.some((column) => column.id === activeTab) ? activeTab : columns[0]?.id);
 
   // FLIP across every column, so a card changing column slides there instead of popping. First render stays still.
@@ -120,6 +127,15 @@
   }
 </script>
 
+{#snippet card(/** @type {any} */ note)}
+  <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
+    {#if note.id === nextUp}
+      <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[0.625rem] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
+    {/if}
+    <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
+  </div>
+{/snippet}
+
 <!-- --lanes: how many columns this board has, read by the grid templates below -->
 <div class="flex h-full min-h-0 flex-col" bind:this={root} style:--lanes={columns.length}>
   <!-- Phone lane tabs -->
@@ -140,6 +156,7 @@
       {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (column.state)]}
       {@const shown = drag.arrange(column.shown, column.id)}
       {@const picked = column.all.filter((note) => ui.selected.has(note.id)).length}
+      {@const split = splitByGroup(shown, noteGroups)}
       <section class="flex min-h-0 min-w-0 snap-start flex-col bg-app spring {drag.id && drag.zone === column.id ? 'bg-surface-raised' : ''}" aria-label={column.name}
         use:dropzone={zoneFor(column)}>
         <header class="hidden min-w-0 items-center gap-2 border-b border-line px-4 py-2.5 md:flex">
@@ -152,14 +169,18 @@
           <span class="ml-auto font-mono text-xs text-ink-faint">{column.all.length}</span>
         </header>
         <div class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto bg-line">
-          {#each shown as note (note.id)}
-            <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
-              {#if note.id === nextUp}
-                <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[0.625rem] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
+          {#each noteGroups as group (group.id)}
+            {@const members = split.members.get(group.id) ?? []}
+            {#if members.length}
+              <GroupHeader {group} notes={members} total={groupTotals.get(group.id) ?? members.length} class="bg-app px-3 py-1.5 text-xs tv:px-4 tv:text-base" />
+              {#if !group.collapsed}
+                <div class="flex flex-col gap-px" transition:slide={{ duration: FOLD_MS }}>
+                  {#each members as note (note.id)}{@render card(note)}{/each}
+                </div>
               {/if}
-              <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
-            </div>
+            {/if}
           {/each}
+          {#each split.rest as note (note.id)}{@render card(note)}{/each}
           <!-- Fills the rest of the lane; the empty message floats in it, so it fades in and out without moving anything -->
           <div class="relative flex-1 bg-app">
             {#if !shown.length}

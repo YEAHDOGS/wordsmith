@@ -3,7 +3,7 @@ import { BOOL_FIELDS, JSON_FIELDS, MODELS, SERVER_FIELDS } from '../../src/lib/m
 
 // D1 caps bound parameters per query at 100.
 export const MAX_BIND_PARAMS = 100;
-export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards']);
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
 // Never changed by an upsert.
 const FIXED_COLUMNS = ['id', 'user_id', 'created_at'];
 

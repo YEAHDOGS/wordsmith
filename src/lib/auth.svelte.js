@@ -24,6 +24,8 @@ class Auth {
   /** @type {string[]} */ providers = $state([]);
   /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
   devLogin = $state(false);
+  /** Worker Previews: sign in with the Preview password (PREVIEW_PASSWORD, see api/lib/login.js). */
+  previewLogin = $state(false);
   /** True once providers and linked accounts came from the server; screens that show them load the session if not. */
   sessionFetched = $state(false);
   /** Native login in progress: the code to match in the browser. @type {{ code: string, provider: string, url: string } | null} */
@@ -48,6 +50,7 @@ class Auth {
       const session = await api('/api/auth/session');
       this.providers = session.providers;
       this.devLogin = session.dev_login;
+      this.previewLogin = Boolean(session.preview_login);
       this.linked = session.linked || [];
       this.sessionFetched = true;
       this.#setUser(session.user);
@@ -111,6 +114,18 @@ class Auth {
     const { token } = await api('/api/auth/dev', { method: 'POST' });
     if (IS_NATIVE) sessionToken.set(token);
     await this.load();
+  }
+
+  /** Worker Previews only: the Preview password signs in the Preview user on staging data. @param {string} password */
+  async previewSignIn(password) {
+    this.error = '';
+    try {
+      const { token } = await api('/api/auth/preview', { method: 'POST', body: { password } });
+      if (IS_NATIVE) sessionToken.set(token);
+      await this.load();
+    } catch (error) {
+      this.error = /** @type {Error} */ (error).message;
+    }
   }
 
   async signOut() {

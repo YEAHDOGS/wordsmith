@@ -8,6 +8,7 @@ import * as health from './functions/api/health.js';
 import * as sync from './functions/api/sync.js';
 import * as authSession from './functions/api/auth/session.js';
 import * as authDev from './functions/api/auth/dev.js';
+import * as authPreview from './functions/api/auth/preview.js';
 import * as authDevice from './functions/api/auth/device/index.js';
 import * as authDevicePoll from './functions/api/auth/device/poll.js';
 import * as authStart from './functions/api/auth/[provider]/start.js';
@@ -51,6 +52,7 @@ const ROUTES = [
   ['/api/sync', sync, false],
   ['/api/auth/session', authSession, false],
   ['/api/auth/dev', authDev, false],
+  ['/api/auth/preview', authPreview, false],
   ['/api/auth/device', authDevice, false],
   ['/api/auth/device/poll', authDevicePoll, false],
   ['/api/auth/:provider/start', authStart, false],

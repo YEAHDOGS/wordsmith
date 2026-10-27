@@ -34,6 +34,19 @@
     .sort((a, b) => (newestFirst ? b.file.created_at - a.file.created_at : a.file.created_at - b.file.created_at)));
   const counts = $derived(Object.fromEntries(FILTERS.map((state) => [state, store.attachments
     .filter((file) => !file.deleted_at && byId.has(file.note_id) && (state === ALL || byId.get(file.note_id).state === state)).length])));
+
+  /**
+   * Tiles show media whole (object-contain) scaled up by --cover to fill the square; hover or focus drops the scale
+   * to 1 so the whole picture shows. object-fit can't animate, transform can.
+   * @param {Event & { currentTarget: HTMLElement }} event load / loadedmetadata, caught on the tile
+   */
+  function setCoverScale(event) {
+    const media = /** @type {HTMLImageElement & HTMLVideoElement} */ (event.target);
+    const width = media.naturalWidth || media.videoWidth;
+    const height = media.naturalHeight || media.videoHeight;
+    if (!width || !height) return;
+    event.currentTarget.style.setProperty('--cover', String(Math.max(width / height, height / width)));
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -66,8 +79,9 @@
           {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (note.state)]}
           <li class="bg-app" animate:flip={MOTION} in:fade={MOTION}>
             <button class="group relative block aspect-square w-full overflow-hidden" onclick={() => router.openNote(note.id)}
+              onloadcapture={setCoverScale} onloadedmetadatacapture={setCoverScale}
               title="{note.title || 'Untitled'} · {file.name} · {fullTime(file.created_at)}" aria-label="Open {note.title || 'untitled note'} ({file.name})">
-              <AttachmentMedia {file} class="spring size-full object-cover group-hover:scale-105" />
+              <AttachmentMedia {file} class="spring size-full object-contain duration-300 [transform:scale(var(--cover,1))] group-hover:[transform:none] group-focus-visible:[transform:none]" />
               {#if file.type.startsWith('video/')}
                 <span class="pointer-events-none absolute inset-0 flex items-center justify-center"><span class="flex size-8 items-center justify-center rounded-full bg-scrim text-ink"><Play class="size-4" /></span></span>
               {/if}

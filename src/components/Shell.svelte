@@ -125,7 +125,7 @@
   <div class="flex min-w-0 flex-1 flex-col">
     <div class="relative">
       <TopBar title={view.title} subtitle={view.subtitle} onsettings={openSettings} />
-      {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} />{/if}
+      {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} projectId={route.view === 'project' ? (project?.id ?? null) : null} />{/if}
     </div>
 
     <main class="relative min-h-0 flex-1 overflow-hidden">
@@ -161,7 +161,7 @@
             {:else}
               <div class="min-h-0 flex-1 overflow-y-auto" in:fade={TAB_IN}>
                 <div class="{CONTENT} px-2 pt-2 sm:px-4 sm:pt-4"><Composer projectId={project?.id ?? null} /></div>
-                <div class="{CONTENT} pb-6 sm:px-4"><NoteGrid notes={view.notes ?? []} showProject={false} empty="No notes in this project yet." /></div>
+                <div class="{CONTENT} pb-6 sm:px-4"><NoteGrid notes={view.notes ?? []} showProject={false} projectId={project?.id ?? null} empty="No notes in this project yet." /></div>
               </div>
             {/if}
           {:else}
