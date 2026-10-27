@@ -24,8 +24,11 @@ function committed(tx) {
 
 /** Local database for one user. */
 export class LocalDb {
-  /** @param {string} userId */
-  constructor(userId) {
+  /**
+   * @param {string} userId
+   * @param {() => void} [onblocked] another tab still holds an older version open, so the upgrade waits for it
+   */
+  constructor(userId, onblocked = () => {}) {
     this.name = DB_PREFIX + userId;
     /** @type {Promise<IDBDatabase>} */
     this.ready = new Promise((resolve, reject) => {
@@ -35,7 +38,16 @@ export class LocalDb {
           if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: store === 'meta' ? 'key' : 'id' });
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      // The upgrade resumes by itself once the other tab closes or reloads.
+      request.onblocked = onblocked;
+      request.onsuccess = () => {
+        // A newer build opened in another tab: step aside and reload into it, so its upgrade never waits on this tab.
+        request.result.onversionchange = () => {
+          request.result.close();
+          location.reload();
+        };
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error);
     });
   }

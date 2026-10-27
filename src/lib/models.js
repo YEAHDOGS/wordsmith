@@ -71,7 +71,8 @@ export const MODELS = {
   },
   notes: {
     project_id: { type: 'id', nullable: true, default: null },
-    kind: { type: 'enum', values: NOTE_KINDS, default: 'note' },
+    // Every note is a feature now; 'note' is only still accepted from older builds (the server stores it as a feature).
+    kind: { type: 'enum', values: NOTE_KINDS, default: 'feature' },
     title: { type: 'text', max: MAX_TITLE, default: '' },
     body: { type: 'text', max: MAX_BODY, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },

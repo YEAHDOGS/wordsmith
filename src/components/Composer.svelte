@@ -2,24 +2,23 @@
   // Quick capture, Google Keep style. Collapsed it is one line; focus expands it. Enter in the title saves,
   // Shift+Enter adds a line. Images and videos can be picked, dropped or pasted in: they wait as thumbnails and
   // upload once the note is saved (a note has to reach the server before files can hang off it).
-  // Outside a project a Note / Feature toggle picks the kind. Inside a project there is no toggle: on the board tab
-  // (defaultKind "feature") the composer files features, so they land on the board; on the notes tab it takes notes,
-  // and the lightbulb beside Save unfolds a small "Create a feature request" form with its own title, details and priority.
+  // Every note is a feature (on the board, in the agent queue), so there is no Note / Feature toggle. The lightbulb
+  // Feature button beside the paperclip unfolds the feature details: priority, difficulty, project, a pull request and
+  // a status. Left closed, the note saves with the defaults (no priority, unrated, this page's project).
   import Lightbulb from '@lucide/svelte/icons/lightbulb';
   import Paperclip from '@lucide/svelte/icons/paperclip';
   import Play from '@lucide/svelte/icons/play';
-  import StickyNote from '@lucide/svelte/icons/sticky-note';
   import X from '@lucide/svelte/icons/x';
   import { fade, scale, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { store } from '../lib/store.svelte.js';
-  import { IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, parsePullRequestUrl } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
   import PriorityPicker from './PriorityPicker.svelte';
 
-  /** @type {{ projectId?: string | null, labelId?: string | null, defaultKind?: 'note' | 'feature' }} */
-  let { projectId = null, labelId = null, defaultKind = 'note' } = $props();
+  /** @type {{ projectId?: string | null, labelId?: string | null }} */
+  let { projectId = null, labelId = null } = $props();
 
   const FLASH_MS = 400;
   const PANEL_MS = 150;
@@ -29,48 +28,46 @@
   // the cap, for as long as the note is still unsynced (a sync in flight may not carry it, or the server is unreachable).
   const SYNC_RETRY_MS = 500;
   const SYNC_RETRY_MAX_MS = 8_000;
-  // The feature form offers priorities 1..5 (0 "None" is left to the note editor); new requests start at Normal.
-  const REQUEST_PRIORITIES = PRIORITY_LABELS.map((_, level) => level).slice(1);
-  const DEFAULT_PRIORITY = PRIORITY_LABELS.indexOf('Normal');
+  // Priority and difficulty share the 0..5 scale; 0 is None / Unrated.
+  const LEVELS = PRIORITY_LABELS.map((_, level) => level);
+  const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
   const ERROR_TYPE = 'Only images and videos can be attached.';
   const ERROR_SIZE = 'Some files were too large to attach.';
   const ERROR_COUNT = `A note holds up to ${MAX_ATTACHMENTS_PER_NOTE} files.`;
+  const ERROR_PR = 'That pull request link should look like https://github.com/owner/repo/pull/123';
+  const FIELD = 'h-9 min-w-0 border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
+  const LABEL = 'mb-1 block text-[0.6875rem] font-semibold tracking-wide text-ink-faint uppercase tv:text-sm';
 
   let expanded = $state(false);
   let title = $state('');
   let body = $state('');
-  let kind = $state(/** @type {'note' | 'feature'} */ ('note'));
   let flash = $state(false);
   /** Files waiting for the note to be saved, each with a preview URL. @type {{ id: string, file: File, url: string }[]} */
   let queued = $state([]);
   let fileError = $state('');
   /** Notes this composer saved with files, so their upload progress and errors show here. @type {string[]} */
   let sentNoteIds = $state([]);
-  // Feature request form (projects only)
-  let requesting = $state(false);
-  let requestTitle = $state('');
-  let requestBody = $state('');
-  let requestPriority = $state(DEFAULT_PRIORITY);
+  // Feature details, unfolded by the Feature button
+  let detailsOpen = $state(false);
+  let priority = $state(0);
+  let difficulty = $state(0);
+  /** null = this page's project */
+  let chosenProject = $state(/** @type {string | null} */ (null));
+  let prUrl = $state('');
+  let status = $state('');
+  let prError = $state('');
   /** @type {HTMLElement | undefined} */
   let root = $state();
   /** @type {HTMLTextAreaElement | undefined} */
   let details = $state();
   /** @type {HTMLInputElement | undefined} */
   let picker = $state();
-  // Focus parks on these before the focused control disappears, so the composer doesn't read it as focus leaving.
+  // Focus parks on this before the focused control disappears, so the composer doesn't read it as focus leaving.
   /** @type {HTMLButtonElement | undefined} */
   let attachButton = $state();
-  /** @type {HTMLButtonElement | undefined} */
-  let ideaButton = $state();
 
-  const inProject = $derived(Boolean(projectId));
-  // The feature request panel is for a project's notes tab; the board tab's composer files features itself.
-  const offersRequest = $derived(inProject && defaultKind !== 'feature');
-  $effect.pre(() => {
-    kind = defaultKind;
-  });
-
-  const placeholder = $derived(kind === 'feature' ? 'Request a feature for your agents…' : 'Take a note…');
+  const projects = $derived(store.projects.filter((project) => !project.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
+  const projectChoice = $derived(chosenProject ?? projectId ?? '');
   const canSave = $derived(Boolean(title.trim() || body.trim() || queued.length));
   const uploads = $derived(store.uploads.filter((upload) => sentNoteIds.includes(upload.noteId)));
   const failedUploads = $derived(uploads.filter((upload) => upload.error));
@@ -117,7 +114,22 @@
 
   function save() {
     if (!canSave) return;
-    const note = store.create('notes', { kind, title: title.trim(), body: body.trim(), project_id: projectId, label_ids: labelId ? [labelId] : [] });
+    const pr = prUrl.trim() ? parsePullRequestUrl(prUrl) : null;
+    if (prUrl.trim() && !pr) {
+      prError = ERROR_PR;
+      detailsOpen = true;
+      return;
+    }
+    const note = store.create('notes', {
+      title: title.trim(),
+      body: body.trim(),
+      project_id: projectChoice || null,
+      label_ids: labelId ? [labelId] : [],
+      priority_level: priority,
+      difficulty,
+      status: status.trim(),
+      pull_requests: pr ? [{ ...pr, title: '', state: 'open', merged_at: null }] : [],
+    });
     if (queued.length) {
       sentNoteIds = [...sentNoteIds, note.id];
       uploadWhenReady(note.id, queued.map((item) => item.file));
@@ -127,18 +139,12 @@
     body = '';
     queued = [];
     fileError = '';
-    flash = true;
-    setTimeout(() => (flash = false), FLASH_MS);
-  }
-
-  function request() {
-    if (!requestTitle.trim() && !requestBody.trim()) return;
-    store.create('notes', { kind: 'feature', title: requestTitle.trim(), body: requestBody.trim(), priority_level: requestPriority, project_id: projectId, label_ids: labelId ? [labelId] : [] });
-    requestTitle = '';
-    requestBody = '';
-    requestPriority = DEFAULT_PRIORITY;
-    ideaButton?.focus();
-    requesting = false;
+    priority = 0;
+    difficulty = 0;
+    chosenProject = null;
+    prUrl = '';
+    status = '';
+    prError = '';
     flash = true;
     setTimeout(() => (flash = false), FLASH_MS);
   }
@@ -150,7 +156,7 @@
     if (!document.hasFocus()) return;
     save();
     expanded = false;
-    requesting = false;
+    detailsOpen = false;
   }
 
   /** @param {KeyboardEvent} event */
@@ -160,17 +166,6 @@
       save();
     }
     if (event.key === 'Escape') /** @type {HTMLElement} */ (event.currentTarget).blur();
-  }
-
-  /** @param {KeyboardEvent} event */
-  function onRequestKey(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      request();
-    }
-    if (event.key !== 'Escape') return;
-    ideaButton?.focus();
-    requesting = false;
   }
 
   /** Files pasted into the title or details join the queue. @param {ClipboardEvent} event */
@@ -195,21 +190,13 @@
 <div bind:this={root} class="spring rounded-ui border bg-surface {flash ? 'border-accent' : 'border-line hover:border-line-strong'} focus-within:border-line-strong" role="group" aria-label="New note" {onfocusout}
   ondragover={(event) => event.dataTransfer?.types.includes('Files') && event.preventDefault()} {ondrop}>
   <div class="flex items-center">
-    <input bind:value={title} maxlength={MAX_TITLE} {placeholder} aria-label={placeholder}
+    <input bind:value={title} maxlength={MAX_TITLE} placeholder="Take a note…" aria-label="Take a note"
       class="min-w-0 flex-1 bg-transparent px-3 py-2 sm:px-4 sm:py-3 short:py-2 text-fluid-base font-semibold text-ink placeholder:font-normal placeholder:text-ink-faint focus:outline-none"
       onfocus={() => (expanded = true)} onkeydown={onTitleKey} {onpaste} />
-    {#if !inProject}
-      <div class="flex shrink-0 border-l border-line" role="group" aria-label="Kind">
-        <button class="spring press flex items-center gap-1.5 px-3 py-2 sm:py-3 short:py-2 text-xs {kind === 'note' ? 'bg-surface-raised text-ink' : 'text-ink-faint hover:text-ink'}"
-          aria-pressed={kind === 'note'} onclick={() => (kind = 'note')} title="Plain note"><StickyNote class="size-4" /><span class="hidden md:inline">Note</span></button>
-        <button class="spring press flex items-center gap-1.5 px-3 py-2 sm:py-3 short:py-2 text-xs {kind === 'feature' ? 'bg-accent-soft text-accent' : 'text-ink-faint hover:text-ink'}"
-          aria-pressed={kind === 'feature'} onclick={() => (kind = 'feature')} title="Feature request for agents"><Lightbulb class="size-4" /><span class="hidden md:inline">Feature</span></button>
-      </div>
-    {/if}
   </div>
   {#if expanded}
     <div transition:slide={{ duration: PANEL_MS }}>
-      <textarea bind:this={details} bind:value={body} use:markdownKeys maxlength={MAX_BODY} rows="3" placeholder={kind === 'feature' ? 'Details, acceptance criteria, links… agents read all of it' : 'Write anything'} aria-label="Details"
+      <textarea bind:this={details} bind:value={body} use:markdownKeys maxlength={MAX_BODY} rows="3" placeholder="Write anything. Agents read all of it." aria-label="Details"
         class="block max-h-60 w-full resize-y border-t border-line bg-transparent px-4 py-3 text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none" {onpaste}></textarea>
 
       {#if queued.length}
@@ -236,35 +223,48 @@
       <div class="flex items-center gap-1 border-t border-line px-1 py-1">
         <button bind:this={attachButton} class="spring press flex size-7 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink sm:size-8 tv:size-11" title="Attach image or video" aria-label="Attach image or video"
           onclick={() => picker?.click()}><Paperclip class="size-4" /></button>
+        <!-- Feature details: priority, difficulty, project, PR, status. The bulb lights while they are open -->
+        <button class="spring press flex h-7 shrink-0 items-center gap-1.5 px-2 text-xs sm:h-8 tv:h-11 tv:text-base {detailsOpen ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}"
+          aria-expanded={detailsOpen} aria-controls="feature-details-{projectId ?? labelId ?? 'all'}" onclick={() => (detailsOpen = !detailsOpen)}>
+          <Lightbulb class="spring size-4 {detailsOpen ? 'scale-110' : ''}" /><span>Feature</span>
+        </button>
         <input bind:this={picker} type="file" accept={ACCEPT} multiple class="hidden" tabindex="-1" onchange={(event) => { addFiles([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
         <span class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
         <!-- Formatting sits in the bottom-right corner, beside Save -->
         <MarkdownToolbar textarea={details} class="ml-auto" />
-        {#if offersRequest}
-          <button bind:this={ideaButton} class="spring press flex size-7 shrink-0 items-center justify-center sm:size-8 tv:size-11 {requesting ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}"
-            title="Create a feature request" aria-label="Create a feature request" aria-expanded={requesting} aria-controls="feature-request-{projectId}" onclick={() => (requesting = !requesting)}>
-            <Lightbulb class="spring size-4 {requesting ? 'scale-110' : ''}" />
-          </button>
-        {/if}
         <button class="spring press shrink-0 bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={!canSave} onclick={save}>
-          {kind === 'feature' ? 'Request' : 'Save'}
+          Save
         </button>
       </div>
 
-      {#if offersRequest && requesting}
-        <section id="feature-request-{projectId}" class="border-t border-line bg-app" aria-label="Create a feature request" transition:slide={{ duration: PANEL_MS }}>
-          <div class="flex flex-col gap-2 px-4 py-3" in:fade={{ duration: PANEL_MS, delay: PANEL_MS / 2 }}>
-            <h3 class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-accent uppercase"><Lightbulb class="size-3.5" />Create a feature request</h3>
-            <input bind:value={requestTitle} maxlength={MAX_TITLE} placeholder="What should your agents build?" aria-label="Feature title" onkeydown={onRequestKey}
-              class="border border-line bg-surface px-3 py-2 text-fluid-sm font-semibold text-ink placeholder:font-normal placeholder:text-ink-faint focus:border-line-strong focus:outline-none" />
-            <textarea bind:value={requestBody} use:markdownKeys maxlength={MAX_BODY} rows="2" placeholder="Details, acceptance criteria, links… agents read all of it" aria-label="Feature details"
-              class="block max-h-48 w-full resize-y border border-line bg-surface px-3 py-2 text-fluid-sm text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"></textarea>
-            <div class="flex flex-wrap items-center gap-2">
-              <PriorityPicker value={requestPriority} levels={REQUEST_PRIORITIES} onselect={(level) => (requestPriority = level)} class="min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(3.5rem,1fr))]" />
-              <button class="spring press shrink-0 bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={!requestTitle.trim() && !requestBody.trim()} onclick={request}>
-                Request
-              </button>
+      {#if detailsOpen}
+        <section id="feature-details-{projectId ?? labelId ?? 'all'}" class="border-t border-line bg-app" aria-label="Feature details" transition:slide={{ duration: PANEL_MS }}>
+          <div class="grid gap-3 px-3 py-3 sm:px-4 lg:grid-cols-2" in:fade={{ duration: PANEL_MS, delay: PANEL_MS / 2 }}>
+            <div class="min-w-0">
+              <span class={LABEL}>Priority</span>
+              <PriorityPicker value={priority} levels={LEVELS} onselect={(level) => (priority = level)} class="grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 xl:grid-cols-6" />
             </div>
+            <div class="min-w-0">
+              <span class={LABEL}>Difficulty</span>
+              <PriorityPicker value={difficulty} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => (difficulty = level)}
+                class="grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 xl:grid-cols-6" />
+            </div>
+            <label class="min-w-0">
+              <span class={LABEL}>Project</span>
+              <select value={projectChoice} onchange={(event) => (chosenProject = event.currentTarget.value)} class="{FIELD} w-full">
+                <option value="">No project</option>
+                {#each projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+              </select>
+            </label>
+            <label class="min-w-0">
+              <span class={LABEL}>Pull request</span>
+              <input bind:value={prUrl} oninput={() => (prError = '')} placeholder="https://github.com/owner/repo/pull/123" inputmode="url" class="{FIELD} w-full font-mono text-xs" />
+            </label>
+            <label class="min-w-0 lg:col-span-2">
+              <span class={LABEL}>Status</span>
+              <input bind:value={status} maxlength={MAX_STATUS} placeholder="What's happening right now" class="{FIELD} w-full" />
+            </label>
+            {#if prError}<p class="text-xs text-accent lg:col-span-2" role="alert" transition:slide={{ duration: PANEL_MS }}>{prError}</p>{/if}
           </div>
         </section>
       {/if}

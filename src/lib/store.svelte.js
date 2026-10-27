@@ -10,6 +10,7 @@ const SYNC_DEBOUNCE_MS = 900;
 const POLL_MS = 60_000;
 const PR_REFRESH_MS = 120_000;
 const UNAUTHORIZED = 401;
+const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
 /** @typedef {'projects' | 'labels' | 'notes' | 'boards'} Table */
 
@@ -50,7 +51,8 @@ class Store {
   /** Loads the local copy for a user, then syncs. @param {string} userId */
   async open(userId) {
     this.close();
-    this.#db = new LocalDb(userId);
+    // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
+    this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
     const [projects, labels, notes, boards, events, attachments, cursor, outbox] = await Promise.all([
       this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),

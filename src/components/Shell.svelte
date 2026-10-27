@@ -51,10 +51,10 @@
   const view = $derived.by(() => {
     const active = matches.filter((note) => !note.archived);
     switch (route.view) {
-      case 'features': return { title: 'Features', subtitle: 'Every project, in claim order', features: active.filter((note) => note.kind === 'feature') };
+      case 'features': return { title: 'Features', subtitle: 'Every project, in claim order', features: active };
       case 'project': {
         const inProject = active.filter((note) => note.project_id === route.id);
-        return { title: project?.name || 'Project', subtitle: project?.repo || '', features: inProject.filter((note) => note.kind === 'feature'), notes: inProject.filter((note) => note.kind === 'note') };
+        return { title: project?.name || 'Project', subtitle: project?.repo || '', features: inProject, notes: inProject };
       }
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
@@ -90,10 +90,8 @@
 
   /** Bottom-nav "+": a blank note in the current context, opened straight into the editor. */
   function newNote() {
-    const inProject = route.view === 'project';
     const note = store.create('notes', {
-      kind: inProject || route.view === 'features' ? 'feature' : 'note',
-      project_id: inProject ? route.id : null,
+      project_id: route.view === 'project' ? route.id : null,
       label_ids: route.view === 'label' ? [route.id] : [],
     });
     router.openNote(note.id);
@@ -144,7 +142,7 @@
             {#if project}<ProjectHeader {project} features={view.features ?? []} tab={projectTab} ontab={(tab) => (projectTab = tab)} />{/if}
             {#if route.view !== 'project' || projectTab === 'board'}
               <div class="{CONTENT} p-2 sm:p-4 short:hidden" in:fade={TAB_IN}>
-                <Composer projectId={project?.id ?? null} defaultKind="feature" />
+                <Composer projectId={project?.id ?? null} />
               </div>
               <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-4 sm:pb-4" in:fade={TAB_IN}>
                 <FeatureBoard features={view.features ?? []} scope={project ? project.id : FEATURES_SCOPE} showProject={!project} />
@@ -159,7 +157,7 @@
               </div>
             {:else}
               <div class="min-h-0 flex-1 overflow-y-auto" in:fade={TAB_IN}>
-                <div class="{CONTENT} px-2 pt-2 sm:px-4 sm:pt-4"><Composer projectId={project?.id ?? null} defaultKind="note" /></div>
+                <div class="{CONTENT} px-2 pt-2 sm:px-4 sm:pt-4"><Composer projectId={project?.id ?? null} /></div>
                 <div class="{CONTENT} pb-6 sm:px-4"><NoteGrid notes={view.notes ?? []} showProject={false} empty="No notes in this project yet." /></div>
               </div>
             {/if}
