@@ -107,7 +107,9 @@ export async function saveNotes(env, userId, actor, changes) {
     after.priority = LEGACY_PRIORITY[after.priority_level] ?? 0;
 
     const events = [...extraEvents, ...lifecycle(before, after, now, actor)];
-    statements.push(upsertStatement(env, 'notes', after));
+    // Only the changed columns are written; an unchanged note (autosave, a repeat PATCH) isn't written at all.
+    const upsert = upsertStatement(env, 'notes', after, before);
+    if (upsert) statements.push(upsert);
     for (const event of events) {
       const who = /** @type {any} */ (event).actor ?? actor;
       statements.push(env.DB.prepare('INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')

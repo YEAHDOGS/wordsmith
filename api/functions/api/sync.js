@@ -100,7 +100,8 @@ export async function onRequestPost(context) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
         const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
-        statements.push(upsertStatement(env, table, next));
+        const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
+        if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
         saved[table].push(apiRow);
       } catch (error) {
