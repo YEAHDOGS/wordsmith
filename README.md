@@ -15,7 +15,18 @@ Google Keep style notes, labels and projects, plus feature requests that AI agen
 
 Every step is written to an append-only, server-stamped `note_events` timeline showing who did it (you, the agent's token name, or GitHub) and when. Open any note to see it on the timeline spine.
 
-Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Settings & agents**, which also has a copy-paste instruction block for CLAUDE.md / AGENTS.md. `GET /api/v1` describes the whole agent API.
+Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Settings**. Its **Connect an agent** card walks through hooking up T3 Code (or any agent) and has two copy-paste prompts: the standing instructions for CLAUDE.md / AGENTS.md, and the triage prompt for scheduled runs. `GET /api/v1` describes the whole agent API.
+
+## Agent triage and the daily batch PR
+
+The owner writes features in wordsmith all day. A scheduled agent run (a T3 Code scheduled task every 30 minutes, Claude Code `/schedule`, or cron) turns them into one reviewable pull request a day:
+
+1. **Triage.** `GET /api/v1/features?state=requested&analyzed=false` lists features nobody has looked at. For each, the agent posts `POST /api/v1/notes/:id/analysis` with a `difficulty` (1 Trivial to 5 Epic, `DIFFICULTY_LABELS` in `src/lib/models.js`), a `batch` and its `analysis`: scope, files to touch, plan, risks. `analyzed_at` is stamped and an `analyzed` event lands on the timeline.
+2. **Group.** Difficulty 2 (Easy) or below is a small fix and goes in today's batch, `small-fixes-YYYY-MM-DD`. Anything bigger (monetization, automation, speech to text…) goes in batch `discuss` and stays requested and unclaimed for a conversation with the owner.
+3. **Work.** The agent claims each small feature, makes and verifies the change, and reports `status` as it goes. All of the day's small fixes share one branch and one PR. If `GET /api/v1/batches` shows today's batch already has a PR, the run adds to it instead of opening another.
+4. **Hand off.** Each feature gets `pr_url`, plus `analysis_append` with what was done and how it was checked. Agents never merge. The owner reviews the batch PR, and merging it completes every feature in it.
+
+Later agents read `GET /api/v1/notes/:id/analysis` and `GET /api/v1/batches` to see what earlier runs decided, did, and grouped. People see the same analysis read-only in the note editor, and set difficulty themselves with the slider next to priority.
 
 ## Getting started (local)
 ```
@@ -41,6 +52,7 @@ For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api`
 - `src/`: the Svelte web app (the product).
 - `api/`: the Cloudflare Worker. `worker.js` serves `dist/` as static assets and routes `/api/*` to the handlers in `functions/`. Also SQL migrations (`migrations/`). Its config is `wrangler.jsonc` at the repo root.
 - `src/tauri/`: the Tauri 2 native shell, when native platforms are selected.
+- `redirect/`: a tiny separate Worker that sends `ws.`, `word.` and `smith.dogs.red` to `wordsmith.dogs.red` (path and query kept). `scripts/deploy.js` deploys it right after the app. It has to be separate: the app serves static assets without running code, and OAuth only accepts `wordsmith.dogs.red`.
 
 ## The three environments
 

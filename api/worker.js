@@ -29,6 +29,8 @@ import * as v1Notes from './functions/api/v1/notes/index.js';
 import * as v1Note from './functions/api/v1/notes/[id]/index.js';
 import * as v1NoteEvents from './functions/api/v1/notes/[id]/events.js';
 import * as v1NoteClaim from './functions/api/v1/notes/[id]/claim.js';
+import * as v1NoteAnalysis from './functions/api/v1/notes/[id]/analysis.js';
+import * as v1Batches from './functions/api/v1/batches.js';
 import * as sharedNote from './functions/n/[id].js';
 import { SHARE_PATH } from '../src/lib/models.js';
 
@@ -66,6 +68,8 @@ const ROUTES = [
   ['/api/v1/notes/:id', v1Note, true],
   ['/api/v1/notes/:id/events', v1NoteEvents, true],
   ['/api/v1/notes/:id/claim', v1NoteClaim, true],
+  ['/api/v1/notes/:id/analysis', v1NoteAnalysis, true],
+  ['/api/v1/batches', v1Batches, true],
 ];
 
 /**

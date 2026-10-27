@@ -1,6 +1,6 @@
 <script>
   // Full editor for one note, opened from #...?note=<id>. Autosaves as you type. Features get state, status,
-  // priority, assignee and pull requests; the right side (below on phones) is the timestamped timeline.
+  // priority, difficulty, assignee, pull requests and any agent analysis; the right side (below on phones) is the timestamped timeline.
   import X from '@lucide/svelte/icons/x';
   import Pin from '@lucide/svelte/icons/pin';
   import Archive from '@lucide/svelte/icons/archive';
@@ -13,6 +13,7 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
+  import Bot from '@lucide/svelte/icons/bot';
   import { fly, fade, slide } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
   import LabelPicker from './LabelPicker.svelte';
@@ -24,7 +25,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
-  import { FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
   import { copyText, noteMarkdown } from '../lib/export.js';
   import { renderMarkdown } from '../lib/markdown.js';
@@ -39,7 +40,9 @@
   const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   // Crossfade for icons and labels that swap in place (copy -> copied)
   const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
-  const PRIORITY_LEVELS = PRIORITY_LABELS.map((_, level) => level);
+  // Priority and difficulty share the 0..5 scale.
+  const LEVELS = PRIORITY_LABELS.map((_, level) => level);
+  const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
   // Feature-only blocks open and close their height (slide), so the rows below glide instead of jumping
   const BLOCK_MS = 180;
 
@@ -247,8 +250,13 @@
                     </button>
                   {/each}
                 </div>
-                <!-- Priority 0-5 as a segmented control: three per row on phones, all six in one row from sm up -->
-                <PriorityPicker value={note.priority_level} levels={PRIORITY_LEVELS} onselect={(level) => set({ priority_level: level })} class="grid-cols-3 sm:grid-cols-6" />
+                <!-- Priority and difficulty 0-5 as segmented controls: three per row on phones, all six in one row from sm up,
+                     side by side (three per row again) from xl up -->
+                <div class="grid gap-2 xl:grid-cols-2">
+                  <PriorityPicker value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} class="grid-cols-3 sm:grid-cols-6 xl:grid-cols-3" />
+                  <PriorityPicker value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY}
+                    onselect={(level) => set({ difficulty: level })} class="grid-cols-3 sm:grid-cols-6 xl:grid-cols-3" />
+                </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
                   <input value={note.assignee} maxlength={MAX_NAME} placeholder="Assignee" aria-label="Assignee" class="{FIELD} sm:w-40"
@@ -284,6 +292,21 @@
                 <button class="spring press border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
               </form>
               {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
+            </section>
+          {/if}
+
+          <!-- What an agent decided when it triaged this (POST /api/v1/notes/:id/analysis): read-only here -->
+          {#if note.analysis || note.batch}
+            <section class="border border-line" aria-label="Agent analysis" transition:slide={{ duration: BLOCK_MS }}>
+              <h3 class="flex flex-wrap items-center gap-x-2 border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">
+                <Bot class="size-3.5" />Agent analysis
+                {#if note.batch}<span class="selectable normal-case tracking-normal text-ink-muted">· {note.batch}</span>{/if}
+                {#if note.analyzed_at}<span class="ml-auto normal-case tracking-normal" title={fullTime(note.analyzed_at)}>{fullTime(note.analyzed_at)}</span>{/if}
+              </h3>
+              {#if note.analysis}
+                <!-- Rendered by src/lib/markdown.js, which escapes all input -->
+                <div class="markdown selectable px-3 py-2 text-fluid-sm text-ink-muted">{@html renderMarkdown(note.analysis)}</div>
+              {/if}
             </section>
           {/if}
         </div>

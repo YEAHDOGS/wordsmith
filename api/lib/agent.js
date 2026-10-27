@@ -1,5 +1,5 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { FEATURE_STATES, MAX_TITLE, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, isId, parsePullRequestUrl } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
@@ -10,6 +10,9 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const CLAIM_CANDIDATES = 5;
 const MAX_EVENTS = 200;
+const MAX_BATCH_NOTES = 500;
+// Triage fields an agent can write, through PATCH or the analysis endpoint.
+const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
 const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
 const STATE_LABELS = { requested: 'Requested', in_progress: 'In progress', complete: 'Complete' };
@@ -73,6 +76,12 @@ export async function listNotes(env, userId, query, kind) {
   if (project) where.push('project_id = ?'), binds.push(project.id);
   const states = (query.get('state') || '').split(',').filter((state) => FEATURE_STATES.includes(state));
   if (states.length) where.push(`state IN (${states.map(() => '?').join(', ')})`), binds.push(...states);
+  // Triage filters: one batch, unanalyzed only (analyzed=false), or at most some difficulty (max_difficulty=2).
+  if (query.has('batch')) where.push('batch = ?'), binds.push(query.get('batch'));
+  if (query.get('analyzed') === 'false') where.push('analyzed_at IS NULL');
+  if (query.get('analyzed') === 'true') where.push('analyzed_at IS NOT NULL');
+  const maxDifficulty = Number(query.get('max_difficulty'));
+  if (query.has('max_difficulty') && Number.isInteger(maxDifficulty)) where.push('difficulty BETWEEN 1 AND ?'), binds.push(Math.min(MAX_DIFFICULTY, maxDifficulty));
   const since = Number(query.get('since'));
   if (since > 0) where.push('updated_at > ?'), binds.push(since);
   const search = (query.get('q') || '').slice(0, MAX_TITLE);
@@ -153,9 +162,10 @@ export async function updateNote(env, userId, actor, id, input) {
   const before = await getNote(env, userId, id);
   /** @type {Record<string, any>} */
   const patch = {};
-  for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee']) {
+  for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
     if (input[field] !== undefined) patch[field] = input[field];
   }
+  if (typeof input.analysis_append === 'string') patch.analysis = `${patch.analysis ?? before.analysis}\n\n${input.analysis_append}`.trim();
   // Agents speak the 0..5 scale as "priority"; it is stored as priority_level.
   if (input.priority !== undefined) patch.priority_level = input.priority;
   if (typeof input.body_append === 'string') patch.body = `${patch.body ?? before.body}\n\n${input.body_append}`.trim();
@@ -221,6 +231,30 @@ export async function claimNext(env, userId, actor, projectRef) {
 }
 
 /**
+ * Notes grouped by batch, so an agent sees what ships together, what's done and which PRs carry it. Batches with
+ * open work come first, then newest triage first.
+ * @param {Record<string, any>} env
+ * @param {string} userId
+ */
+export async function listBatches(env, userId) {
+  const { results } = await env.DB.prepare(`SELECT * FROM notes WHERE user_id = ? AND batch != '' AND deleted_at IS NULL ORDER BY ${CLAIM_ORDER} LIMIT ?`)
+    .bind(userId, MAX_BATCH_NOTES).all();
+  const maps = await lookups(env, userId);
+  /** @type {Map<string, { batch: string, open: number, analyzed_at: number, pull_requests: string[], notes: any[] }>} */
+  const batches = new Map();
+  for (const row of results) {
+    const note = present(toApi(row), maps);
+    if (!batches.has(note.batch)) batches.set(note.batch, { batch: note.batch, open: 0, analyzed_at: 0, pull_requests: [], notes: [] });
+    const group = /** @type {any} */ (batches.get(note.batch));
+    if (note.state !== 'complete') group.open++;
+    group.analyzed_at = Math.max(group.analyzed_at, note.analyzed_at || 0);
+    for (const pr of note.pull_requests) if (!group.pull_requests.includes(pr.url)) group.pull_requests.push(pr.url);
+    group.notes.push({ id: note.id, title: note.title, state: note.state, priority: note.priority, difficulty: note.difficulty, status: note.status, project: note.project?.name ?? null });
+  }
+  return [...batches.values()].sort((a, b) => Number(b.open > 0) - Number(a.open > 0) || b.analyzed_at - a.analyzed_at);
+}
+
+/**
  * Markdown checklist of features, easy to paste into an agent prompt.
  * @param {Record<string, any>[]} features
  */
@@ -234,6 +268,9 @@ export function featuresMarkdown(features) {
     lines.push(`  - requested: ${iso(note.created_at)}${note.started_at ? `, started: ${iso(note.started_at)}` : ''}${note.completed_at ? `, completed: ${iso(note.completed_at)}` : ''}`);
     if (note.assignee) lines.push(`  - assignee: ${note.assignee}`);
     if (note.status) lines.push(`  - status: ${note.status}`);
+    if (note.difficulty) lines.push(`  - difficulty: ${note.difficulty} (${DIFFICULTY_LABELS[note.difficulty]})`);
+    if (note.batch) lines.push(`  - batch: ${note.batch}`);
+    if (note.analysis) lines.push('  - analysis:', ...note.analysis.split('\n').map((/** @type {string} */ line) => `    > ${line}`));
     for (const pr of note.pull_requests) lines.push(`  - PR (${pr.state}): ${pr.url}`);
     if (note.body) lines.push('', ...note.body.split('\n').map((/** @type {string} */ line) => `    ${line}`), '');
   }

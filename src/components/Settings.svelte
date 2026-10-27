@@ -1,6 +1,6 @@
 <script>
-  // Account, linked providers, agent API tokens, appearance, the app version and installers,
-  // the copy-paste agent setup and webhook help. One stacked column on phones, a 1px grid of cards from lg up.
+  // Account, linked providers, agent API tokens, appearance, the app version and installers, the step-by-step guide to
+  // connecting an agent (T3 Code or any other), its two copy-paste prompts, and webhook help. One stacked column on phones, a 1px grid of cards from lg up.
   import KeyRound from '@lucide/svelte/icons/key-round';
   import Copy from '@lucide/svelte/icons/copy';
   import LogOut from '@lucide/svelte/icons/log-out';
@@ -17,6 +17,7 @@
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
   import { githubProfileUrl } from './settings-data.js';
+  import { agentInstructions, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';
 
@@ -34,23 +35,17 @@
   let secret = $state('');
   let error = $state('');
   let copiedKey = $state('');
-  let setupOpen = $state(matchMedia(WIDE_SCREEN).matches);
+  /** @type {Record<string, boolean>} */
+  let open = $state({ setup: matchMedia(WIDE_SCREEN).matches, triage: false });
   let githubUrl = $state(GITHUB_PROFILE_FALLBACK);
 
   const linkedProviders = $derived(auth.linked.map((identity) => identity.provider));
   const githubId = $derived(auth.linked.find((identity) => identity.provider === 'github')?.provider_user_id || '');
-  const agentInstructions = $derived(`## wordsmith (feature queue)
-Your wordsmith token is in the WORDSMITH_TOKEN environment variable. Send it as "Authorization: Bearer $WORDSMITH_TOKEN".
-API: ${apiUrl('/api/v1')} (GET it for the full endpoint list)
-
-Loop:
-1. Claim work: POST ${apiUrl('/api/v1/features/next')} with JSON {"project":"<project name or id>"}. 204 means the queue is empty.
-2. Report progress: PATCH ${apiUrl('/api/v1/notes/<id>')} with {"status":"short present-tense update"}. Do this at each milestone.
-3. When your pull request is open: PATCH the same URL with {"pr_url":"https://github.com/owner/repo/pull/123"}.
-4. Don't mark features complete yourself. Merging the PR completes them.
-5. Have a new idea? POST ${apiUrl('/api/v1/features')} with {"project":"...","title":"...","body":"..."}.
-Every call is timestamped on the feature's timeline under your token's name.`);
-  const setupLines = $derived(agentInstructions.split('\n'));
+  // The two copy-paste prompts (agent-prompts.js), each shown folded to SETUP_PREVIEW_LINES until expanded.
+  const prompts = $derived([
+    { key: 'setup', title: TEXT.setup, hint: TEXT.setupHint, text: agentInstructions(apiUrl) },
+    { key: 'triage', title: TEXT.triage, hint: TEXT.triageHint, text: triagePrompt(apiUrl) },
+  ]);
 
   async function loadTokens() {
     try {
@@ -200,25 +195,45 @@ Every call is timestamped on the feature's timeline under your token's name.`);
     </section>
 
     <section class="{CARD} lg:col-span-2" use:reveal={4}>
-      <div class="flex flex-wrap items-start justify-between gap-x-3">
-        <div class="min-w-0 flex-1 basis-60">
-          <h2 class={HEADING}>{TEXT.setup}</h2>
-          <p class={HINT}>{TEXT.setupHint}</p>
-        </div>
-        {@render copyButton('setup', agentInstructions, 'mb-4')}
-      </div>
-      <!-- Long URLs wrap anywhere, so the block never pushes the page sideways; the rest folds away behind a toggle -->
-      <div class="selectable overflow-hidden font-mono text-xs leading-relaxed text-ink-muted {BOX}">
-        <pre class="px-4 pt-4 whitespace-pre-wrap wrap-anywhere {setupOpen ? '' : 'pb-4'}">{setupLines.slice(0, SETUP_PREVIEW_LINES).join('\n')}</pre>
-        {#if setupOpen}
-          <pre class="px-4 pb-4 whitespace-pre-wrap wrap-anywhere" transition:slide={SWAP}>{setupLines.slice(SETUP_PREVIEW_LINES).join('\n')}</pre>
-        {/if}
-      </div>
-      <button class="spring press mt-2 inline-flex items-center gap-1.5 py-1 text-xs text-ink-muted hover:text-ink" aria-expanded={setupOpen} onclick={() => (setupOpen = !setupOpen)}>
-        <ChevronDown class="size-3.5 transition-transform duration-150 ease-spring {setupOpen ? 'rotate-180' : ''}" />{setupOpen ? TEXT.showLess : TEXT.showAll}
-      </button>
+      <h2 class={HEADING}>{TEXT.connect}</h2>
+      <p class={HINT}>{TEXT.connectHint}</p>
+      <ol class="mb-8 grid gap-px border border-line bg-line sm:grid-cols-2 xl:grid-cols-3">
+        {#each TEXT.connectSteps as step, index (step.title)}
+          <li class="flex min-w-0 gap-3 bg-app p-3 tv:p-5">
+            <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft font-mono text-xs font-bold text-accent tv:size-9 tv:text-base">{index + 1}</span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold tv:text-lg">{step.title}</p>
+              <p class="mt-0.5 text-xs text-ink-muted tv:text-base">{step.body}</p>
+              {#if step.code}<code class="selectable mt-1.5 block font-mono text-[0.6875rem] wrap-anywhere text-ink tv:text-sm">{step.code}</code>{/if}
+            </div>
+          </li>
+        {/each}
+      </ol>
 
-      <h2 class="{HEADING} mt-8">{TEXT.webhook}</h2>
+      {#each prompts as prompt (prompt.key)}
+        {@const lines = prompt.text.split('\n')}
+        <div class="mb-8">
+          <div class="flex flex-wrap items-start justify-between gap-x-3">
+            <div class="min-w-0 flex-1 basis-60">
+              <h3 class="mb-1 text-base font-bold tracking-tight tv:text-2xl">{prompt.title}</h3>
+              <p class={HINT}>{prompt.hint}</p>
+            </div>
+            {@render copyButton(prompt.key, prompt.text, 'mb-4')}
+          </div>
+          <!-- Long URLs wrap anywhere, so the block never pushes the page sideways; the rest folds away behind a toggle -->
+          <div class="selectable overflow-hidden font-mono text-xs leading-relaxed text-ink-muted {BOX}">
+            <pre class="px-4 pt-4 whitespace-pre-wrap wrap-anywhere {open[prompt.key] ? '' : 'pb-4'}">{lines.slice(0, SETUP_PREVIEW_LINES).join('\n')}</pre>
+            {#if open[prompt.key]}
+              <pre class="px-4 pb-4 whitespace-pre-wrap wrap-anywhere" transition:slide={SWAP}>{lines.slice(SETUP_PREVIEW_LINES).join('\n')}</pre>
+            {/if}
+          </div>
+          <button class="spring press mt-2 inline-flex items-center gap-1.5 py-1 text-xs text-ink-muted hover:text-ink" aria-expanded={open[prompt.key]} onclick={() => (open[prompt.key] = !open[prompt.key])}>
+            <ChevronDown class="size-3.5 transition-transform duration-150 ease-spring {open[prompt.key] ? 'rotate-180' : ''}" />{open[prompt.key] ? TEXT.showLess : TEXT.showAll}
+          </button>
+        </div>
+      {/each}
+
+      <h2 class={HEADING}>{TEXT.webhook}</h2>
       <p class={HINT}>{TEXT.webhookHint}</p>
       <div class="flex items-center gap-2">
         <code class="selectable min-w-0 flex-1 truncate px-3 py-2 font-mono text-xs {BOX}">{apiUrl('/api/github/webhook')}</code>
