@@ -58,7 +58,11 @@ Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through 
 
 Builds run migrations automatically: every pull request Preview applies pending migrations to staging D1 first (`scripts/preview.js`), and every production deploy from `master` applies them to production D1 first (`scripts/deploy.js`, the Workers Builds deploy command). A failed migration fails the build, so nothing deploys against an old schema. Keep migrations additive and backward compatible. To run them by hand: `npx wrangler d1 migrations apply wordsmith-staging --remote --env preview`, then `npx wrangler d1 migrations apply wordsmith-production --remote`, or the manual **Migrate Cloudflare D1** workflow (needs `CLOUDFLARE_API_TOKEN` with D1 edit and `CLOUDFLARE_ACCOUNT_ID` as repo secrets).
 
-For the local Worker and D1, run `npm install`, then `npm run cloudflare:dev` (it builds `dist/` first). Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
+For the local Worker and D1, run `npm install`, then `npm run cloudflare:dev` (it builds `dist/` first) and open http://localhost:8788. Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
+
+To run locally against the **staging** data instead, use `npm run cloudflare:dev:staging`: the Worker runs on your machine at http://localhost:8788, but `env.preview`'s D1 and R2 bindings are marked `"remote": true`, so it reads and writes the real staging database and bucket (needs `npx wrangler login`). Never do this with production.
+
+Signing in locally: copy `.dev.vars.example` to `.dev.vars`. `DEV_LOGIN=true` shows a "Local dev" button on localhost. For real GitHub sign-in, create a separate GitHub OAuth app with callback `http://localhost:8788/api/auth/github/callback` and put its `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` in `.dev.vars` (the production OAuth app only accepts the wordsmith.dogs.red callback). `cloudflare:dev` passes `--local-upstream localhost:8788` because the production custom-domain route would otherwise make the Worker see every request as wordsmith.dogs.red, which breaks both the callback URL and the dev login. Use `npm run dev` (Vite on :5173, proxying `/api` to :8788) only alongside one of those for hot reload, and sign in on :8788.
 
 ## Versioning
 
