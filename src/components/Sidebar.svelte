@@ -1,7 +1,7 @@
 <script>
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
   // Top: logo, wordmark and the sync icon, the same height as the top bar so their bottom lines meet. Bottom: the app
-  // version, the archive (with a count badge) and a settings cog; the rail stacks the two buttons. The Made by DOGS
+  // version, the archive (no count badge; the count is in its tooltip) and a settings cog; the rail stacks the two buttons. The Made by DOGS
   // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
@@ -13,8 +13,7 @@
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
   import { flip } from 'svelte/animate';
-  import { scale, slide } from 'svelte/transition';
-  import { backOut } from 'svelte/easing';
+  import { slide } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import SyncStatus from './SyncStatus.svelte';
   import { store } from '../lib/store.svelte.js';
@@ -42,8 +41,6 @@
   // Same heights as the TopBar header (h-12 sm:h-14 tv:h-20).
   const HEADER_HEIGHT = 'h-12 sm:h-14 tv:h-20';
   const FOOTER_BUTTON = 'spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised';
-  const MAX_BADGE = 99;
-  const BADGE_IN = { start: 0.3, duration: 200, easing: backOut };
 
   let newProject = $state('');
   let newLabel = $state('');
@@ -197,10 +194,6 @@
       <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}
         title={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-label={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-current={active('archive') ? 'page' : undefined}>
         <span class="flex spring {active('archive') ? '-translate-y-px scale-110' : ''}"><Archive class="size-4 tv:size-6" /></span>
-        {#if archivedCount}
-          <span class="pointer-events-none absolute top-0.5 right-0.5 min-w-3.5 rounded-full bg-surface-raised px-0.5 text-center font-mono text-[0.5625rem] leading-3.5 tabular-nums text-ink ring-1 ring-line-strong tv:top-1 tv:right-1 tv:min-w-5 tv:text-xs tv:leading-5"
-            aria-hidden="true" transition:scale={BADGE_IN}>{archivedCount > MAX_BADGE ? `${MAX_BADGE}+` : archivedCount}</span>
-        {/if}
       </button>
       <button class="{FOOTER_BUTTON} {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
         onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>

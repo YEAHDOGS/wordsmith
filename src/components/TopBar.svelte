@@ -10,13 +10,12 @@
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { syncProblem } from './sync-problem.js';
+  import { letterIn, letterOut } from './title-flip.js';
 
   /** @type {{ title: string, subtitle?: string }} */
   let { title, subtitle = '' } = $props();
 
   const ICON_BUTTON = 'spring press relative flex size-10 tv:size-12 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink';
-  const TITLE_IN = { y: 10, duration: 220, easing: backOut };
-  const TITLE_OUT = { y: -10, duration: 120, easing: cubicIn };
   const SEARCH_IN = { x: 32, duration: 200, easing: backOut };
   const SEARCH_OUT = { x: 32, duration: 140, easing: cubicIn };
   const BADGE = { start: 0.3, duration: 200, easing: backOut };
@@ -46,15 +45,22 @@
     <!-- One grid cell: the leaving and entering titles overlap while they animate, so nothing shifts. With no subtitle the
          title slides down half the subtitle line to sit centered (transform only; short screens hide that line anyway) -->
     <div class="spring grid min-w-0 {subtitle ? '' : 'translate-y-2 short:translate-y-0'}">
-      {#key title}
-        <h1 class="col-start-1 row-start-1 min-w-0 truncate text-fluid-lg leading-tight font-bold tracking-tight" in:fly={TITLE_IN} out:fly={TITLE_OUT}>{title}</h1>
-      {/key}
+      <!-- A keyed each, not {#key}: the leaving copy keeps its own text instead of showing the new title while it
+           animates out. Letter by letter (title-flip.js); |global because the letters sit one block below the change. -->
+      {#each [title] as shown (shown)}
+        {@const letters = [...shown]}
+        <h1 class="col-start-1 row-start-1 min-w-0 truncate text-fluid-lg leading-tight font-bold tracking-tight" aria-label={shown}>
+          {#each letters as letter, index}<span class="inline-block whitespace-pre" aria-hidden="true"
+            in:letterIn|global={{ index, count: letters.length }} out:letterOut|global={{ index, count: letters.length }}>{letter}</span>{/each}
+        </h1>
+      {/each}
     </div>
     <!-- Always takes its line (even empty), so pages with and without a subtitle keep the title in place -->
     <div class="short:hidden grid h-4 min-w-0">
-      {#key subtitle}
-        <p class="col-start-1 row-start-1 min-w-0 truncate font-mono text-[0.6875rem] leading-4 text-ink-faint" in:fade={{ duration: 200, delay: 60 }} out:fade={{ duration: 100 }}>{subtitle}</p>
-      {/key}
+      <!-- Keyed each like the title, so the leaving line fades out with its own text -->
+      {#each [subtitle] as line (line)}
+        <p class="col-start-1 row-start-1 min-w-0 truncate font-mono text-[0.6875rem] leading-4 text-ink-faint" in:fade={{ duration: 200, delay: 60 }} out:fade={{ duration: 100 }}>{line}</p>
+      {/each}
     </div>
   </div>
 
