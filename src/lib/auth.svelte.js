@@ -22,7 +22,7 @@ class Auth {
   /** @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null } | null} */
   user = $state(null);
   /** @type {string[]} */ providers = $state([]);
-  /** @type {{ provider: string, email: string | null, created_at: number }[]} */ linked = $state([]);
+  /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
   devLogin = $state(false);
   /** Native login in progress: the code to match in the browser. @type {{ code: string, provider: string, url: string } | null} */
   device = $state(null);

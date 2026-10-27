@@ -7,6 +7,18 @@
 @import "./styles/motion.css";
 @import "./styles/markdown.css";
 
+/* UI size (Settings → Appearance): --ws-scale from theme.css scales every rem. 100% keeps the visitor's browser font size. */
+html {
+  font-size: calc(var(--ws-scale) * 100%);
+}
+
+/* Theme, size and corner changes crossfade the whole page (src/lib/appearance.svelte.js crossfade): opacity only */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease-out-soft);
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -80,6 +92,33 @@ textarea,
     scrollbar-width: thin;
     scrollbar-color: var(--color-line-strong) transparent;
   }
+
+  /* Corner style (Settings → Appearance): buttons, fields, note cards, dialogs and popovers follow --ws-radius.
+     Base layer, so utilities like rounded-full on dots and avatars still win. Square (0) is the default look. */
+  button,
+  [role="button"],
+  select,
+  textarea,
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  dialog,
+  [data-popover] {
+    border-radius: var(--ws-radius);
+  }
+}
+
+/* Native color pickers (Settings → Appearance): the chosen color fills the box, following the corner style */
+input[type="color"].swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+input[type="color"].swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: var(--ws-radius-sm);
+}
+
+input[type="color"].swatch::-moz-color-swatch {
+  border: none;
+  border-radius: var(--ws-radius-sm);
 }
 
 /* Hide scrollbars but keep scrolling functionality (sideways swipe lists) */

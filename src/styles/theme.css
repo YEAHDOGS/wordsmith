@@ -97,7 +97,53 @@
   --ws-dot-pink: #b8237a;
 }
 
+/* Custom colors (Settings → Appearance) are not written here: src/lib/appearance.svelte.js reads the values above
+   as defaults and overrides the --ws-* properties inline on <html> with the user's picks and shades derived from them. */
+
+/* Corner style (Settings → Appearance), from <html data-corners>. Square is the DOGS default.
+   --ws-radius rounds buttons, fields, cards and dialogs (base rule in src/app.css, rounded-ui utility);
+   --ws-radius-sm rounds small chips and inner boxes (rounded-ui-sm). */
+:root {
+  --ws-radius: 0rem;
+  --ws-radius-sm: 0rem;
+}
+
+[data-corners="soft"] {
+  --ws-radius: 0.375rem;
+  --ws-radius-sm: 0.25rem;
+}
+
+[data-corners="rounded"] {
+  --ws-radius: 0.875rem;
+  --ws-radius-sm: 0.5rem;
+}
+
+/* UI size (Settings → Appearance), from <html data-size>: scales the root font size (src/app.css), and with it every
+   rem-based Tailwind size: text, spacing, boxes and icons. m is the browser's own default size. */
+:root {
+  --ws-scale: 1;
+}
+
+[data-size="xs"] {
+  --ws-scale: 0.8125;
+}
+
+[data-size="s"] {
+  --ws-scale: 0.90625;
+}
+
+[data-size="l"] {
+  --ws-scale: 1.125;
+}
+
+[data-size="xl"] {
+  --ws-scale: 1.25;
+}
+
 @theme inline {
+  /* rounded-ui / rounded-ui-sm follow the corner style above */
+  --radius-ui: var(--ws-radius);
+  --radius-ui-sm: var(--ws-radius-sm);
   --color-app: var(--ws-app);
   --color-surface: var(--ws-surface);
   --color-surface-raised: var(--ws-surface-raised);

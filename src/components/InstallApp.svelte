@@ -1,0 +1,89 @@
+<script>
+  // Settings → About: the running version (linked to the PR it shipped with) and, on the web, installers for
+  // every platform from the latest GitHub release, the visitor's own platform first. Hidden inside the native app.
+  import Download from '@lucide/svelte/icons/download';
+  import ExternalLink from '@lucide/svelte/icons/external-link';
+  import GitMerge from '@lucide/svelte/icons/git-merge';
+  import Smartphone from '@lucide/svelte/icons/smartphone';
+  import { fade, fly } from 'svelte/transition';
+  import { IS_NATIVE } from '../lib/api.js';
+  import { APP_VERSION, LATEST_PR } from '../lib/version.js';
+  import { latestRelease, visitorPlatform } from './settings-data.js';
+  import { BOX, BUTTON, HEADING, HINT, SUBHEADING } from './settings-styles.js';
+  import TEXT from './settings.json';
+
+  const MB_DECIMALS = 1;
+  const STAGGER_MS = 40;
+  const ENTER = { y: 8, duration: 220 };
+  const FADE = { duration: 150 };
+
+  const platform = visitorPlatform();
+  /** @type {import('./settings-data.js').Release | null | undefined} undefined while loading */
+  let release = $state(undefined);
+
+  /** Downloads grouped by platform, the visitor's own first. */
+  const groups = $derived.by(() => {
+    if (!release) return [];
+    const order = Object.keys(TEXT.platforms).sort((a, b) => Number(b === platform) - Number(a === platform));
+    return order
+      .map((id) => ({ id, downloads: /** @type {import('./settings-data.js').Release} */ (release).downloads.filter((download) => download.platform === id) }))
+      .filter((group) => group.downloads.length);
+  });
+
+  $effect(() => {
+    if (IS_NATIVE) return;
+    latestRelease().then((found) => (release = found));
+  });
+</script>
+
+<h2 class={HEADING}>{TEXT.about}</h2>
+<p class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-fluid-sm text-ink-muted">
+  <span>{TEXT.version} <span class="selectable font-mono text-ink">{APP_VERSION}</span></span>
+  {#if LATEST_PR}
+    <a class="spring inline-flex min-w-0 max-w-full items-center gap-1.5 text-ink-muted hover:text-accent" href={LATEST_PR.url} target="_blank" rel="noopener noreferrer"
+      title="{TEXT.latestPr}: {LATEST_PR.title}">
+      <GitMerge class="size-3.5 shrink-0" /><span class="font-mono">#{LATEST_PR.number}</span><span class="truncate">{LATEST_PR.title}</span>
+    </a>
+  {/if}
+</p>
+
+{#if !IS_NATIVE}
+  <p class={SUBHEADING}>{TEXT.install}</p>
+  <p class={HINT}>{TEXT.installHint}</p>
+
+  <!-- One grid cell for loading / empty / list, so each state crossfades in place -->
+  <div class="grid">
+    {#if release === undefined}
+      <p class="col-start-1 row-start-1 text-xs text-ink-faint" transition:fade={FADE}>{TEXT.loadingRelease}</p>
+    {:else if !groups.length}
+      <p class="col-start-1 row-start-1 text-xs text-ink-faint" in:fade={FADE}>{TEXT.noRelease}</p>
+    {:else}
+      <ul class="col-start-1 row-start-1 grid gap-2 sm:grid-cols-2" in:fade={FADE}>
+        {#each groups as group, index (group.id)}
+          <li class="{BOX} min-w-0 p-3 {group.id === platform ? 'border-accent' : ''}" in:fly={{ ...ENTER, delay: index * STAGGER_MS }}>
+            <p class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold">
+              {TEXT.platforms[/** @type {keyof typeof TEXT.platforms} */ (group.id)]}
+              {#if group.id === platform}<span class="truncate text-xs font-normal text-accent">{TEXT.forThisDevice}</span>{/if}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              {#each group.downloads as download (download.url)}
+                <a class="{BUTTON} {group.id === platform ? 'border-accent' : ''}" href={download.url} download title={download.name}>
+                  <Download class="size-4 shrink-0" /><span class="font-mono uppercase">.{download.kind}</span>
+                  <span class="text-xs text-ink-faint">{download.mb.toFixed(MB_DECIMALS)} MB</span>
+                </a>
+              {/each}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </div>
+
+  <p class="mt-3 flex items-start gap-2 text-xs {platform === 'ios' ? 'text-ink' : 'text-ink-muted'}">
+    <Smartphone class="mt-px size-3.5 shrink-0 {platform === 'ios' ? 'text-accent' : ''}" />{TEXT.iosNote}
+  </p>
+  {#if release}
+    <a class="spring mt-3 inline-flex items-center gap-1.5 text-xs text-ink-muted hover:text-accent" href={release.url} target="_blank" rel="noopener noreferrer"
+      in:fade={FADE}>{TEXT.allReleases} · <span class="font-mono">{release.tag}</span><ExternalLink class="size-3" /></a>
+  {/if}
+{/if}
