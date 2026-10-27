@@ -1,8 +1,39 @@
 name: Build apps
 
+# Manual only: Actions → Build apps → Run workflow, then tick the platforms you want.
+# Every platform's installers land in one "build" artifact per platform, named like build/wordsmith-win-x64.exe.
 on:
   workflow_dispatch:
     inputs:
+      web:
+        description: Web (dist)
+        type: boolean
+        default: true
+      windows:
+        description: Windows (wordsmith-win-x64.exe / .msi)
+        type: boolean
+        default: true
+      macos:
+        description: macOS (wordsmith-mac-universal.dmg)
+        type: boolean
+        default: true
+      linux:
+        description: Linux (wordsmith-linux-x64.AppImage / .deb / .rpm)
+        type: boolean
+        default: true
+      android:
+        description: Android (wordsmith-android.apk)
+        type: boolean
+        default: false
+      ios:
+        description: iOS (wordsmith-ios.ipa, needs Apple signing set up)
+        type: boolean
+        default: false
+      api_base:
+        description: API origin native apps call, e.g. https://wordsmith.pages.dev (blank = repo variable WORDSMITH_API_BASE)
+        type: string
+        default: ''
+
 permissions:
   contents: read
 
@@ -14,9 +45,33 @@ env:
   NODE_VERSION: "24"
 
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          INPUTS: ${{ toJSON(inputs) }}
+        run: |
+          node -e '
+            const inputs = JSON.parse(process.env.INPUTS);
+            const all = [
+              { platform: "windows", os: "windows-latest", args: "--bundles msi,nsis", mobile: "" },
+              { platform: "linux", os: "ubuntu-24.04", args: "--bundles deb,rpm,appimage", mobile: "" },
+              { platform: "macos", os: "macos-15", args: "--target universal-apple-darwin --bundles dmg", mobile: "" },
+              { platform: "android", os: "ubuntu-24.04", args: "--apk", mobile: "android" },
+              { platform: "ios", os: "macos-15", args: "", mobile: "ios" },
+            ];
+            const picked = all.filter((entry) => inputs[entry.platform] === true || inputs[entry.platform] === "true");
+            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(picked)}\n`);
+            console.log("Building:", picked.map((entry) => entry.platform).join(", ") || "no native targets");
+          '
+
   web:
     name: Web
-    if: contains(fromJSON('["web","android","ios","windows","macos","linux"]'), 'web')
+    if: inputs.web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,8 +79,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install
-        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - run: npm ci --no-audit --no-fund
       - run: npm run build
       - uses: actions/upload-artifact@v7
         with:
@@ -35,45 +89,31 @@ jobs:
 
   native:
     name: ${{ matrix.platform }}
-    if: contains(fromJSON('__PLATFORMS_JSON__'), matrix.platform)
+    needs: plan
+    if: needs.plan.outputs.matrix != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: windows
-            os: windows-latest
-            args: --bundles msi,nsis
-            mobile: ''
-          - platform: linux
-            os: ubuntu-24.04
-            args: --bundles deb,rpm,appimage
-            mobile: ''
-          - platform: macos
-            os: macos-15
-            args: --bundles dmg,app
-            mobile: ''
-          - platform: android
-            os: ubuntu-24.04
-            args: --apk
-            mobile: android
-          - platform: ios
-            os: macos-15
-            args: ''
-            mobile: ios
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
+    env:
+      # Native bundles have no same-origin API; this is baked in at build time (it is a public URL, not a secret).
+      VITE_API_BASE: ${{ inputs.api_base || vars.WORDSMITH_API_BASE }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install
-        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - run: npm ci --no-audit --no-fund
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Android Rust target
+      - name: Install macOS Rust targets
+        if: matrix.platform == 'macos'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install Android Rust targets
         if: matrix.platform == 'android'
         run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - name: Install iOS Rust targets
@@ -95,12 +135,10 @@ jobs:
         with:
           args: ${{ matrix.args }}
           mobile: ${{ matrix.mobile }}
+      - name: Collect into build/
+        run: node scripts/collect-builds.js ${{ matrix.platform }}
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}
-          path: |
-            src/tauri/target/**/release/bundle/**
-            src/tauri/gen/**/build/outputs/**/*
-            src/tauri/gen/apple/build/**/**/*.ipa
-            src/tauri/gen/apple/build/**/**/*.app
+          path: build/*
           if-no-files-found: error

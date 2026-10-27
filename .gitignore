@@ -18,6 +18,9 @@ dist-ssr
 *.local
 .wrangler/
 
+# Collected native binaries (scripts/collect-builds.js)
+/build/
+
 # Tauri native build output
 src/tauri/target/
 src/tauri/gen/

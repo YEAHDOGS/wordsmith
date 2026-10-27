@@ -1,12 +1,12 @@
 [package]
-name = "dogs-app"
+name = "wordsmith"
 version = "1.0.0"
-description = "__APP_DESCRIPTION__"
+description = "wordsmith by DOGS: notes and feature requests your AI agents ship."
 authors = ["DOGS"]
 edition = "2021"
 
 [lib]
-name = "dogs_app_lib"
+name = "wordsmith_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -25,8 +25,8 @@ Rules for every AI agent working in this repository.
 - Database changes require versioned SQL migrations. SQL migrations are the source of truth; do not duplicate database schemas in application code.
 - All apps use three isolated environments:
   - **Local**: `npx wrangler pages dev ../dist`, run from `api/`, runs Pages Functions on Workers locally with Miniflare. D1 uses a local SQLite database under `api/.wrangler/state/`; this data is machine-local and must never be committed or connected to production. Standalone Workers use `npx wrangler dev`.
-  - **Staging / Preview**: Cloudflare Pages preview deployments run on Cloudflare's edge and share a dedicated staging D1 database populated only with synthetic test data. GitHub Actions deploys branch pushes and same-repository pull requests here. Fork pull requests cannot access deployment secrets and are not deployed.
-  - **Production**: Cloudflare Pages and Workers run on Cloudflare's edge for live users and use the production D1 database. GitHub Actions deploys production only from `master`.
+  - **Staging / Preview**: Cloudflare Pages preview deployments run on Cloudflare's edge and share a dedicated staging D1 database populated only with synthetic test data. Deployed by manually running `deploy-cloudflare.yml` with `staging` (no automatic deploys for now). Fork pull requests cannot access deployment secrets and are not deployed.
+  - **Production**: Cloudflare Pages and Workers run on Cloudflare's edge for live users and use the production D1 database. Deployed by manually running `deploy-cloudflare.yml` with `production`, only from `master`.
 - Never point local or staging at the production D1 database. Keep staging and production bindings separate in Cloudflare configuration.
 - All branch previews share staging D1. Keep migrations additive and backward compatible, use unique timestamped migration names, and never reset or destructively seed the shared staging database from a preview.
 - Native apps call the same Cloudflare APIs as the web app. Never connect a client app directly to D1 or embed Cloudflare credentials in browser code, Vite `VITE_*` variables, or native bundles.
@@ -111,6 +111,8 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - Release builds are manually triggered from `.github/workflows/build-apps.yml`. Each selected platform is built on its required GitHub-hosted runner and uploaded as an artifact.
 - Android builds require Android Studio command line tools and an installed SDK/NDK; iOS builds require macOS and Xcode. Linux and Windows builds use their native runner toolchains.
 - Check native window layouts down to 320×320; every responsive layout requirement applies.
+- Built binaries are collected into `/build/` at the repo root as `wordsmith-<platform>-<arch>.<ext>` (e.g. `build/wordsmith-win-x64.exe`) by `scripts/collect-builds.js`. `/build/` is gitignored.
+- GitHub Actions workflows are manual only (`workflow_dispatch`) for now. Do not add push or pull_request triggers.
 
 # System Prompt: AAA Superpower Architecture Blueprint
 You are an expert interactive front-end engineer specializing in award-winning digital experiences. Replicate the core visual framework of the Superpower.com design system with flawless token execution. Avoid generic corporate bento grids. Focus on a high-fidelity, fluid layout structured around a continuous vertical alignment concept (human spine aesthetic).
