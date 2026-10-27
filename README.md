@@ -25,7 +25,7 @@ npm run build
 npm run cloudflare:db:migrate:local
 npm run cloudflare:dev                     # http://localhost:8788, the Worker + local D1 + local R2
 ```
-For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to :8788.
+For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api` to :8788.
 
 `wrangler.jsonc` sits at the repo root, so run Wrangler from there; local state lands in `.wrangler/`.
 
@@ -60,9 +60,9 @@ Builds run migrations automatically: every pull request Preview applies pending 
 
 For the local Worker and D1, run `npm install`, then `npm run cloudflare:dev` (it builds `dist/` first) and open http://localhost:8788. Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
 
-To run locally against the **staging** data instead, use `npm run cloudflare:dev:staging`: the Worker runs on your machine at http://localhost:8788, but `env.preview`'s D1 and R2 bindings are marked `"remote": true`, so it reads and writes the real staging database and bucket (needs `npx wrangler login`). Never do this with production.
+To run locally against the **staging** data instead (the default), use `npm run dev`: the Worker runs on your machine at http://localhost:8788, but `env.preview`'s D1 and R2 bindings are marked `"remote": true`, so it reads and writes the real staging database and bucket (needs `npx wrangler login`). Never do this with production. Staging starts empty for a new account: sign in once, then run `npm run seed:staging` to add synthetic sample projects, labels, features and notes for every staging user (additive and repeatable, never deletes; `npm run seed:staging -- <user id>` for one user).
 
-Signing in locally: copy `.dev.vars.example` to `.dev.vars`. `DEV_LOGIN=true` shows a "Local dev" button on localhost. For real GitHub sign-in, create a separate GitHub OAuth app with callback `http://localhost:8788/api/auth/github/callback` and put its `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` in `.dev.vars` (the production OAuth app only accepts the wordsmith.dogs.red callback). `cloudflare:dev` passes `--local-upstream localhost:8788` because the production custom-domain route would otherwise make the Worker see every request as wordsmith.dogs.red, which breaks both the callback URL and the dev login. Use `npm run dev` (Vite on :5173, proxying `/api` to :8788) only alongside one of those for hot reload, and sign in on :8788.
+Signing in locally: copy `.dev.vars.example` to `.dev.vars`. `DEV_LOGIN=true` shows a "Local dev" button on localhost. For real GitHub sign-in, create a separate GitHub OAuth app with callback `http://localhost:8788/api/auth/github/callback` and put its `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` in `.dev.vars` (the production OAuth app only accepts the wordsmith.dogs.red callback). `cloudflare:dev` passes `--local-upstream localhost:8788` because the production custom-domain route would otherwise make the Worker see every request as wordsmith.dogs.red, which breaks both the callback URL and the dev login. Use `npm run devVite` (Vite alone on :5173, proxying `/api` to :8788) only alongside one of those for hot reload, and sign in on :8788. Tauri's dev shell uses `devVite` too.
 
 ## Versioning
 

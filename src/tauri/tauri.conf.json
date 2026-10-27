@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "net.wearedogs.wordsmith",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 0.0.0.0",
+    "beforeDevCommand": "npm run devVite -- --host 0.0.0.0",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../../dist"

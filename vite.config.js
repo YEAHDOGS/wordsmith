@@ -13,7 +13,7 @@ const APP_CSS_TARGET = ['chrome99', 'edge99', 'firefox97', 'safari15.4', 'ios15.
 const APP_JS_TARGET = ['chrome99', 'edge99', 'firefox97', 'safari16.4', 'ios16.4']
 // The optional Tauri shell lives in src/tauri; its Rust build output must not trigger dev reloads.
 const NATIVE_SHELL_GLOB = '**/src/tauri/**'
-// npm run dev proxies the API to local wrangler (npm run cloudflare:dev), so cookies stay same-origin.
+// npm run devVite proxies the API to local wrangler (npm run dev or npm run cloudflare:dev), so cookies stay same-origin.
 const LOCAL_API = 'http://localhost:8788'
 
 // https://vite.dev/config/
