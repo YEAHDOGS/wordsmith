@@ -6,8 +6,9 @@ import { decodeJwtPayload, pkceChallenge, signEs256Jwt } from './crypto.js';
 const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_API = 'https://api.github.com';
-// read:user + user:email identify you. Set GITHUB_OAUTH_SCOPE to add "repo" so PR auto-sync can read private repos.
-const GITHUB_DEFAULT_SCOPE = 'read:user user:email';
+// read:user + user:email identify you; read:org lists the organizations you belong to (private memberships too) so the
+// repo picker can find their repos. Set GITHUB_OAUTH_SCOPE to add "repo" so the picker and PR auto-sync see private repos.
+const GITHUB_DEFAULT_SCOPE = 'read:user user:email read:org';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
