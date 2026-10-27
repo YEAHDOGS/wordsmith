@@ -55,7 +55,7 @@
 
   <section class="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-stretch justify-center gap-6 short:gap-3 overflow-y-auto px-4 py-6 short:py-2 tv:max-w-2xl">
     <div class="relative overflow-hidden bg-app py-2 text-center sweep" in:fade={{ duration: 400 }}>
-      <h1 class="text-fluid-display font-black leading-none tracking-tight">
+      <h1 class="text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
         word<span class="text-accent">smith</span>
       </h1>
       <p class="mt-3 short:mt-1 text-fluid-base font-medium text-ink-muted">{TEXT.tagline}</p>
