@@ -7,6 +7,7 @@
 // new" polls with a single small query (api/functions/api/sync.js).
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
+import { prepareForUpload } from './compress.js';
 import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
 
 const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards']);
@@ -316,7 +317,9 @@ class Store {
       this.uploads.push(entry);
       const live = () => this.uploads.find((upload) => upload.id === entry.id);
       try {
-        const { attachment } = await uploadFile(`/api/notes/${noteId}/attachments`, file, (fraction) => { const upload = live(); if (upload) upload.progress = fraction; });
+        // Shrink images to fit, and refuse what can't fit, before anything is sent (src/lib/compress.js).
+        const ready = await prepareForUpload(file);
+        const { attachment } = await uploadFile(`/api/notes/${noteId}/attachments`, ready, (fraction) => { const upload = live(); if (upload) upload.progress = fraction; });
         this.#mergeAttachments([attachment]);
         await this.#db?.put('attachments', [attachment]);
         this.uploads = this.uploads.filter((upload) => upload.id !== entry.id);
