@@ -7,11 +7,15 @@
   // created, highest priority, or manual) and grouping by nothing, project, or season (winter is December to February).
   // Hold and slide a card to move it: each band is a drop zone (src/lib/reorder.svelte.js); a drop in a time order
   // switches to manual so it sticks. Every reorder, sort change and resize slides cards with FLIP.
+  // Inside a project, its note groups (src/lib/groups.js) come right after Pinned, one band each, and fold away under their header.
   import { tick, untrack } from 'svelte';
+  import { slide } from 'svelte/transition';
   import { router } from '../lib/router.svelte.js';
   import CheckCheck from '@lucide/svelte/icons/check-check';
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
+  import GroupHeader from './GroupHeader.svelte';
+  import { groupsIn, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import Layers from '@lucide/svelte/icons/layers';
@@ -25,8 +29,8 @@
   import { measure, play } from '../lib/flip.js';
   import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
 
-  /** @type {{ notes: any[], showProject?: boolean, empty?: string }} */
-  let { notes, showProject = true, empty = 'Nothing here yet.' } = $props();
+  /** @type {{ notes: any[], showProject?: boolean, empty?: string, projectId?: string | null }} */
+  let { notes, showProject = true, empty = 'Nothing here yet.', projectId = null } = $props();
 
   const GAP_PX = 8;
   const MIN_COLUMN_PX = 160;
@@ -65,6 +69,8 @@
   const NO_PROJECT = 'No project';
   const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
   const FILTERED_EMPTY = 'No features in this state.';
+  const GROUP_PREFIX = 'group:';
+  const FOLD_MS = 200;
 
   let width = $state(0);
   const columnCount = $derived.by(() => {
@@ -95,8 +101,14 @@
     return (note.project_id && store.find('projects', note.project_id)?.name) || NO_PROJECT;
   }
 
-  /** Band a note belongs to when it isn't pinned. @param {any} note */
+  const noteGroups = $derived(groupsIn(projectId));
+  const groupIds = $derived(new Set(noteGroups.map((row) => row.id)));
+  // Every live note in each group, before the state filter: the header's total.
+  const groupTotals = $derived(new Map(noteGroups.map((row) => [row.id, notes.filter((note) => note.group_id === row.id).length])));
+
+  /** Band a note belongs to when it isn't pinned (a grouped note is in its group, pinned or not). @param {any} note */
   function bandOf(note) {
+    if (groupIds.has(note.group_id)) return GROUP_PREFIX + note.group_id;
     if (group === 'all') return 'others';
     return `${group}:${group === 'project' ? projectName(note) : seasonOf(note[timeField])}`;
   }
@@ -129,13 +141,18 @@
     ? [...naturalOrder].sort((a, b) => (frozenRanks?.get(a.id) ?? -1) - (frozenRanks?.get(b.id) ?? -1))
     : naturalOrder);
 
-  /** Pinned first, then one "Others" band, or one band per project or per season. */
+  /** Pinned first, then each note group, then one "Others" band, or one band per project or per season. */
   const sections = $derived.by(() => {
-    const pinned = sorted.filter((note) => note.pinned);
-    const rest = sorted.filter((note) => !note.pinned);
-    /** @type {{ key: string, title: string, notes: any[] }[]} */
+    const { members, rest: ungrouped } = splitByGroup(sorted, noteGroups);
+    const pinned = ungrouped.filter((note) => note.pinned);
+    const rest = ungrouped.filter((note) => !note.pinned);
+    /** @type {{ key: string, title: string, notes: any[], group?: any }[]} */
     const list = [];
     if (pinned.length) list.push({ key: 'pinned', title: 'Pinned', notes: pinned });
+    for (const row of noteGroups) {
+      const inGroup = members.get(row.id) ?? [];
+      if (inGroup.length) list.push({ key: GROUP_PREFIX + row.id, title: row.name, notes: inGroup, group: row });
+    }
     if (group !== 'all') {
       // Notes arrive already ordered by project or by time, so each band is one consecutive run.
       // In priority or manual order seasons can interleave, so bands are gathered by key instead.
@@ -151,7 +168,7 @@
       if (group === 'season') ordered.sort((a, b) => Math.max(...b.notes.map((note) => note[timeField])) - Math.max(...a.notes.map((note) => note[timeField])));
       list.push(...ordered);
     } else if (rest.length) {
-      list.push({ key: 'others', title: pinned.length ? 'Others' : '', notes: rest });
+      list.push({ key: 'others', title: list.length ? 'Others' : '', notes: rest });
     }
     return list;
   });
@@ -202,8 +219,8 @@
       key: section.key,
       label: section.title || 'notes',
       list: () => section.notes,
-      // Pinned and the plain list trade notes freely; a project or season band only takes its own.
-      accepts: (/** @type {any} */ note) => section.key === 'pinned' || bandOf(note) === section.key,
+      // Pinned and the plain list trade ungrouped notes freely; a group, project or season band only takes its own.
+      accepts: (/** @type {any} */ note) => (section.key === 'pinned' ? !groupIds.has(note.group_id) : bandOf(note) === section.key),
       ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(section, note, index),
     };
   }
@@ -289,7 +306,9 @@
     <p class="px-4 py-16 text-center text-fluid-sm text-ink-faint">{notes.length ? FILTERED_EMPTY : empty}</p>
   {:else if width}
     {#each sections as section (section.key)}
-      {#if section.title}
+      {#if section.group}
+        <GroupHeader group={section.group} notes={section.notes} total={groupTotals.get(section.group.id) ?? section.notes.length} class="pt-4 pb-2 text-fluid-sm" />
+      {:else if section.title}
         {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
         <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint">
           <button class="spring press -m-1 p-1 {picked ? 'text-accent' : 'hover:text-ink'}" role="checkbox" aria-checked={picked === section.notes.length ? 'true' : picked ? 'mixed' : 'false'}
@@ -299,20 +318,22 @@
           {section.title} <span class="text-ink-faint">· {section.notes.length}</span>
         </h2>
       {/if}
-      <div class="flex items-start gap-2" use:dropzone={zoneFor(section)}>
-        {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
-          <div class="flex min-w-0 flex-1 flex-col gap-2">
-            {#each column as note, index (note.id)}
-              <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-              <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
-                data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
-                <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
-                <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
-              </div>
-            {/each}
-          </div>
-        {/each}
-      </div>
+      {#if !section.group?.collapsed}
+        <div class="flex items-start gap-2" use:dropzone={zoneFor(section)} transition:slide={{ duration: FOLD_MS }}>
+          {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+              {#each column as note, index (note.id)}
+                <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
+                <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+                  data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
+                  <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
+                  <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
+                </div>
+              {/each}
+            </div>
+          {/each}
+        </div>
+      {/if}
     {/each}
   {/if}
   <DragGhost {showProject} />

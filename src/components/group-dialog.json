@@ -1,0 +1,17 @@
+{
+  "createTitle": "Group {count}",
+  "editTitle": "Edit group",
+  "one": "note",
+  "many": "notes",
+  "close": "Close",
+  "addTo": "Add to a group",
+  "newGroup": "New group",
+  "namePlaceholder": "Group name",
+  "nameLabel": "Group name",
+  "color": "Color",
+  "create": "Create group",
+  "save": "Save",
+  "remove": "Take out of their group",
+  "ungroup": "Ungroup",
+  "ungroupHint": "The group goes away; its notes stay where they are."
+}
