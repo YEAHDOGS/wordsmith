@@ -43,8 +43,9 @@
   </button>
 
   <div class="min-w-0 flex-1 pl-1 sm:max-w-xs sm:flex-none sm:pl-0 lg:max-w-sm">
-    <!-- One grid cell: the leaving and entering titles overlap while they animate, so nothing shifts -->
-    <div class="grid min-w-0">
+    <!-- One grid cell: the leaving and entering titles overlap while they animate, so nothing shifts. With no subtitle the
+         title slides down half the subtitle line to sit centered (transform only; short screens hide that line anyway) -->
+    <div class="spring grid min-w-0 {subtitle ? '' : 'translate-y-2 short:translate-y-0'}">
       {#key title}
         <h1 class="col-start-1 row-start-1 min-w-0 truncate text-fluid-lg leading-tight font-bold tracking-tight" in:fly={TITLE_IN} out:fly={TITLE_OUT}>{title}</h1>
       {/key}
