@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx --yes wrangler dev --env preview --port 8788",
+    "dev": "npx --yes wrangler dev --env preview --ip 0.0.0.0 --port 8788",
     "devVite": "vite",
     "build": "vite build",
     "test": "vitest",
