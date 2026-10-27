@@ -9,7 +9,8 @@
   /** @type {{ value: string, onchange: (color: string) => void }} */
   let { value, onchange } = $props();
 
-  const POPOVER_WIDTH_PX = 160;
+  // The popover is w-40 (10rem); rem, because the UI size setting scales the root font.
+  const POPOVER_WIDTH_REM = 10;
   const EDGE_PX = 8;
   const DOT_STAGGER_MS = 15;
 
@@ -22,7 +23,8 @@
 
   function toggle() {
     const rect = button?.getBoundingClientRect();
-    if (!open && rect) shift = Math.min(0, innerWidth - EDGE_PX - (rect.left + POPOVER_WIDTH_PX));
+    const width = POPOVER_WIDTH_REM * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    if (!open && rect) shift = Math.min(0, innerWidth - EDGE_PX - (rect.left + width));
     open = !open;
   }
 

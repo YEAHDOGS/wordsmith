@@ -30,11 +30,6 @@
     ui.query = '';
     searching = false;
   }
-
-  /** @param {HTMLElement} node */
-  function autofocus(node) {
-    node.focus();
-  }
 </script>
 
 <header class="relative flex h-12 shrink-0 items-center gap-1 border-b border-line bg-app px-1 sm:h-14 sm:gap-2 sm:px-4 tv:h-20">
@@ -77,7 +72,7 @@
     <div class="absolute inset-0 z-10 flex items-center gap-1 bg-app px-1 sm:hidden" in:fly={SEARCH_IN} out:fly={SEARCH_OUT}>
       <label class="relative flex min-w-0 flex-1 items-center">
         <Search class="pointer-events-none absolute left-3 size-4 text-ink-faint" />
-        <input use:autofocus bind:value={ui.query} type="search" placeholder="Search notes, status, PRs" aria-label="Search"
+        <input {@attach (node) => node.focus()} bind:value={ui.query} type="search" placeholder="Search notes, status, PRs" aria-label="Search"
           class="w-full border border-line bg-surface py-2 pr-3 pl-9 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
           onblur={() => !ui.query && (searching = false)} onkeydown={(event) => event.key === 'Escape' && closeSearch()} />
       </label>

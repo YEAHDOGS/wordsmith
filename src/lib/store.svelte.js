@@ -3,7 +3,7 @@
 // Sync runs on edits (debounced), on focus, on reconnect, and on a slow poll so agent updates show up.
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
-import { MAX_SYNC_BATCH, newRow } from './models.js';
+import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
 
 const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes']);
 const SYNC_DEBOUNCE_MS = 900;
@@ -54,6 +54,8 @@ class Store {
       this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
     ]);
+    // Notes cached before migration 20261027040000 only carry the old 0..3 priority; derive the 0..5 level.
+    for (const note of notes) note.priority_level ??= Math.max(0, LEGACY_PRIORITY.indexOf(note.priority));
     Object.assign(this, { projects, labels, notes, events, attachments });
     this.#cursor = cursor || 0;
     this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));

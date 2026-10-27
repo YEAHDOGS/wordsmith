@@ -11,6 +11,8 @@ import { pathToFileURL } from 'node:url';
 
 const REPO = 'YEAHDOGS/wordsmith';
 const BASE_BRANCH = 'master';
+// Refs tried, in order, to find the master a branch build is based on (the git fallback).
+const BASE_REFS = [`origin/${BASE_BRANCH}`, BASE_BRANCH];
 const GITHUB_API = 'https://api.github.com';
 const VERSION_PREFIX = '1.0.0.';
 const DEV_VERSION = `${VERSION_PREFIX}dev`;
@@ -39,18 +41,25 @@ async function github(path) {
   return response.json();
 }
 
-/** Merged PR count from search, plus the most recently merged PR from the pulls list (search can't sort by merge time). */
+/**
+ * Merged PR count from search, plus the most recently merged PR from the pulls list (search can't sort by merge time).
+ * The search index trails new merges by seconds to minutes, and the build for a merge starts right after it, so merged
+ * PRs from the real-time pulls list that closed after the newest indexed one and are missing from search are added on.
+ */
 async function fromGitHub() {
   const query = encodeURIComponent(`repo:${REPO} is:pr is:merged base:${BASE_BRANCH}`);
   const [search, pulls] = await Promise.all([
-    github(`/search/issues?q=${query}&per_page=1`),
+    github(`/search/issues?q=${query}&sort=updated&order=desc&per_page=${LATEST_PR_PAGE_SIZE}`),
     github(`/repos/${REPO}/pulls?state=closed&base=${BASE_BRANCH}&sort=updated&direction=desc&per_page=${LATEST_PR_PAGE_SIZE}`),
   ]);
-  if (!Number.isInteger(search?.total_count) || !Array.isArray(pulls)) throw new Error('Unexpected GitHub response');
+  if (!Number.isInteger(search?.total_count) || !Array.isArray(search.items) || !Array.isArray(pulls)) throw new Error('Unexpected GitHub response');
   const merged = pulls.filter((pull) => pull.merged_at).sort((a, b) => Date.parse(b.merged_at) - Date.parse(a.merged_at));
+  const indexed = new Set(search.items.map((/** @type {any} */ item) => item.number));
+  const newestIndexed = Math.max(0, ...search.items.map((/** @type {any} */ item) => Date.parse(item.closed_at) || 0));
+  const lagging = merged.filter((pull) => !indexed.has(pull.number) && Date.parse(pull.merged_at) > newestIndexed).length;
   const latest = merged[0];
   return {
-    version: versionFrom(search.total_count, BASELINE_MERGED),
+    version: versionFrom(search.total_count + lagging, BASELINE_MERGED),
     latestPr: latest ? { number: latest.number, title: String(latest.title), url: latest.html_url } : null,
     source: /** @type {const} */ ('github'),
   };
@@ -63,10 +72,26 @@ function git(args) {
   return run.stdout.trim();
 }
 
+/**
+ * The master commit this checkout is built on: HEAD itself on master, else where the branch left master, so a
+ * feature branch's own merge commits don't count. With no master ref at all it falls back to HEAD.
+ */
+function baseCommit() {
+  if (git(['rev-parse', '--abbrev-ref', 'HEAD']) === BASE_BRANCH) return 'HEAD';
+  for (const ref of BASE_REFS) {
+    try {
+      return git(['merge-base', 'HEAD', ref]);
+    } catch {
+      // That ref doesn't exist here; try the next one.
+    }
+  }
+  return 'HEAD';
+}
+
 /** Counts first-parent merges on master locally. A shallow clone would undercount, so it refuses one. */
 function fromGit() {
   if (git(['rev-parse', '--is-shallow-repository']) === 'true') throw new Error('shallow clone');
-  const merges = Number(git(['rev-list', '--count', '--first-parent', '--merges', 'HEAD']));
+  const merges = Number(git(['rev-list', '--count', '--first-parent', '--merges', baseCommit()]));
   if (!Number.isInteger(merges)) throw new Error('no merge count');
   return { version: versionFrom(merges, BASELINE_GIT_MERGES), latestPr: null, source: /** @type {const} */ ('git') };
 }

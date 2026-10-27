@@ -63,9 +63,12 @@ function overridesFor(defaults, picks) {
   /** @type {Record<string, string>} */
   const tokens = {};
   for (const key of COLOR_KEYS) if (picks[key]) tokens[`--ws-${key}`] = /** @type {string} */ (picks[key]);
-  if (picks.ink || picks.app) {
+  // Muted and faint text are checked against the surface too, so a new surface alone re-derives them.
+  if (picks.ink || picks.app || picks.surface) {
     tokens['--ws-ink-muted'] = toHex(fixContrast(mix(ink, app, MUTED_INK_MIX), [app, surface], TEXT_CONTRAST));
     tokens['--ws-ink-faint'] = toHex(fixContrast(mix(ink, app, FAINT_INK_MIX), [app, surface], TEXT_CONTRAST));
+  }
+  if (picks.ink || picks.app) {
     tokens['--ws-line'] = toHex(mix(app, ink, LINE_MIX));
     tokens['--ws-line-strong'] = toHex(mix(app, ink, LINE_STRONG_MIX));
   }

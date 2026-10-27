@@ -84,11 +84,6 @@
     return orgAccess.missing_scopes.includes(SCOPE_PRIVATE) ? `${lead} ${HINT_PRIVATE}` : lead;
   });
 
-  /** Focus the search box when the picker opens (it opens because you just asked for it). @param {HTMLInputElement} node */
-  function focus(node) {
-    node.focus();
-  }
-
   async function search() {
     const ticket = ++latestSearch;
     loading = true;
@@ -146,7 +141,8 @@
   <form class="flex border-b border-line" onsubmit={(event) => { event.preventDefault(); linkTyped(); }}>
     <label class="relative flex min-w-0 flex-1 items-center">
       <Search class="pointer-events-none absolute left-3 size-4 text-ink-faint" />
-      <input bind:value={query} use:focus placeholder={needsGithub ? 'owner/name or a github.com URL' : 'Search your and your orgs\' repos, or type owner/name'} aria-label="Repository"
+      <!-- Focused on open: the picker opens because you just asked for it -->
+      <input bind:value={query} {@attach (node) => node.focus()} placeholder={needsGithub ? 'owner/name or a github.com URL' : 'Search your and your orgs\' repos, or type owner/name'} aria-label="Repository"
         class="w-full min-w-0 bg-transparent py-2.5 pr-3 pl-9 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-faint focus:outline-none" />
     </label>
     <button class="spring press border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised disabled:opacity-40" disabled={!typedIsRepo || loading}>Link</button>

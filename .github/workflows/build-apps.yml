@@ -165,9 +165,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # Native artifacts only: the web artifact (dist/) holds index.html and an assets/ folder, which are not installers
       - uses: actions/download-artifact@v8
         with:
           path: build
+          pattern: '{windows,linux,macos,android,ios}'
           merge-multiple: true
       - name: Publish release
         env:
@@ -175,7 +177,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           shopt -s nullglob
-          files=(build/*)
+          files=()
+          for f in build/wordsmith-*; do [ -f "$f" ] && files+=("$f"); done
           if [ ${#files[@]} -eq 0 ]; then echo "No installers were built; nothing to release."; exit 1; fi
           version=$(node -e 'import("./scripts/version.js").then(async (m) => console.log((await m.readVersion()).version))')
           case "$version" in *.dev) echo "Could not work out the app version; not releasing."; exit 1;; esac

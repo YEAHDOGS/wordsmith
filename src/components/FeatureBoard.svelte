@@ -19,10 +19,11 @@
   const COMPLETE_PAGE = 30;
   const REQUESTED = 'requested';
   const BOARD_GROUP = 'board';
+  const FADE_MS = 150;
   // Requested runs in claim order: priority first, then manual order (oldest first until moved), the same order the
   // agent API uses for /features/next. The other two columns follow what agents did, newest first.
   const SORTS = {
-    requested: (/** @type {any} */ a, /** @type {any} */ b) => b.priority - a.priority || orderKey(a) - orderKey(b),
+    requested: (/** @type {any} */ a, /** @type {any} */ b) => b.priority_level - a.priority_level || orderKey(a) - orderKey(b),
     in_progress: (/** @type {any} */ a, /** @type {any} */ b) => (b.started_at || 0) - (a.started_at || 0),
     complete: (/** @type {any} */ a, /** @type {any} */ b) => (b.completed_at || 0) - (a.completed_at || 0),
   };
@@ -134,11 +135,12 @@
               <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
             </div>
           {/each}
-          {#if !shown.length}
-            <p in:fade={{ duration: 150 }} class="flex-1 bg-app px-4 py-10 text-center text-xs text-ink-faint">{EMPTY[/** @type {keyof typeof EMPTY} */ (column.state)]}</p>
-          {:else}
-            <div class="flex-1 bg-app"></div>
-          {/if}
+          <!-- Fills the rest of the lane; the empty message floats in it, so it fades in and out without moving anything -->
+          <div class="relative flex-1 bg-app">
+            {#if !shown.length}
+              <p class="absolute inset-x-0 top-0 px-4 py-10 text-center text-xs text-ink-faint" transition:fade={{ duration: FADE_MS }}>{EMPTY[/** @type {keyof typeof EMPTY} */ (column.state)]}</p>
+            {/if}
+          </div>
           {#if column.all.length > column.shown.length}
             <button class="spring bg-app py-3 text-xs text-ink-muted hover:text-accent" onclick={() => (completeLimit += COMPLETE_PAGE)}>Show older</button>
           {/if}

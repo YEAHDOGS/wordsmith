@@ -11,6 +11,8 @@ import { buzz } from './press.js';
 const ZONE_ATTR = 'data-drop-zone';
 const CARD_SELECTOR = '[data-flip-id]';
 const POSITION_STEP = 1024;
+// Smallest gap a respace leaves between two notes whose keys were equal (keys are millisecond-sized, so 1 is tiny).
+const MIN_GAP = 1;
 // Auto-scroll: within EDGE_PX of a list's edge it scrolls, faster the closer the pointer, up to MAX_SCROLL_PX a frame.
 const EDGE_PX = 64;
 const MAX_SCROLL_PX = 18;
@@ -36,7 +38,6 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @property {(note: any) => number} [naturalIndex] where a note lands when the slot isn't chosen by hand
  * @property {string} [group] zones sharing a group are side by side (board columns): Alt+Left/Right hops between them
  * @property {string} [label] spoken after a keyboard move into this zone
- * @property {() => void} [onlift] runs when a card from this zone is picked up (the grid switches to manual order)
  */
 
 /**
@@ -52,7 +53,7 @@ export function orderKey(note) {
  * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byPriority the list runs
  * highest priority first: the note keeps its priority when that fits between its neighbours, else takes the nearest
  * one that does, then gets a position among the notes of that priority. When the doubles between two neighbours have
- * run out, the whole zone is respaced in its new order (rare).
+ * run out (or they share a key), the whole zone is respaced in its new order (rare; see respace).
  * @param {any[]} list
  * @param {any} note
  * @param {number} index
@@ -62,9 +63,9 @@ export function orderKey(note) {
 export function placeNote(list, note, index, byPriority = false) {
   const before = list[index - 1] ?? null;
   const after = list[index] ?? null;
-  const priority = byPriority ? Math.min(Math.max(note.priority, after?.priority ?? 0), before?.priority ?? MAX_PRIORITY) : note.priority;
+  const priority = byPriority ? Math.min(Math.max(note.priority_level, after?.priority_level ?? 0), before?.priority_level ?? MAX_PRIORITY) : note.priority_level;
   // A neighbour bounds the position only when it sorts in the same run (same priority, when sorting by priority).
-  const bounds = (/** @type {any} */ neighbour) => neighbour && (!byPriority || neighbour.priority === priority);
+  const bounds = (/** @type {any} */ neighbour) => neighbour && (!byPriority || neighbour.priority_level === priority);
   const low = bounds(before) ? orderKey(before) : null;
   const high = bounds(after) ? orderKey(after) : null;
   /** @type {number | null} */
@@ -77,10 +78,33 @@ export function placeNote(list, note, index, byPriority = false) {
   } else if (high !== null) {
     position = high - POSITION_STEP;
   }
-  const extra = byPriority && priority !== note.priority ? { priority } : {};
+  const extra = byPriority && priority !== note.priority_level ? { priority_level: priority } : {};
   if (position !== null) return [{ id: note.id, patch: { ...extra, position } }];
-  const order = [...list.slice(0, index), note, ...list.slice(index)];
-  return order.map((entry, slot) => ({ id: entry.id, patch: entry.id === note.id ? { ...extra, position: slot * POSITION_STEP } : { position: slot * POSITION_STEP } }));
+  const writes = respace([...list.slice(0, index), note, ...list.slice(index)]);
+  const own = writes.find((write) => write.id === note.id);
+  if (own) Object.assign(own.patch, extra);
+  else writes.push({ id: note.id, patch: extra });
+  return writes;
+}
+
+/**
+ * Writes that make `order` sort exactly as given. It reuses the keys its notes already have, sorted, nudging repeats
+ * apart by MIN_GAP, so the zone stays in the same number space as every note outside it (hidden by a filter,
+ * archived, in another project): those keep their place around it. Notes whose key doesn't change aren't written.
+ * @param {any[]} order
+ * @returns {{ id: string, patch: Record<string, any> }[]}
+ */
+export function respace(order) {
+  const keys = order.map(orderKey).sort((a, b) => a - b);
+  /** @type {{ id: string, patch: Record<string, any> }[]} */
+  const writes = [];
+  let previous = -Infinity;
+  order.forEach((entry, slot) => {
+    const key = keys[slot] > previous ? keys[slot] : previous + MIN_GAP;
+    previous = key;
+    if (key !== orderKey(entry)) writes.push({ id: entry.id, patch: { position: key } });
+  });
+  return writes;
 }
 
 /**
@@ -214,7 +238,6 @@ class Drag {
     this.#last = { x: event.clientX, y: event.clientY };
     this.#follow(event);
     this.#useScrollers(zoneEl);
-    zone.onlift?.();
     buzz();
     addEventListener('pointermove', this.#onmove);
     addEventListener('pointerup', this.#ondrop);
@@ -230,21 +253,18 @@ class Drag {
    * @param {HTMLElement} card
    * @param {keyof typeof NUDGE_KEYS} key
    */
-  async nudge(note, card, key) {
+  nudge(note, card, key) {
     const zoneEl = card.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (this.note || !zoneEl || !zone) return;
     const step = NUDGE_KEYS[key];
     if (zone.group && SIDEWAYS_KEYS.includes(key)) return this.#hop(note, zoneEl, zone, step);
     if (zone.sortable === false) return announce(`${zone.label ?? 'This list'} keeps its own order`);
-    zone.onlift?.();
-    await tick();
-    const current = this.#zones.get(zoneEl) ?? zone;
-    const list = current.list();
+    const list = zone.list();
     const from = list.findIndex((entry) => entry.id === note.id);
     const to = from + step;
     if (from === -1 || to < 0 || to >= list.length) return announce(to < 0 ? 'Already first' : 'Already last');
-    current.ondrop(list[from], to);
+    zone.ondrop(list[from], to);
     announce(`Moved to ${to + 1} of ${list.length}`);
     refocus(note.id);
   }

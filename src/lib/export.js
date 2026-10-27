@@ -18,7 +18,7 @@ export function noteMarkdown(note) {
 
   const details = [];
   if (note.kind === 'feature') details.push(`Feature: ${STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (note.state)]?.label ?? note.state}`);
-  if (note.kind === 'feature' && note.priority) details.push(`Priority: ${PRIORITY_LABELS[note.priority]}`);
+  if (note.kind === 'feature' && note.priority_level) details.push(`Priority: ${PRIORITY_LABELS[note.priority_level]}`);
   if (project && !project.deleted_at) details.push(`Project: ${project.name}${project.repo ? ` (${project.repo})` : ''}`);
   if (note.assignee) details.push(`Assignee: ${note.assignee}`);
   if (note.kind === 'feature') details.push(`wordsmith id: \`${note.id}\``);

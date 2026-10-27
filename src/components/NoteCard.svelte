@@ -29,7 +29,7 @@
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
-  import { PRIORITY_LABELS } from '../lib/models.js';
+  import { LOUD_PRIORITY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
   import { exit } from '../lib/flip.js';
@@ -38,11 +38,18 @@
   let { note, showProject = true } = $props();
 
   const BODY_PREVIEW_CHARS = 600;
-  // Priority meter: five rising bars, bar i lit when priority > i. Urgent and Critical light up in the accent.
-  const PRIORITY_BARS = ['h-1', 'h-1.5', 'h-2', 'h-2.5', 'h-3'];
-  const LOUD_PRIORITY = 4;
+  // Priority meter: one rising bar per level, bar i lit when priority > i; loud levels light up in the accent.
+  // Bar i is (i + BAR_BASE_STEPS) * BAR_STEP_REM tall, so five bars run from h-1 to h-3.
+  const PRIORITY_BARS = Array.from({ length: MAX_PRIORITY }, (_, bar) => bar);
+  const BAR_STEP_REM = 0.125;
+  const BAR_BASE_STEPS = 2;
   const FLIP_WRAPPER = '[data-flip-id]';
-  const MENU_ITEM = 'spring press flex items-center gap-1.5 border border-line bg-surface px-3 py-2 tv:px-5 tv:py-3 text-xs tv:text-lg font-medium hover:border-line-strong hover:bg-surface-raised';
+  // On narrow cards (two columns on a 320px phone) the labels hide and the actions sit icon-only in one row, so the
+  // menu fits a title-only card; the label text stays for screen readers.
+  const MENU_ITEM = 'spring press flex items-center gap-1.5 border border-line bg-surface px-3 py-2 @max-[12rem]:px-2.5 tv:px-5 tv:py-3 text-xs tv:text-lg font-medium hover:border-line-strong hover:bg-surface-raised';
+  const MENU_LABEL = '@max-[12rem]:sr-only';
+  /** Arrow key -> step between the menu's actions. */
+  const MENU_KEYS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
 
   /** @type {HTMLElement | undefined} */
   let card = $state();
@@ -105,6 +112,21 @@
     /** @type {HTMLElement | null | undefined} */ (card?.querySelector('[role="menuitem"]'))?.focus();
   }
 
+  /** Menu keys: arrows, Home and End move between actions (focus wraps); Tab closes the menu and moves on. @param {KeyboardEvent & { currentTarget: HTMLElement }} event */
+  function onMenuKey(event) {
+    if (event.key === 'Tab') {
+      menu.id = '';
+      return;
+    }
+    const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]')];
+    const step = MENU_KEYS[/** @type {keyof typeof MENU_KEYS} */ (event.key)];
+    const at = items.indexOf(/** @type {Element} */ (document.activeElement));
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : step ? (Math.max(at, 0) + step + items.length) % items.length : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    /** @type {HTMLElement} */ (items[next]).focus();
+  }
+
   /** Moving after a hold (or dragging with a mouse) picks the card up. @param {PointerEvent} event */
   function lift(event) {
     const wrapper = /** @type {HTMLElement | null | undefined} */ (card?.closest(FLIP_WRAPPER));
@@ -160,7 +182,7 @@
 
 <div
   bind:this={card}
-  class="spring group relative flex h-full min-h-28 cursor-pointer flex-col gap-2 p-4 short:p-3 tv:p-6 outline-none hover:bg-surface-raised focus-visible:bg-surface-raised {TINT_BG[/** @type {keyof typeof TINT_BG} */ (note.color)] || TINT_BG.default} {selected ? 'ring-2 ring-inset ring-accent' : ''}"
+  class="@container spring group relative flex h-full min-h-28 cursor-pointer flex-col gap-2 p-4 short:p-3 tv:p-6 outline-none hover:bg-surface-raised focus-visible:bg-surface-raised {TINT_BG[/** @type {keyof typeof TINT_BG} */ (note.color)] || TINT_BG.default} {selected ? 'ring-2 ring-inset ring-accent' : ''}"
   role="button"
   tabindex="0"
   aria-label="{note.title || 'Untitled note'}{selected ? ', selected' : ''}"
@@ -179,10 +201,10 @@
     </div>
   {/if}
   <div class="flex items-start gap-2">
-    {#if note.priority}
-      <span class="mt-1 flex h-3 shrink-0 items-end gap-px tv:mt-2" role="img" aria-label="{PRIORITY_LABELS[note.priority]} priority" title="Priority: {PRIORITY_LABELS[note.priority]}">
-        {#each PRIORITY_BARS as height, bar (bar)}
-          <span class="spring w-0.5 tv:w-1 {height} {bar < note.priority ? (note.priority >= LOUD_PRIORITY ? 'bg-accent' : 'bg-ink-muted') : 'bg-line-strong'}"></span>
+    {#if note.priority_level}
+      <span class="mt-1 flex h-3 shrink-0 items-end gap-px tv:mt-2" role="img" aria-label="{PRIORITY_LABELS[note.priority_level]} priority" title="Priority: {PRIORITY_LABELS[note.priority_level]}">
+        {#each PRIORITY_BARS as bar (bar)}
+          <span class="spring w-0.5 tv:w-1 {bar < note.priority_level ? (note.priority_level >= LOUD_PRIORITY ? 'bg-accent' : 'bg-ink-muted') : 'bg-line-strong'}" style:height="{(bar + BAR_BASE_STEPS) * BAR_STEP_REM}rem"></span>
         {/each}
       </span>
     {/if}
@@ -236,12 +258,14 @@
   {#if menuOpen}
     <div class="absolute inset-0 z-10 flex items-center justify-center p-2" transition:fade={{ duration: 150 }}>
       <button class="absolute inset-0 cursor-default bg-scrim" tabindex="-1" aria-label="Close menu" onclick={(event) => { event.stopPropagation(); closeMenu(); }}></button>
-      <div class="relative flex flex-wrap justify-center gap-1.5" role="menu" aria-label="Note actions" in:scale|global={{ start: 0.85, duration: 180, easing: backOut }} out:scale|global={{ start: 0.9, duration: 120 }}>
-        <button class="{MENU_ITEM} text-ink" role="menuitem" onclick={(event) => leave(event, () => store.update('notes', note.id, { archived: !note.archived }))}>
-          {#if note.archived}<ArchiveRestore class="size-4" />Unarchive{:else}<Archive class="size-4" />Archive{/if}
+      <!-- A real menu: arrow keys, Home and End move between the actions, which stay out of the Tab order -->
+      <div class="relative flex flex-wrap justify-center gap-1.5" role="menu" tabindex="-1" aria-label="Note actions" onkeydown={onMenuKey}
+        in:scale|global={{ start: 0.85, duration: 180, easing: backOut }} out:scale|global={{ start: 0.9, duration: 120 }}>
+        <button class="{MENU_ITEM} text-ink" role="menuitem" tabindex="-1" title={note.archived ? 'Unarchive' : 'Archive'} onclick={(event) => leave(event, () => store.update('notes', note.id, { archived: !note.archived }))}>
+          {#if note.archived}<ArchiveRestore class="size-4 shrink-0" /><span class={MENU_LABEL}>Unarchive</span>{:else}<Archive class="size-4 shrink-0" /><span class={MENU_LABEL}>Archive</span>{/if}
         </button>
-        <button class="{MENU_ITEM} text-accent" role="menuitem" onclick={(event) => leave(event, () => store.remove('notes', note.id))}><Trash class="size-4" />Delete</button>
-        <button class="{MENU_ITEM} text-ink" role="menuitem" onclick={toggleSelect}><CircleCheck class="size-4" />{selected ? 'Deselect' : 'Select'}</button>
+        <button class="{MENU_ITEM} text-accent" role="menuitem" tabindex="-1" title="Delete" onclick={(event) => leave(event, () => store.remove('notes', note.id))}><Trash class="size-4 shrink-0" /><span class={MENU_LABEL}>Delete</span></button>
+        <button class="{MENU_ITEM} text-ink" role="menuitem" tabindex="-1" title={selected ? 'Deselect' : 'Select'} onclick={toggleSelect}><CircleCheck class="size-4 shrink-0" /><span class={MENU_LABEL}>{selected ? 'Deselect' : 'Select'}</span></button>
       </div>
     </div>
   {/if}

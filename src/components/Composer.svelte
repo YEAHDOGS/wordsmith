@@ -2,8 +2,9 @@
   // Quick capture, Google Keep style. Collapsed it is one line; focus expands it. Enter in the title saves,
   // Shift+Enter adds a line. Images and videos can be picked, dropped or pasted in: they wait as thumbnails and
   // upload once the note is saved (a note has to reach the server before files can hang off it).
-  // Outside a project a Note / Feature toggle picks the kind. Inside a project the composer only takes notes, and the
-  // lightbulb beside Save unfolds a small "Create a feature request" form with its own title, details and priority.
+  // Outside a project a Note / Feature toggle picks the kind. Inside a project there is no toggle: on the board tab
+  // (defaultKind "feature") the composer files features, so they land on the board; on the notes tab it takes notes,
+  // and the lightbulb beside Save unfolds a small "Create a feature request" form with its own title, details and priority.
   import Lightbulb from '@lucide/svelte/icons/lightbulb';
   import Paperclip from '@lucide/svelte/icons/paperclip';
   import Play from '@lucide/svelte/icons/play';
@@ -15,6 +16,7 @@
   import { IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
+  import PriorityPicker from './PriorityPicker.svelte';
 
   /** @type {{ projectId?: string | null, labelId?: string | null, defaultKind?: 'note' | 'feature' }} */
   let { projectId = null, labelId = null, defaultKind = 'note' } = $props();
@@ -23,11 +25,12 @@
   const PANEL_MS = 150;
   const THUMB_MS = 150;
   const ACCEPT = [...IMAGE_TYPES, ...VIDEO_TYPES].join(',');
-  // Waiting for a just-saved note to reach the server before uploading: a sync already in flight may not carry it.
+  // Waiting for a just-saved note to reach the server before uploading: retries back off from the first delay up to
+  // the cap, for as long as the note is still unsynced (a sync in flight may not carry it, or the server is unreachable).
   const SYNC_RETRY_MS = 500;
-  const SYNC_TRIES = 20;
+  const SYNC_RETRY_MAX_MS = 8_000;
   // The feature form offers priorities 1..5 (0 "None" is left to the note editor); new requests start at Normal.
-  const REQUEST_PRIORITIES = PRIORITY_LABELS.map((label, value) => ({ label, value })).slice(1);
+  const REQUEST_PRIORITIES = PRIORITY_LABELS.map((_, level) => level).slice(1);
   const DEFAULT_PRIORITY = PRIORITY_LABELS.indexOf('Normal');
   const ERROR_TYPE = 'Only images and videos can be attached.';
   const ERROR_SIZE = 'Some files were too large to attach.';
@@ -61,8 +64,10 @@
   let ideaButton = $state();
 
   const inProject = $derived(Boolean(projectId));
+  // The feature request panel is for a project's notes tab; the board tab's composer files features itself.
+  const offersRequest = $derived(inProject && defaultKind !== 'feature');
   $effect.pre(() => {
-    kind = projectId ? 'note' : defaultKind;
+    kind = defaultKind;
   });
 
   const placeholder = $derived(kind === 'feature' ? 'Request a feature for your agents…' : 'Take a note…');
@@ -92,16 +97,20 @@
   }
 
   /**
-   * Uploads files to a freshly saved note: waits for a connection, then for the note to reach the server.
-   * The store pushes unsynced notes too, but returns early when a sync is already running.
+   * Uploads files to a freshly saved note once the note has reached the server, however long that takes.
+   * store.sync() returns at once when a sync is already running or the store thinks it is offline, so this keeps
+   * asking with a growing pause: offline it waits for the browser to come back online first.
    * @param {string} noteId
    * @param {File[]} files
    */
   async function uploadWhenReady(noteId, files) {
-    if (!navigator.onLine) await new Promise((resolve) => addEventListener('online', resolve, { once: true }));
-    for (let tries = 0; tries < SYNC_TRIES && store.isPending('notes', noteId); tries++) {
+    let delay = SYNC_RETRY_MS;
+    while (store.isPending('notes', noteId)) {
+      if (!navigator.onLine) await new Promise((resolve) => addEventListener('online', resolve, { once: true }));
       await store.sync();
-      if (store.isPending('notes', noteId)) await new Promise((resolve) => setTimeout(resolve, SYNC_RETRY_MS));
+      if (!store.isPending('notes', noteId)) break;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, SYNC_RETRY_MAX_MS);
     }
     await store.upload(noteId, files);
   }
@@ -124,7 +133,7 @@
 
   function request() {
     if (!requestTitle.trim() && !requestBody.trim()) return;
-    store.create('notes', { kind: 'feature', title: requestTitle.trim(), body: requestBody.trim(), priority: requestPriority, project_id: projectId, label_ids: labelId ? [labelId] : [] });
+    store.create('notes', { kind: 'feature', title: requestTitle.trim(), body: requestBody.trim(), priority_level: requestPriority, project_id: projectId, label_ids: labelId ? [labelId] : [] });
     requestTitle = '';
     requestBody = '';
     requestPriority = DEFAULT_PRIORITY;
@@ -183,7 +192,7 @@
   }
 </script>
 
-<div bind:this={root} class="spring border bg-surface {flash ? 'border-accent' : 'border-line hover:border-line-strong'} focus-within:border-line-strong" role="group" aria-label="New note" {onfocusout}
+<div bind:this={root} class="spring rounded-ui border bg-surface {flash ? 'border-accent' : 'border-line hover:border-line-strong'} focus-within:border-line-strong" role="group" aria-label="New note" {onfocusout}
   ondragover={(event) => event.dataTransfer?.types.includes('Files') && event.preventDefault()} {ondrop}>
   <div class="flex items-center">
     <input bind:value={title} maxlength={MAX_TITLE} {placeholder} aria-label={placeholder}
@@ -231,7 +240,7 @@
         <span class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
         <!-- Formatting sits in the bottom-right corner, beside Save -->
         <MarkdownToolbar textarea={details} class="ml-auto" />
-        {#if inProject}
+        {#if offersRequest}
           <button bind:this={ideaButton} class="spring press flex size-7 shrink-0 items-center justify-center sm:size-8 tv:size-11 {requesting ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}"
             title="Create a feature request" aria-label="Create a feature request" aria-expanded={requesting} aria-controls="feature-request-{projectId}" onclick={() => (requesting = !requesting)}>
             <Lightbulb class="spring size-4 {requesting ? 'scale-110' : ''}" />
@@ -242,7 +251,7 @@
         </button>
       </div>
 
-      {#if inProject && requesting}
+      {#if offersRequest && requesting}
         <section id="feature-request-{projectId}" class="border-t border-line bg-app" aria-label="Create a feature request" transition:slide={{ duration: PANEL_MS }}>
           <div class="flex flex-col gap-2 px-4 py-3" in:fade={{ duration: PANEL_MS, delay: PANEL_MS / 2 }}>
             <h3 class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-accent uppercase"><Lightbulb class="size-3.5" />Create a feature request</h3>
@@ -251,13 +260,7 @@
             <textarea bind:value={requestBody} use:markdownKeys maxlength={MAX_BODY} rows="2" placeholder="Details, acceptance criteria, links… agents read all of it" aria-label="Feature details"
               class="block max-h-48 w-full resize-y border border-line bg-surface px-3 py-2 text-fluid-sm text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"></textarea>
             <div class="flex flex-wrap items-center gap-2">
-              <div class="flex min-w-0 flex-1 flex-wrap gap-px border border-line bg-line" role="radiogroup" aria-label="Priority">
-                {#each REQUEST_PRIORITIES as option (option.value)}
-                  <button role="radio" aria-checked={requestPriority === option.value} title="{option.label} priority"
-                    class="spring press flex-1 basis-14 px-2 py-1.5 text-xs {requestPriority === option.value ? 'bg-accent-soft font-semibold text-accent' : 'bg-surface text-ink-muted hover:text-ink'}"
-                    onclick={() => (requestPriority = option.value)}>{option.label}</button>
-                {/each}
-              </div>
+              <PriorityPicker value={requestPriority} levels={REQUEST_PRIORITIES} onselect={(level) => (requestPriority = level)} class="min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(3.5rem,1fr))]" />
               <button class="spring press shrink-0 bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={!requestTitle.trim() && !requestBody.trim()} onclick={request}>
                 Request
               </button>

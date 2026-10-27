@@ -10,6 +10,8 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const CLAIM_CANDIDATES = 5;
 const MAX_EVENTS = 200;
+// Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
+const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
 const STATE_LABELS = { requested: 'Requested', in_progress: 'In progress', complete: 'Complete' };
 
 /**
@@ -39,7 +41,8 @@ async function lookups(env, userId) {
 }
 
 /**
- * A note as agents see it: project and label names inlined.
+ * A note as agents see it: project and label names inlined, and priority on the 0..5 scale (the same value as
+ * priority_level; the old 0..3 column that older app builds still use is not shown to agents).
  * @param {Record<string, any>} note
  * @param {Awaited<ReturnType<typeof lookups>>} maps
  */
@@ -47,6 +50,7 @@ function present(note, maps) {
   const project = note.project_id ? maps.projects.get(note.project_id) : null;
   return {
     ...note,
+    priority: note.priority_level,
     project: project ? { id: project.id, name: project.name, repo: project.repo } : null,
     labels: note.label_ids.map((/** @type {string} */ id) => maps.labels.get(id)).filter(Boolean),
   };
@@ -76,7 +80,7 @@ export async function listNotes(env, userId, query, kind) {
   if (search) where.push('(instr(lower(title), lower(?)) > 0 OR instr(lower(body), lower(?)) > 0)'), binds.push(search, search);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(query.get('limit')) || DEFAULT_LIMIT));
 
-  const order = kind === 'feature' ? 'priority DESC, COALESCE(position, created_at) ASC, created_at ASC' : 'pinned DESC, updated_at DESC';
+  const order = kind === 'feature' ? CLAIM_ORDER : 'pinned DESC, updated_at DESC';
   const { results } = await env.DB.prepare(`SELECT * FROM notes WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`).bind(...binds, limit).all();
   const maps = await lookups(env, userId);
   const label = query.get('label');
@@ -128,7 +132,7 @@ export async function createNote(env, userId, actor, input, kind) {
     project_id: project?.id ?? null,
     title: input.title ?? '',
     body: input.body ?? '',
-    priority: input.priority ?? 0,
+    priority_level: input.priority ?? 0,
     status: input.status ?? '',
     label_ids: (await labelIds(env, userId, input.labels)) ?? [],
   };
@@ -149,9 +153,11 @@ export async function updateNote(env, userId, actor, id, input) {
   const before = await getNote(env, userId, id);
   /** @type {Record<string, any>} */
   const patch = {};
-  for (const field of ['title', 'body', 'state', 'status', 'priority', 'archived', 'pinned', 'assignee']) {
+  for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee']) {
     if (input[field] !== undefined) patch[field] = input[field];
   }
+  // Agents speak the 0..5 scale as "priority"; it is stored as priority_level.
+  if (input.priority !== undefined) patch.priority_level = input.priority;
   if (typeof input.body_append === 'string') patch.body = `${patch.body ?? before.body}\n\n${input.body_append}`.trim();
   if (input.project !== undefined) patch.project_id = (await resolveProject(env, userId, input.project))?.id ?? null;
   const ids = await labelIds(env, userId, input.labels);
@@ -204,8 +210,8 @@ export async function claimFeature(env, userId, actor, id) {
 export async function claimNext(env, userId, actor, projectRef) {
   const project = await resolveProject(env, userId, projectRef);
   const query = project
-    ? env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND project_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, COALESCE(position, created_at) ASC, created_at ASC LIMIT ?").bind(userId, project.id, CLAIM_CANDIDATES)
-    : env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, COALESCE(position, created_at) ASC, created_at ASC LIMIT ?").bind(userId, CLAIM_CANDIDATES);
+    ? env.DB.prepare(`SELECT id FROM notes WHERE user_id = ? AND project_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY ${CLAIM_ORDER} LIMIT ?`).bind(userId, project.id, CLAIM_CANDIDATES)
+    : env.DB.prepare(`SELECT id FROM notes WHERE user_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY ${CLAIM_ORDER} LIMIT ?`).bind(userId, CLAIM_CANDIDATES);
   const { results } = await query.all();
   for (const { id } of results) {
     const claimed = await claimFeature(env, userId, actor, String(id));

@@ -15,6 +15,7 @@
   const RATIO_DECIMALS = 1;
   const SWAP_MS = 150;
   const THEME_PLACEHOLDER = '{theme}';
+  const RATIO_PLACEHOLDER = '{ratio}';
 
   // While the size slider is dragged it only previews the label; the page rescales on release (change event)
   let draggingSize = $state(-1);
@@ -49,13 +50,14 @@
       {/each}
     </div>
 
-    <!-- Every pair is always listed, so the card never changes height: only the marks and colors swap -->
-    <div class="mt-2 {BOX} p-3" aria-live="polite">
-      <div class="mb-2 grid items-start text-xs">
+    <!-- Every pair is always listed, so the card never changes height: only the marks and colors swap.
+         Only the summary line is live, so dragging a picker doesn't re-announce every ratio. -->
+    <div class="mt-2 {BOX} p-3">
+      <div class="mb-2 grid items-start text-xs" aria-live="polite">
         {#if allOk}
           <p class="col-start-1 row-start-1 flex items-center gap-1.5 text-complete" transition:fade={{ duration: SWAP_MS }}><Check class="size-3.5 shrink-0" />{TEXT.contrastOk}</p>
         {:else}
-          <p class="col-start-1 row-start-1 flex items-center gap-1.5 text-requested" transition:fade={{ duration: SWAP_MS }}><TriangleAlert class="size-3.5 shrink-0" />{TEXT.contrastWarning}</p>
+          <p class="col-start-1 row-start-1 flex items-center gap-1.5 text-requested" transition:fade={{ duration: SWAP_MS }}><TriangleAlert class="size-3.5 shrink-0" />{TEXT.contrastWarning.replace(RATIO_PLACEHOLDER, String(TEXT_CONTRAST))}</p>
         {/if}
       </div>
       <ul class="grid gap-1 sm:grid-cols-2">

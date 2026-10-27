@@ -3,8 +3,8 @@
   // Reading order runs left to right; each note goes into the currently shortest column. Heights are estimated from
   // content, not measured, so cards never jump after they render. Two toggles: the order (newest updated, newest
   // created, highest priority, or manual) and grouping by nothing, project, or season (winter is December to February).
-  // Hold and slide a card to move it: each band is a drop zone (src/lib/reorder.svelte.js); picking a card up in a time
-  // order switches to manual so the drop sticks. Every reorder, sort change and resize slides cards with FLIP.
+  // Hold and slide a card to move it: each band is a drop zone (src/lib/reorder.svelte.js); a drop in a time order
+  // switches to manual so it sticks. Every reorder, sort change and resize slides cards with FLIP.
   import { tick } from 'svelte';
   import CheckCheck from '@lucide/svelte/icons/check-check';
   import NoteCard from './NoteCard.svelte';
@@ -48,7 +48,7 @@
   const COMPARE = {
     updated: (a, b) => b.updated_at - a.updated_at,
     created: (a, b) => b.created_at - a.created_at,
-    priority: (a, b) => b.priority - a.priority || orderKey(a) - orderKey(b),
+    priority: (a, b) => b.priority_level - a.priority_level || orderKey(a) - orderKey(b),
     manual: (a, b) => orderKey(a) - orderKey(b),
   };
   const GROUP_LABELS = { all: 'All', project: 'Projects', season: 'Seasons' };
@@ -146,13 +146,25 @@
     tick().then(() => play(root, before));
   });
 
-  /** Saves a drop. Into the pinned band pins the note; out of it unpins. @param {{ key: string, notes: any[] }} section @param {any} note @param {number} index */
+  /**
+   * Saves a drop. Into the pinned band pins the note; out of it unpins. In a time order the slot was picked among notes
+   * sorted by time, so the note goes right after the one shown before it (or before the one shown after it, at the
+   * top) in manual order, and only then does the grid switch to manual so the drop sticks. Picking a card up,
+   * cancelling, or letting go on its own slot never reaches here, so none of those touch the chosen sort.
+   * Priority order only moves features between levels: plain notes have no priority control to undo it.
+   * @param {{ key: string, notes: any[] }} section @param {any} note @param {number} index
+   */
   function drop(section, note, index) {
-    const list = section.notes.filter((other) => other.id !== note.id);
+    const shown = section.notes.filter((other) => other.id !== note.id);
     const pinned = section.key === 'pinned';
-    for (const { id, patch } of placeNote(list, note, index, ui.order === 'priority')) {
+    const timeOrder = TIME_ORDERS.includes(/** @type {any} */ (ui.order));
+    const list = timeOrder ? [...shown].sort(COMPARE.manual) : shown;
+    const [before, after] = [shown[index - 1], shown[index]];
+    const slot = !timeOrder ? index : before ? list.indexOf(before) + 1 : after ? list.indexOf(after) : list.length;
+    for (const { id, patch } of placeNote(list, note, slot, ui.order === 'priority' && note.kind === 'feature')) {
       store.update('notes', id, id === note.id && Boolean(note.pinned) !== pinned ? { ...patch, pinned } : patch);
     }
+    if (timeOrder) ui.setOrder('manual');
   }
 
   /** The drop zone for one band. @param {{ key: string, title: string, notes: any[] }} section */
@@ -163,7 +175,6 @@
       list: () => section.notes,
       // Pinned and the plain list trade notes freely; a project or season band only takes its own.
       accepts: (/** @type {any} */ note) => section.key === 'pinned' || bandOf(note) === section.key,
-      onlift: () => TIME_ORDERS.includes(/** @type {any} */ (ui.order)) && ui.setOrder('manual'),
       ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(section, note, index),
     };
   }
@@ -251,7 +262,7 @@
           <div class="flex min-w-0 flex-1 flex-col gap-2">
             {#each column as note, index (note.id)}
               <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-              <div class="overflow-hidden border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+              <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
                 data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
                 <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
                 <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>

@@ -30,7 +30,7 @@
   "colors": "Colors",
   "colorsHint": "For the {theme} theme. The other shades are worked out from these four.",
   "colorNames": { "app": "Background", "surface": "Surface", "ink": "Text", "accent": "Accent" },
-  "contrastWarning": "Below WCAG 2.2 AA contrast (4.5:1):",
+  "contrastWarning": "Below WCAG 2.2 AA contrast ({ratio}:1):",
   "pairs": { "ink-app": "Text on background", "ink-surface": "Text on surfaces", "accent-app": "Accent on background", "accent-ink": "Label on accent buttons" },
   "autoFix": "Auto-fix",
   "contrastOk": "All text meets WCAG 2.2 AA contrast.",

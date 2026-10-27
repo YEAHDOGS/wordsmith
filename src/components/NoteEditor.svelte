@@ -13,13 +13,14 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
-  import { fly, fade } from 'svelte/transition';
+  import { fly, fade, slide } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import ColorPicker from './ColorPicker.svelte';
   import Attachments from './Attachments.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
+  import PriorityPicker from './PriorityPicker.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
@@ -38,7 +39,9 @@
   const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   // Crossfade for icons and labels that swap in place (copy -> copied)
   const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
-  const HIGH_PRIORITY = PRIORITY_LABELS.indexOf('High');
+  const PRIORITY_LEVELS = PRIORITY_LABELS.map((_, level) => level);
+  // Feature-only blocks open and close their height (slide), so the rows below glide instead of jumping
+  const BLOCK_MS = 180;
 
   const note = $derived(store.find('notes', id));
   const projects = $derived(store.projects.filter((project) => !project.deleted_at));
@@ -174,7 +177,7 @@
 {#if note}
   <dialog bind:this={dialog} aria-label={note.title || 'Note'} onclose={close} {oncancel} ondblclick={onBackdrop}
     class="m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 text-ink backdrop:bg-scrim sm:m-auto sm:h-[min(92dvh,56rem)] sm:w-[min(96vw,72rem)] tv:w-[min(90vw,96rem)]">
-    <div class="spring flex h-full flex-col bg-app sm:border {dropping ? 'border-accent' : 'border-line'}" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 120 }} role="presentation"
+    <div class="spring flex h-full flex-col bg-app sm:rounded-ui sm:border {dropping ? 'border-accent' : 'border-line'}" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 120 }} role="presentation"
       ondragover={(event) => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); dropping = true; } }}
       ondragleave={(event) => event.currentTarget === event.target && (dropping = false)} {ondrop} {onpaste}>
       <!-- Toolbar: a single wrapping row, never a sideways scroller. Phones keep only pin, color, archive and trash here;
@@ -234,7 +237,7 @@
             </div>
 
             {#if note.kind === 'feature'}
-              <div class="flex flex-col gap-2 tv:gap-3" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
+              <div class="flex flex-col gap-2 tv:gap-3" transition:slide={{ duration: BLOCK_MS }}>
                 <div class="grid grid-cols-3 gap-px border border-line bg-line" role="radiogroup" aria-label="State">
                   {#each FEATURE_STATES as state (state)}
                     {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (state)]}
@@ -245,15 +248,7 @@
                   {/each}
                 </div>
                 <!-- Priority 0-5 as a segmented control: three per row on phones, all six in one row from sm up -->
-                <div class="grid grid-cols-3 gap-px border border-line bg-line sm:grid-cols-6" role="radiogroup" aria-label="Priority">
-                  {#each PRIORITY_LABELS as label, value (label)}
-                    {@const on = note.priority === value}
-                    <button role="radio" aria-checked={on} onclick={() => set({ priority: value })} title="{label} priority"
-                      class="spring press flex min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-semibold {on ? (value >= HIGH_PRIORITY ? 'bg-accent-soft text-accent' : 'bg-surface-raised text-ink') : 'bg-app text-ink-muted hover:bg-surface-raised'}">
-                      <span class="font-mono text-[0.625rem] {on ? '' : 'text-ink-faint'}">{value || '–'}</span><span class="truncate">{label}</span>
-                    </button>
-                  {/each}
-                </div>
+                <PriorityPicker value={note.priority_level} levels={PRIORITY_LEVELS} onselect={(level) => set({ priority_level: level })} class="grid-cols-3 sm:grid-cols-6" />
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
                   <input value={note.assignee} maxlength={MAX_NAME} placeholder="Assignee" aria-label="Assignee" class="{FIELD} sm:w-40"
@@ -274,7 +269,7 @@
           <Attachments bind:this={attachments} noteId={id} />
 
           {#if note.kind === 'feature'}
-            <section class="border border-line" aria-label="Pull requests" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
+            <section class="border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
               <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
               {#each note.pull_requests as pr (pr.url)}
                 <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
