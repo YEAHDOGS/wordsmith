@@ -9,7 +9,16 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
 // Timeline entries in note_events, written by the server on every interaction.
-export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored'];
+export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached'];
+
+// Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
+export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+// Pages Functions accept request bodies up to 100 MB on the free plan.
+export const MAX_VIDEO_BYTES = 95 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_NOTE = 20;
+export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
 
 export const MAX_TITLE = 300;
@@ -54,7 +63,8 @@ export const MODELS = {
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
-export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at'] };
+/** @type {Record<string, string[]>} */
+export const SERVER_FIELDS ={ projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests'];

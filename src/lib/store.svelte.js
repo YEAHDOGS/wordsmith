@@ -1,0 +1,296 @@
+// Offline-first data store. Every edit lands in memory and IndexedDB first, joins an outbox, and syncs to
+// Cloudflare in the background: push the outbox, then pull everything changed since the last cursor.
+// Sync runs on edits (debounced), on focus, on reconnect, and on a slow poll so agent updates show up.
+import { api, uploadFile } from './api.js';
+import { LocalDb } from './idb.js';
+import { MAX_SYNC_BATCH, newRow } from './models.js';
+
+const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes']);
+const SYNC_DEBOUNCE_MS = 900;
+const POLL_MS = 60_000;
+const PR_REFRESH_MS = 120_000;
+const UNAUTHORIZED = 401;
+
+/** @typedef {'projects' | 'labels' | 'notes'} Table */
+
+/** @param {any} value */
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
+class Store {
+  /** @type {any[]} */ projects = $state([]);
+  /** @type {any[]} */ labels = $state([]);
+  /** @type {any[]} */ notes = $state([]);
+  /** @type {any[]} */ events = $state([]);
+  /** @type {any[]} */ attachments = $state([]);
+  /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);
+  syncing = $state(false);
+  online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
+  lastSync = $state(0);
+  pending = $state(0);
+  error = $state('');
+  /** Called when the server says the session is gone. */
+  onUnauthorized = () => {};
+
+  /** @type {LocalDb | null} */ #db = null;
+  /** @type {Map<string, number>} outbox key "table:id" -> local version */ #outbox = new Map();
+  #version = 0;
+  #cursor = 0;
+  #again = false;
+  #lastPrRefresh = 0;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */ #debounce;
+  /** @type {ReturnType<typeof setInterval> | undefined} */ #poll;
+
+  #onFocus = () => document.visibilityState === 'visible' && this.sync();
+  #onOnline = () => {
+    this.online = navigator.onLine;
+    if (this.online) this.sync();
+  };
+
+  /** Loads the local copy for a user, then syncs. @param {string} userId */
+  async open(userId) {
+    this.close();
+    this.#db = new LocalDb(userId);
+    const [projects, labels, notes, events, attachments, cursor, outbox] = await Promise.all([
+      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('events'), this.#db.all('attachments'),
+      this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
+    ]);
+    Object.assign(this, { projects, labels, notes, events, attachments });
+    this.#cursor = cursor || 0;
+    this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));
+    this.pending = this.#outbox.size;
+    addEventListener('online', this.#onOnline);
+    addEventListener('offline', this.#onOnline);
+    document.addEventListener('visibilitychange', this.#onFocus);
+    this.#poll = setInterval(() => document.visibilityState === 'visible' && this.sync(), POLL_MS);
+    this.sync();
+  }
+
+  close() {
+    removeEventListener('online', this.#onOnline);
+    removeEventListener('offline', this.#onOnline);
+    document.removeEventListener('visibilitychange', this.#onFocus);
+    clearInterval(this.#poll);
+    clearTimeout(this.#debounce);
+  }
+
+  /** Signs out: forget everything on this device. */
+  async wipe() {
+    this.close();
+    await this.#db?.destroy().catch(() => {});
+    this.#db = null;
+    Object.assign(this, { projects: [], labels: [], notes: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
+    this.#outbox.clear();
+    this.#cursor = 0;
+  }
+
+  /** @param {Table} table @param {string} id */
+  find(table, id) {
+    return this[table].find((row) => row.id === id);
+  }
+
+  /** @param {Table} table @param {any} row */
+  #upsertLocal(table, row) {
+    const list = this[table];
+    const index = list.findIndex((existing) => existing.id === row.id);
+    if (index === -1) list.push(row);
+    else list[index] = row;
+  }
+
+  /**
+   * Saves a row locally and queues it for sync.
+   * @param {Table} table
+   * @param {any} row
+   */
+  #save(table, row) {
+    const next = { ...plain(row), updated_at: Date.now() };
+    this.#upsertLocal(table, next);
+    this.#db?.put(table, [next]);
+    this.#outbox.set(`${table}:${next.id}`, ++this.#version);
+    this.#persistOutbox();
+    clearTimeout(this.#debounce);
+    this.#debounce = setTimeout(() => this.sync(), SYNC_DEBOUNCE_MS);
+    return next;
+  }
+
+  /** @param {Table} table @param {Record<string, any>} [values] */
+  create(table, values = {}) {
+    return this.#save(table, newRow(table, values));
+  }
+
+  /** @param {Table} table @param {string} id @param {Record<string, any>} patch */
+  update(table, id, patch) {
+    const current = this.find(table, id);
+    if (!current) return null;
+    return this.#save(table, { ...plain(current), ...patch });
+  }
+
+  /** Tombstones a row; every device drops it on its next sync. @param {Table} table @param {string} id */
+  remove(table, id) {
+    return this.update(table, id, { deleted_at: Date.now() });
+  }
+
+  #persistOutbox() {
+    this.pending = this.#outbox.size;
+    this.#db?.setMeta('outbox', [...this.#outbox.keys()]);
+  }
+
+  /** Push the outbox, then pull changes. Safe to call often; overlapping calls coalesce. */
+  async sync() {
+    if (!this.#db) return;
+    if (this.syncing) {
+      this.#again = true;
+      return;
+    }
+    if (!navigator.onLine) {
+      this.online = false;
+      return;
+    }
+    this.syncing = true;
+    try {
+      await this.#push();
+      await this.#pull();
+      this.online = true;
+      this.lastSync = Date.now();
+      this.error = '';
+      await this.#refreshPullRequests();
+    } catch (error) {
+      const failure = /** @type {any} */ (error);
+      if (failure.status === UNAUTHORIZED) this.onUnauthorized();
+      else if (failure instanceof TypeError) this.online = false;
+      else this.error = failure.message;
+    } finally {
+      this.syncing = false;
+      if (this.#again) {
+        this.#again = false;
+        this.sync();
+      }
+    }
+  }
+
+  async #push() {
+    while (this.#outbox.size) {
+      const batch = [...this.#outbox].slice(0, MAX_SYNC_BATCH);
+      /** @type {Record<string, any[]>} */
+      const body = { projects: [], labels: [], notes: [] };
+      for (const [key] of batch) {
+        const [table, id] = key.split(':');
+        const row = this.find(/** @type {Table} */ (table), id);
+        if (row) body[table].push(plain(row));
+      }
+      const result = await api('/api/sync', { method: 'POST', body });
+      const saved = [];
+      for (const table of SYNCED) {
+        for (const row of result.saved[table]) {
+          const key = `${table}:${row.id}`;
+          const sentVersion = batch.find(([sent]) => sent === key)?.[1];
+          // Edited again while this push was in flight? Keep the newer local copy queued.
+          if (this.#outbox.get(key) !== sentVersion) continue;
+          this.#outbox.delete(key);
+          this.#upsertLocal(table, row);
+          saved.push([table, row]);
+        }
+      }
+      for (const { id, error } of result.rejected) {
+        for (const table of SYNCED) this.#outbox.delete(`${table}:${id}`);
+        this.error = `A change was rejected: ${error}`;
+      }
+      // Anything left from this batch that the server didn't mention would loop forever; drop it.
+      for (const [key, version] of batch) if (this.#outbox.get(key) === version) this.#outbox.delete(key);
+      for (const table of SYNCED) await this.#db?.put(table, saved.filter(([name]) => name === table).map(([, row]) => row));
+      this.#persistOutbox();
+    }
+  }
+
+  async #pull() {
+    let more = true;
+    while (more) {
+      const result = await api(`/api/sync?since=${this.#cursor}`);
+      for (const table of SYNCED) {
+        const incoming = result[table].filter((/** @type {any} */ row) => !this.#outbox.has(`${table}:${row.id}`));
+        for (const row of incoming) this.#upsertLocal(table, row);
+        await this.#db?.put(table, incoming);
+      }
+      const known = new Set(this.events.map((event) => event.id));
+      const fresh = result.events.filter((/** @type {any} */ event) => !known.has(event.id));
+      if (fresh.length) {
+        this.events.push(...fresh);
+        await this.#db?.put('events', fresh);
+      }
+      this.#mergeAttachments(result.attachments || []);
+      await this.#db?.put('attachments', result.attachments || []);
+      this.#cursor = result.cursor;
+      more = result.more;
+    }
+    await this.#db?.setMeta('cursor', this.#cursor);
+  }
+
+  /** Asks the server to re-check open PRs on GitHub, so merges show up even without the webhook. */
+  async #refreshPullRequests() {
+    if (Date.now() - this.#lastPrRefresh < PR_REFRESH_MS) return;
+    const hasOpen = this.notes.some((note) => !note.deleted_at && note.pull_requests?.some((/** @type {any} */ pr) => pr.state === 'open'));
+    if (!hasOpen) return;
+    this.#lastPrRefresh = Date.now();
+    const { updated } = await api('/api/prs/refresh', { method: 'POST' });
+    if (updated) await this.#pull();
+  }
+
+  /** @param {any[]} rows */
+  #mergeAttachments(rows) {
+    for (const row of rows) {
+      const index = this.attachments.findIndex((existing) => existing.id === row.id);
+      if (index === -1) this.attachments.push(row);
+      else this.attachments[index] = row;
+    }
+  }
+
+  /** Live attachments on a note, oldest first. @param {string} noteId */
+  attachmentsFor(noteId) {
+    return this.attachments.filter((file) => file.note_id === noteId && !file.deleted_at).sort((a, b) => a.created_at - b.created_at);
+  }
+
+  /**
+   * Uploads files to a note. The note must exist on the server first, so unsynced notes are pushed before uploading.
+   * Uploads need a connection; they are not queued offline.
+   * @param {string} noteId
+   * @param {File[]} files
+   */
+  async upload(noteId, files) {
+    if (this.#outbox.has(`notes:${noteId}`)) await this.sync();
+    await Promise.all(files.map(async (file) => {
+      const entry = { id: crypto.randomUUID(), noteId, name: file.name, progress: 0, error: '' };
+      this.uploads.push(entry);
+      const live = () => this.uploads.find((upload) => upload.id === entry.id);
+      try {
+        const { attachment } = await uploadFile(`/api/notes/${noteId}/attachments`, file, (fraction) => { const upload = live(); if (upload) upload.progress = fraction; });
+        this.#mergeAttachments([attachment]);
+        await this.#db?.put('attachments', [attachment]);
+        this.uploads = this.uploads.filter((upload) => upload.id !== entry.id);
+        this.sync();
+      } catch (error) {
+        const upload = live();
+        if (upload) upload.error = /** @type {Error} */ (error).message;
+      }
+    }));
+  }
+
+  /** @param {string} uploadId */
+  dismissUpload(uploadId) {
+    this.uploads = this.uploads.filter((upload) => upload.id !== uploadId);
+  }
+
+  /** Deletes an attachment everywhere (needs a connection). @param {string} id */
+  async deleteAttachment(id) {
+    await api(`/api/attachments/${id}`, { method: 'DELETE' });
+    const row = this.attachments.find((file) => file.id === id);
+    if (row) row.deleted_at = Date.now();
+    if (row) await this.#db?.put('attachments', [row]);
+    this.sync();
+  }
+
+  /** Timeline for one note, oldest first. @param {string} noteId */
+  eventsFor(noteId) {
+    return this.events.filter((event) => event.note_id === noteId).sort((a, b) => a.created_at - b.created_at);
+  }
+}
+
+export const store = new Store();

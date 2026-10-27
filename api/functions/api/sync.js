@@ -2,6 +2,7 @@
 // GET  /api/sync?since=<ms>  -> { projects, labels, notes, events, cursor, more }
 // POST /api/sync { projects?, labels?, notes? } -> { saved: { table: rows }, rejected: [{ id, error }] }
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
+import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorForRequest, saveNotes } from '../../lib/notes.js';
@@ -23,6 +24,8 @@ export async function onRequestGet(context) {
     env.DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?`).bind(user.id, since, PULL_LIMIT));
   queries.push(env.DB.prepare('SELECT id, note_id, type, actor_type, actor_name, data, created_at FROM note_events WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT ?')
     .bind(user.id, since, PULL_LIMIT));
+  // Attachments are created by upload, not by sync, so they only flow down.
+  queries.push(env.DB.prepare('SELECT * FROM attachments WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?').bind(user.id, since, PULL_LIMIT));
   const results = (await env.DB.batch(queries)).map((/** @type {any} */ result) => result.results);
 
   // A full page means there is more to fetch: continue from the oldest page end so nothing is skipped.
@@ -31,12 +34,13 @@ export async function onRequestGet(context) {
   const more = pageEnds.length > 0;
   const cursor = more ? Math.min(...pageEnds) - 1 : Math.max(since, now - CURSOR_OVERLAP_MS);
 
-  const [projects, labels, notes, events] = results;
+  const [projects, labels, notes, events, attachments] = results;
   return json({
     projects: projects.map(toApi),
     labels: labels.map(toApi),
     notes: notes.map(toApi),
     events: events.map((/** @type {any} */ event) => ({ ...event, data: safeJson(event.data, {}) })),
+    attachments: attachments.map(presentAttachment),
     cursor,
     server_time: now,
     more,

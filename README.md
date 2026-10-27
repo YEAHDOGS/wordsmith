@@ -4,11 +4,37 @@ wordsmith, a notes app for ai agentic dev, made by DOGS.
 
 Built by DOGS with Vite, Svelte 5, Tailwind CSS v4, plain JavaScript, and Cloudflare Workers, D1, R2, and Pages. Database access uses native Cloudflare bindings and APIs. No ORM is used.
 
-## Getting started
+## What it does
+
+Google Keep style notes, labels and projects, plus feature requests that AI agents work through:
+
+1. **You** capture a feature in a project (any device, works offline).
+2. **An agent** claims it with `POST /api/v1/features/next`, which is atomic, so two agents never get the same one. State becomes *in progress* and `started_at` is stamped.
+3. The agent reports `status` as it goes, attaches screenshots or videos, and links its PR with `pr_url`.
+4. **You** merge the PR on GitHub. The webhook (or a poll every couple of minutes while the app is open) marks the PR merged, and the feature completes itself with `completed_at` stamped.
+
+Every step is written to an append-only, server-stamped `note_events` timeline showing who did it (you, the agent's token name, or GitHub) and when. Open any note to see it on the timeline spine.
+
+Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Settings & agents**, which also has a copy-paste instruction block for CLAUDE.md / AGENTS.md. `GET /api/v1` describes the whole agent API.
+
+## Getting started (local)
 ```
 npm install
-npm run dev
+cp api/.dev.vars.example api/.dev.vars    # DEV_LOGIN=true gives a "Local dev" sign-in on localhost
+npm run build
+npm run cloudflare:db:migrate:local
+npm run cloudflare:dev                     # http://localhost:8788, Pages Functions + local D1 + local R2
 ```
+For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to :8788.
+
+`api/package.json` marks `api/` as the Pages project root. Without it, `wrangler pages dev` looks for `wrangler.jsonc` next to the repo's `package.json` and silently runs with no D1 or R2 bindings.
+
+## Cost guards (free tier)
+
+- Workers and D1 on the free plan stop at their limits instead of billing.
+- R2 (attachments) **can** bill past its free tier, so the app enforces hard caps in D1 (`storage_usage`, `api/lib/attachments.js`): 8 GB stored, 500k uploads and 5M reads a month. Past them, uploads and downloads return 507 instead of costing money. The bucket is private, and every byte goes through an authenticated Worker. Files are cached as immutable, so repeat views cost nothing.
+- Login, token creation, uploads, PR refreshes and agent writes are rate limited. Queries and sync batches are bounded. The app polls once a minute, and only while visible.
+- If the `ATTACHMENTS` binding is missing, attachments switch off (503) and nothing else changes.
 
 ## Layout
 
@@ -40,4 +66,4 @@ For local Pages Functions and D1, run `npm install`, `npm run build`, then `npm 
 
 Selected targets: android, ios, windows, macos, linux.
 
-`npm run tauri:dev` runs the native shell in development. `npm run tauri:build` builds for the current host. Release artifacts are produced by the manually triggered **Build apps** GitHub Actions workflow, with each selected target built on a compatible runner.
+Native builds call the hosted API, so build them with `VITE_API_BASE=https://<your pages domain>`. Sign-in opens the system browser and the app polls for its session (device flow), because Google and Apple block OAuth inside embedded WebViews. `npm run tauri:dev` runs the native shell in development. `npm run tauri:build` builds for the current host. Release artifacts are produced by the manually triggered **Build apps** GitHub Actions workflow, with each selected target built on a compatible runner.

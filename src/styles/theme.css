@@ -1,20 +1,150 @@
-/* Theme: every color, theme token and custom breakpoint variant lives here, never in components.
-   Each --color-* token becomes Tailwind utilities, e.g. --color-neon-red -> text-neon-red, bg-neon-red/20.
-   Literal copies of these colors exist only where CSS variables can't reach: src/styles/legacy-fallback.css
-   (Chrome 40 page) and the theme-color meta in index.html. Keep them in step. */
+/* Theme: every color, font, easing and custom breakpoint variant lives here, never in components.
+   Palette values are CSS variables on :root (dark) and [data-theme="light"]; @theme inline maps them to Tailwind
+   utilities, e.g. --color-accent -> text-accent, bg-accent. Themed colors can't take /opacity modifiers on the
+   app's browser floor (color-mix needs Chrome 111), so every translucent shade gets its own token below.
+   Literal copies exist only in src/styles/legacy-fallback.css (Chrome 40 page) and the theme-color meta in index.html.
+   All ink-on-surface pairs meet WCAG 2.2 AA (4.5:1 text, 3:1 UI). */
 
 /* Short screens (phones on their side, small phones, squat displays): compact layout variant, e.g. short:hidden */
 @custom-variant short (@media (max-height: 640px));
-/* Ultra-wide displays (21:9 and wider): spread content sideways instead of leaving empty bleed, e.g. ultrawide:grid-cols-4 */
+/* Ultra-wide displays (21:9 and wider): spread content sideways instead of leaving empty bleed, e.g. ultrawide:grid-cols-6 */
 @custom-variant ultrawide (@media (min-aspect-ratio: 21/9) and (min-width: 1536px));
+/* TVs and 10-foot screens: big type and spacing, e.g. tv:text-2xl */
+@custom-variant tv (@media (min-width: 1920px) and (min-height: 1000px));
+/* Desktop in portrait (rotated monitors): stack panels into rows, e.g. tallscreen:flex-col */
+@custom-variant tallscreen (@media (min-width: 1024px) and (orientation: portrait));
 
-/* Batman Beyond inspired neon-red / dark palette. Used across src/App.svelte and src/app.css. */
+/* Dark theme (default). Batman Beyond neon red on near-black. */
+:root {
+  color-scheme: dark;
+  --ws-app: #050508;            /* page background, the canvas behind the 1px grid */
+  --ws-surface: #0c0c11;        /* cards, panels, inputs */
+  --ws-surface-raised: #15151c; /* hover and selected surfaces, dialogs */
+  --ws-line: #22222c;           /* the 1px grid boundaries and the timeline spine */
+  --ws-line-strong: #3a3a48;    /* focused/hovered borders, 3:1 against surfaces */
+  --ws-ink: #f4f4f7;            /* primary text */
+  --ws-ink-muted: #a3a3b4;      /* secondary text, 8:1 on app */
+  --ws-ink-faint: #7c7c8e;      /* timestamps and hints, 4.6:1 on surface */
+  --ws-accent: #ff3344;         /* DOGS neon red: brand, primary actions, spine highlights */
+  --ws-accent-hover: #ff5a68;   /* primary button hover */
+  --ws-accent-ink: #050508;     /* text on accent buttons */
+  --ws-accent-soft: #2a0b10;    /* accent-tinted backgrounds (active nav, selected chip) */
+  --ws-requested: #f5b83d;      /* feature state: requested */
+  --ws-requested-soft: #2b2108;
+  --ws-progress: #5aa8ff;       /* feature state: in progress */
+  --ws-progress-soft: #0b1c30;
+  --ws-complete: #3ddc84;       /* feature state: complete, merged PRs */
+  --ws-complete-soft: #0a2717;
+  --ws-scrim: #000000b3;        /* behind dialogs and the mobile drawer */
+  /* Note and label tints (Google Keep style), muted so ink stays AA on top */
+  --ws-tint-red: #3a1418;
+  --ws-tint-orange: #3a2412;
+  --ws-tint-yellow: #35300f;
+  --ws-tint-green: #13301d;
+  --ws-tint-teal: #0f2f2e;
+  --ws-tint-blue: #12233d;
+  --ws-tint-purple: #281a3d;
+  --ws-tint-pink: #3a1630;
+  /* Label dots: saturated versions of the tints */
+  --ws-dot-red: #ff5a68;
+  --ws-dot-orange: #ff9b45;
+  --ws-dot-yellow: #f5d63d;
+  --ws-dot-green: #3ddc84;
+  --ws-dot-teal: #2dd4bf;
+  --ws-dot-blue: #5aa8ff;
+  --ws-dot-purple: #b18cff;
+  --ws-dot-pink: #ff7ac6;
+}
+
+/* Light theme: same roles, paper background, darker accent for AA on white. */
+[data-theme="light"] {
+  color-scheme: light;
+  --ws-app: #f6f6f3;
+  --ws-surface: #ffffff;
+  --ws-surface-raised: #efefeb;
+  --ws-line: #e1e1dc;
+  --ws-line-strong: #a9a9a2;
+  --ws-ink: #121216;
+  --ws-ink-muted: #4d4d57;
+  --ws-ink-faint: #6a6a74;
+  --ws-accent: #d3142a;
+  --ws-accent-hover: #b00f22;
+  --ws-accent-ink: #ffffff;
+  --ws-accent-soft: #fde7ea;
+  --ws-requested: #8a5a00;
+  --ws-requested-soft: #fdf1d6;
+  --ws-progress: #1f5fbf;
+  --ws-progress-soft: #e3eefc;
+  --ws-complete: #17773f;
+  --ws-complete-soft: #def5e7;
+  --ws-scrim: #12121673;
+  --ws-tint-red: #fbe1e1;
+  --ws-tint-orange: #fde9d7;
+  --ws-tint-yellow: #fbf3c8;
+  --ws-tint-green: #ddf3e3;
+  --ws-tint-teal: #d6f2ef;
+  --ws-tint-blue: #dde9fb;
+  --ws-tint-purple: #ebe2fb;
+  --ws-tint-pink: #fbe0ef;
+  --ws-dot-red: #d3142a;
+  --ws-dot-orange: #c25a00;
+  --ws-dot-yellow: #9a7b00;
+  --ws-dot-green: #17773f;
+  --ws-dot-teal: #0f766e;
+  --ws-dot-blue: #1f5fbf;
+  --ws-dot-purple: #6d3fd1;
+  --ws-dot-pink: #b8237a;
+}
+
+@theme inline {
+  --color-app: var(--ws-app);
+  --color-surface: var(--ws-surface);
+  --color-surface-raised: var(--ws-surface-raised);
+  --color-line: var(--ws-line);
+  --color-line-strong: var(--ws-line-strong);
+  --color-ink: var(--ws-ink);
+  --color-ink-muted: var(--ws-ink-muted);
+  --color-ink-faint: var(--ws-ink-faint);
+  --color-accent: var(--ws-accent);
+  --color-accent-hover: var(--ws-accent-hover);
+  --color-accent-ink: var(--ws-accent-ink);
+  --color-accent-soft: var(--ws-accent-soft);
+  --color-requested: var(--ws-requested);
+  --color-requested-soft: var(--ws-requested-soft);
+  --color-progress: var(--ws-progress);
+  --color-progress-soft: var(--ws-progress-soft);
+  --color-complete: var(--ws-complete);
+  --color-complete-soft: var(--ws-complete-soft);
+  --color-scrim: var(--ws-scrim);
+  --color-tint-red: var(--ws-tint-red);
+  --color-tint-orange: var(--ws-tint-orange);
+  --color-tint-yellow: var(--ws-tint-yellow);
+  --color-tint-green: var(--ws-tint-green);
+  --color-tint-teal: var(--ws-tint-teal);
+  --color-tint-blue: var(--ws-tint-blue);
+  --color-tint-purple: var(--ws-tint-purple);
+  --color-tint-pink: var(--ws-tint-pink);
+  --color-dot-red: var(--ws-dot-red);
+  --color-dot-orange: var(--ws-dot-orange);
+  --color-dot-yellow: var(--ws-dot-yellow);
+  --color-dot-green: var(--ws-dot-green);
+  --color-dot-teal: var(--ws-dot-teal);
+  --color-dot-blue: var(--ws-dot-blue);
+  --color-dot-purple: var(--ws-dot-purple);
+  --color-dot-pink: var(--ws-dot-pink);
+}
+
 @theme {
-  --color-neon-red: #ff3344;
-  /* neon-red at 15%, literal so it works without color-mix() (Chrome < 111): scrollbar track edges in app.css */
-  --color-neon-red-faint: rgb(255 51 68 / 15%);
-  --color-app: #050508;
-  --color-card: #0e0e12;
-  --color-card-hover: #14141a;
-  --color-muted: #8e8e9f;
+  /* Inter Tight for UI, JetBrains Mono for ids, timestamps and code (Google Fonts, loaded in index.html) */
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Fluid type: headings scale with the viewport from phones to TVs */
+  --text-fluid-sm: clamp(0.8125rem, 0.76rem + 0.2vw, 1rem);
+  --text-fluid-base: clamp(0.9375rem, 0.88rem + 0.25vw, 1.25rem);
+  --text-fluid-lg: clamp(1.125rem, 1rem + 0.6vw, 1.75rem);
+  --text-fluid-xl: clamp(1.5rem, 1.2rem + 1.4vw, 3rem);
+  --text-fluid-display: clamp(2.25rem, 1.4rem + 4vw, 6rem);
+  /* 150ms spring for every micro-interaction (hover, press, toggle) */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }

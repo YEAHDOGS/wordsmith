@@ -11,6 +11,8 @@ const ENDPOINTS = [
   ['GET', '/api/v1/notes/:id/events', 'Timestamped timeline of everything that happened to it.'],
   ['POST', '/api/v1/notes/:id/claim', 'Claim one specific requested feature. 409 if it is taken.'],
   ['PATCH', '/api/v1/notes/:id', 'Update: { state?, status?, pr_url?, body_append?, title?, body?, priority?, labels?, project? }.'],
+  ['POST', '/api/notes/:id/attachments', 'Attach an image or video: raw file as the body, Content-Type set to its type, X-File-Name header. Images up to 20 MB, videos up to 95 MB.'],
+  ['GET', '/api/attachments/:attachment_id', 'Download an attachment listed on a note (same bearer token). Look at screenshots before you start.'],
   ['GET', '/api/v1/notes?q=&label=&project=', 'Plain notes and features together, with search.'],
   ['POST', '/api/v1/notes', 'Capture a plain note: { title, body, project?, labels? }.'],
 ];

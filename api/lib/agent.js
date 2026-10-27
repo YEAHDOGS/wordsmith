@@ -1,5 +1,6 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
 import { FEATURE_STATES, MAX_TITLE, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
 import { saveNotes } from './notes.js';
@@ -86,9 +87,14 @@ export async function listNotes(env, userId, query, kind) {
 /** @param {Record<string, any>} env @param {string} userId @param {string} id */
 export async function getNote(env, userId, id) {
   if (!isId(id)) throw new HttpError(400, 'Bad id');
-  const row = await env.DB.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').bind(id, userId).first();
+  const [notes, files] = await env.DB.batch([
+    env.DB.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').bind(id, userId),
+    env.DB.prepare('SELECT * FROM attachments WHERE note_id = ? AND user_id = ? AND deleted_at IS NULL ORDER BY created_at').bind(id, userId),
+  ]);
+  const row = notes.results[0];
   if (!row) throw new HttpError(404, 'Note not found');
-  return present(toApi(row), await lookups(env, userId));
+  // Agents download these with the same bearer token, e.g. to look at a screenshot of the bug.
+  return { ...present(toApi(row), await lookups(env, userId)), attachments: files.results.map(presentAttachment) };
 }
 
 /** Timeline for one note, oldest first. @param {Record<string, any>} env @param {string} userId @param {string} noteId */

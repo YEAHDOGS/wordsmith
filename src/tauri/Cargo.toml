@@ -14,3 +14,5 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# Opens OAuth sign-in in the system browser: Google and Apple refuse to sign in inside embedded WebViews.
+tauri-plugin-opener = "2"
