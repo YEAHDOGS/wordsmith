@@ -130,7 +130,7 @@
           {:else if route.view === 'project' || route.view === 'features'}
             {#if project}<ProjectHeader {project} features={view.features ?? []} tab={projectTab} ontab={(tab) => (projectTab = tab)} />{/if}
             {#if route.view !== 'project' || projectTab === 'board'}
-              <div class="{CONTENT} p-2 sm:p-3 short:hidden">
+              <div class="{CONTENT} px-2 py-1.5 sm:p-3 short:hidden">
                 <Composer projectId={project?.id ?? null} defaultKind="feature" />
               </div>
               <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-3 sm:pb-3">

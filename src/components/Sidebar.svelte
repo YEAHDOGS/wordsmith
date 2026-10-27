@@ -1,6 +1,7 @@
 <script>
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
-  // Top: logo, wordmark and the sync icon. Bottom: the Made by DOGS sticker, then the app version and a settings cog.
+  // Top: logo, wordmark and the sync icon. Bottom: the Made by DOGS sticker, then the app version, the archive (with a count
+  // badge) and a settings cog; the rail stacks the two buttons.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
   import Archive from '@lucide/svelte/icons/archive';
@@ -11,7 +12,8 @@
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
   import { flip } from 'svelte/animate';
-  import { slide } from 'svelte/transition';
+  import { scale, slide } from 'svelte/transition';
+  import { backOut } from 'svelte/easing';
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
   import SyncStatus from './SyncStatus.svelte';
@@ -28,7 +30,6 @@
   const NAV = [
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
-    { view: 'archive', label: 'Archive', icon: Archive },
   ];
   const ITEM = 'spring press group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink';
   const ACTIVE = 'bg-accent-soft text-ink';
@@ -40,6 +41,9 @@
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
   const DOGS_URL = 'https://dogs.red';
   const MADE_BY = 'This product was made by DOGS';
+  const FOOTER_BUTTON = 'spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised';
+  const MAX_BADGE = 99;
+  const BADGE_IN = { start: 0.3, duration: 200, easing: backOut };
 
   let newProject = $state('');
   let newLabel = $state('');
@@ -49,6 +53,7 @@
 
   const projects = $derived(store.projects.filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
   const labels = $derived(store.labels.filter((l) => !l.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
+  const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
     /** @type {Record<string, number>} */
@@ -192,9 +197,17 @@
           class="h-9 w-auto -rotate-3 shadow-md spring group-hover:rotate-0 group-hover:scale-105 group-active:scale-95 tv:h-14" />
       </a>
     {/if}
-    <div class="flex items-center {compact ? 'justify-center py-1' : 'justify-between py-1 pr-1.5 pl-4'}">
-      {#if !compact}<span class="font-mono text-[0.6875rem] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
-      <button class="spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
+    <div class="flex items-center {compact ? 'flex-col justify-center gap-0.5 py-1' : 'gap-0.5 py-1 pr-1.5 pl-4'}">
+      {#if !compact}<span class="mr-auto font-mono text-[0.6875rem] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
+      <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}
+        title={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-label={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-current={active('archive') ? 'page' : undefined}>
+        <span class="flex spring {active('archive') ? '-translate-y-px scale-110' : ''}"><Archive class="size-4 tv:size-6" /></span>
+        {#if archivedCount}
+          <span class="pointer-events-none absolute top-0.5 right-0.5 min-w-3.5 rounded-full bg-surface-raised px-0.5 text-center font-mono text-[0.5625rem] leading-3.5 tabular-nums text-ink ring-1 ring-line-strong tv:top-1 tv:right-1 tv:min-w-5 tv:text-xs tv:leading-5"
+            aria-hidden="true" transition:scale={BADGE_IN}>{archivedCount > MAX_BADGE ? `${MAX_BADGE}+` : archivedCount}</span>
+        {/if}
+      </button>
+      <button class="{FOOTER_BUTTON} {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
         onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>
         <span class="flex spring {active('settings') ? 'rotate-90' : ''}"><Settings class="size-4 tv:size-6" /></span>
       </button>

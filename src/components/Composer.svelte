@@ -196,13 +196,13 @@
   ondragover={(event) => event.dataTransfer?.types.includes('Files') && event.preventDefault()} {ondrop}>
   <div class="flex items-center">
     <input bind:value={title} maxlength={MAX_TITLE} {placeholder} aria-label={placeholder}
-      class="min-w-0 flex-1 bg-transparent px-4 py-3 short:py-2 text-fluid-base font-semibold text-ink placeholder:font-normal placeholder:text-ink-faint focus:outline-none"
+      class="min-w-0 flex-1 bg-transparent px-3 py-2 sm:px-4 sm:py-3 short:py-2 text-fluid-base font-semibold text-ink placeholder:font-normal placeholder:text-ink-faint focus:outline-none"
       onfocus={() => (expanded = true)} onkeydown={onTitleKey} {onpaste} />
     {#if !inProject}
       <div class="flex shrink-0 border-l border-line" role="group" aria-label="Kind">
-        <button class="spring press flex items-center gap-1.5 px-3 py-3 short:py-2 text-xs {kind === 'note' ? 'bg-surface-raised text-ink' : 'text-ink-faint hover:text-ink'}"
+        <button class="spring press flex items-center gap-1.5 px-3 py-2 sm:py-3 short:py-2 text-xs {kind === 'note' ? 'bg-surface-raised text-ink' : 'text-ink-faint hover:text-ink'}"
           aria-pressed={kind === 'note'} onclick={() => (kind = 'note')} title="Plain note"><StickyNote class="size-4" /><span class="hidden md:inline">Note</span></button>
-        <button class="spring press flex items-center gap-1.5 px-3 py-3 short:py-2 text-xs {kind === 'feature' ? 'bg-accent-soft text-accent' : 'text-ink-faint hover:text-ink'}"
+        <button class="spring press flex items-center gap-1.5 px-3 py-2 sm:py-3 short:py-2 text-xs {kind === 'feature' ? 'bg-accent-soft text-accent' : 'text-ink-faint hover:text-ink'}"
           aria-pressed={kind === 'feature'} onclick={() => (kind = 'feature')} title="Feature request for agents"><Lightbulb class="size-4" /><span class="hidden md:inline">Feature</span></button>
       </div>
     {/if}

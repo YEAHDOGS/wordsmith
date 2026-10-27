@@ -106,7 +106,7 @@
   <div class="grid grid-cols-3 border-b border-line md:hidden" role="tablist" aria-label="Feature states">
     {#each columns as column (column.state)}
       {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (column.state)]}
-      <button role="tab" aria-selected={activeTab === column.state} class="spring relative py-2 text-xs {activeTab === column.state ? style.text : 'text-ink-muted'}" onclick={() => showLane(column.state)}>
+      <button role="tab" aria-selected={activeTab === column.state} class="spring relative py-1.5 text-xs {activeTab === column.state ? style.text : 'text-ink-muted'}" onclick={() => showLane(column.state)}>
         {style.label} <span class="font-mono">{column.all.length}</span>
         {#if activeTab === column.state}<span class="absolute inset-x-0 bottom-0 h-0.5 {style.dot}" in:scale={{ duration: 150 }}></span>{/if}
       </button>
