@@ -23,11 +23,11 @@ npm install
 cp api/.dev.vars.example api/.dev.vars    # DEV_LOGIN=true gives a "Local dev" sign-in on localhost
 npm run build
 npm run cloudflare:db:migrate:local
-npm run cloudflare:dev                     # http://localhost:8788, Pages Functions + local D1 + local R2
+npm run cloudflare:dev                     # http://localhost:8788, the Worker + local D1 + local R2
 ```
 For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to :8788.
 
-`api/package.json` marks `api/` as the Pages project root. Without it, `wrangler pages dev` looks for `wrangler.jsonc` next to the repo's `package.json` and silently runs with no D1 or R2 bindings.
+`api/package.json` marks `api/` as Wrangler's project root, so local state lands in `api/.wrangler/`.
 
 ## Cost guards (free tier)
 
@@ -39,26 +39,26 @@ For hot reload, run `npm run dev` alongside it: Vite on :5173 proxies `/api` to 
 ## Layout
 
 - `src/`: the Svelte web app (the product).
-- `api/`: Cloudflare Pages Functions (`api/functions/`), SQL migrations (`api/migrations/`) and `wrangler.jsonc`. Run Wrangler from this folder.
+- `api/`: the Cloudflare Worker. `worker.js` serves `dist/` as static assets and routes `/api/*` to the handlers in `functions/`. Also SQL migrations (`migrations/`) and `wrangler.jsonc`. Run Wrangler from this folder.
 - `src/tauri/`: the Tauri 2 native shell, when native platforms are selected.
 
 ## The three environments
 
 Never use production data in local development or staging. Staging contains synthetic test data only. Native apps call Cloudflare APIs and never connect directly to D1.
 
-- **Local (your laptop)**: Run Pages Functions on Workers with `npm run cloudflare:dev` (`npx wrangler pages dev ../dist` from `api/`). Wrangler uses Miniflare to simulate Workers and D1. Standalone Workers run with `npx wrangler dev`. Local D1 uses a SQLite file under `api/.wrangler/state/`; it stays on your machine and is ignored by Git. Use SQL migrations and test data.
-- **Staging / Preview (pull requests and testing)**: Cloudflare Pages builds every pushed branch other than `master` as a preview deployment. All previews share a dedicated staging D1 database with synthetic test data; keep migrations additive and do not reset shared staging data.
-- **Production (live users)**: Cloudflare Pages and Workers serve production traffic on Cloudflare's edge and use a separate production D1 database. Every push to `master` deploys production.
+- **Local (your laptop)**: Run the Worker with `npm run cloudflare:dev` (`npx wrangler dev` from `api/`). Wrangler uses Miniflare to simulate the Worker, D1 and R2. Local D1 uses a SQLite file under `api/.wrangler/state/`; it stays on your machine and is ignored by Git. Use SQL migrations and test data.
+- **Staging / Preview (pull requests and testing)**: Deploy the separate `wordsmith-preview` Worker by hand with `npm run cloudflare:deploy:preview`. All previews share a dedicated staging D1 database with synthetic test data; keep migrations additive and do not reset shared staging data.
+- **Production (live users)**: the `wordsmith` Worker serves production traffic on Cloudflare's edge and uses a separate production D1 database. Workers Builds deploys the `wordsmith` Worker on every push to `master`.
 
 Configure separate preview and production D1 bindings in Cloudflare. Set a least-privilege Cloudflare API token and account ID as GitHub repository secrets; do not commit credentials. Fork pull requests cannot access deployment secrets and are not deployed.
 
 ### Before the first deploy
 
-The Pages project `wordsmith` is connected to `YEAHDOGS/wordsmith` through Cloudflare's Git integration, with root directory `api` (where `functions/` and `wrangler.jsonc` live), build command `cd .. && npm ci && npm run build`, and the output directory taken from `wrangler.jsonc` (`../dist`). `.node-version` pins Node 24 for the build. Bindings (D1, R2, vars) come from `api/wrangler.jsonc`; secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per environment with `npx wrangler pages secret put NAME --project-name wordsmith --env production|preview`.
+Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through **Workers Builds**: root directory `api`, build command `cd .. && npm ci && npm run build`, deploy command `npx wrangler deploy`. Every push to `master` deploys it. Static assets are served without invoking the Worker (`run_worker_first` is `/api/*` only), so only API calls count toward the free 100k requests/day. Staging is a separate Worker, `wordsmith-preview`, deployed by hand with `npm run cloudflare:deploy:preview`. Secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per Worker with `npx wrangler secret put NAME` (add `--env preview` for staging).
 
-Pages never runs migrations. Apply them before pushing code that needs them, staging first: `npx wrangler d1 migrations apply wordsmith-staging --remote --env preview`, then `wordsmith-production --remote --env production`, or run the manual **Migrate Cloudflare D1** workflow (needs `CLOUDFLARE_API_TOKEN` with D1 edit and `CLOUDFLARE_ACCOUNT_ID` as repo secrets).
+Builds never run migrations. Apply them before pushing code that needs them, staging first: `npx wrangler d1 migrations apply wordsmith-staging --remote --env preview`, then `npx wrangler d1 migrations apply wordsmith-production --remote`, or run the manual **Migrate Cloudflare D1** workflow (needs `CLOUDFLARE_API_TOKEN` with D1 edit and `CLOUDFLARE_ACCOUNT_ID` as repo secrets).
 
-For local Pages Functions and D1, run `npm install`, `npm run build`, then `npm run cloudflare:dev`. Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
+For the local Worker and D1, run `npm install`, `npm run build`, then `npm run cloudflare:dev`. Run local SQL migrations with `npm run cloudflare:db:migrate:local`. This database is isolated from Cloudflare and is not a copy of staging or production.
 
 ## Browser support
 - **The app** runs on Chrome/Edge 99+, Firefox 97+ and Safari 15.4+. Vite lowers JS and CSS to these targets in `vite.config.js`.
@@ -68,6 +68,6 @@ For local Pages Functions and D1, run `npm install`, `npm run build`, then `npm 
 
 Selected targets: android, ios, windows, macos, linux.
 
-Native builds call the hosted API, so build them with `VITE_API_BASE=https://<your pages domain>`. Sign-in opens the system browser and the app polls for its session (device flow), because Google and Apple block OAuth inside embedded WebViews. `npm run tauri:dev` runs the native shell in development. `npm run tauri:build` builds for the current host. Every installer is copied to `build/` at the repo root with one name per platform: `wordsmith-win-x64.exe` / `.msi`, `wordsmith-mac-universal.dmg`, `wordsmith-linux-x64.AppImage` / `.deb` / `.rpm`, `wordsmith-android.apk`, `wordsmith-ios.ipa` (`build/` is gitignored). Release builds come from the manually triggered **Build apps** workflow: tick the platforms you want, and each uploads its `build/` files as an artifact.
+Native builds call the hosted API, so build them with `VITE_API_BASE=https://<the wordsmith Worker's domain>`. Sign-in opens the system browser and the app polls for its session (device flow), because Google and Apple block OAuth inside embedded WebViews. `npm run tauri:dev` runs the native shell in development. `npm run tauri:build` builds for the current host. Every installer is copied to `build/` at the repo root with one name per platform: `wordsmith-win-x64.exe` / `.msi`, `wordsmith-mac-universal.dmg`, `wordsmith-linux-x64.AppImage` / `.deb` / `.rpm`, `wordsmith-android.apk`, `wordsmith-ios.ipa` (`build/` is gitignored). Release builds come from the manually triggered **Build apps** workflow: tick the platforms you want, and each uploads its `build/` files as an artifact.
 
 On Windows machines with Defender's ASR rule *Block executables unless they meet prevalence, age, or trusted list criteria*, cargo's build scripts are blocked (`Access is denied. (os error 5)`). Exclude the build folder from an admin PowerShell: `Add-MpPreference -AttackSurfaceReductionOnlyExclusions "<repo>\src\tauri\target"`.

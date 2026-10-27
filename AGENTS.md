@@ -21,12 +21,12 @@ Rules for every AI agent working in this repository.
 
 ## Cloudflare environments
 - Use Cloudflare Workers and D1 for serverless logic and relational data, with R2 for object storage when needed. Use Cloudflare bindings and D1 APIs directly. Stay inside the free tier, cache responses, lazy load, and keep data locally so each visitor makes as few requests as possible.
-- Server code lives in `api/`: Pages Functions in `api/functions/`, SQL migrations in `api/migrations/`, Wrangler config in `api/wrangler.jsonc`. The optional Tauri shell lives in `src/tauri/`.
+- wordsmith runs as one Cloudflare **Worker** with static assets: `api/worker.js` serves `dist/` as assets and routes `/api/*` (its ROUTES table) to handlers in `api/functions/`, which keep the Pages Functions shape (`onRequestGet`... receiving `{ request, env, params, data, next }`). Add a route to ROUTES when adding a handler file. SQL migrations live in `api/migrations/`, Wrangler config in `api/wrangler.jsonc` (top level = production, `env.preview` = staging). The optional Tauri shell lives in `src/tauri/`.
 - Database changes require versioned SQL migrations. SQL migrations are the source of truth; do not duplicate database schemas in application code.
 - All apps use three isolated environments:
-  - **Local**: `npx wrangler pages dev ../dist`, run from `api/`, runs Pages Functions on Workers locally with Miniflare. D1 uses a local SQLite database under `api/.wrangler/state/`; this data is machine-local and must never be committed or connected to production. Standalone Workers use `npx wrangler dev`.
-  - **Staging / Preview**: Cloudflare Pages preview deployments run on Cloudflare's edge and share a dedicated staging D1 database populated only with synthetic test data. Deployed by Cloudflare Pages' Git integration: every pushed branch other than `master` builds a preview. Fork pull requests cannot access deployment secrets and are not deployed.
-  - **Production**: Cloudflare Pages and Workers run on Cloudflare's edge for live users and use the production D1 database. Deployed by Cloudflare Pages' Git integration on every push to `master`.
+  - **Local**: `npm run cloudflare:dev` (`npx wrangler dev` from `api/`) runs the Worker locally with Miniflare. D1 uses a local SQLite database under `api/.wrangler/state/`; this data is machine-local and must never be committed or connected to production.
+  - **Staging / Preview**: the separate `wordsmith-preview` Worker (`npm run cloudflare:deploy:preview`) on a dedicated staging D1 database populated only with synthetic test data. Fork pull requests cannot access deployment secrets and are not deployed.
+  - **Production**: the `wordsmith` Worker on the production D1 database, deployed by Workers Builds (Git-connected to `YEAHDOGS/wordsmith`) on every push to `master`.
 - Never point local or staging at the production D1 database. Keep staging and production bindings separate in Cloudflare configuration.
 - All branch previews share staging D1. Keep migrations additive and backward compatible, use unique timestamped migration names, and never reset or destructively seed the shared staging database from a preview.
 - Native apps call the same Cloudflare APIs as the web app. Never connect a client app directly to D1 or embed Cloudflare credentials in browser code, Vite `VITE_*` variables, or native bundles.
@@ -35,7 +35,7 @@ Rules for every AI agent working in this repository.
 - Store secrets in Cloudflare Worker secrets or GitHub Actions secrets, use least-privilege API tokens, and never commit credentials. Preview builds must not receive production secrets.
 - SQL migration files are the only database schema source. Apply them to local D1 while developing and to staging before production. Test migrations against staging before promoting them. Destructive production migrations require a tested recovery plan and explicit backup plan.
 - Keep dependencies current at stable releases when changing them. Prefer small, maintained packages and avoid unnecessary dependencies.
-- Website and Pages Functions deploy through the Cloudflare Pages project `wordsmith`, connected to `YEAHDOGS/wordsmith` (root directory `api`). Pages never runs migrations: apply them with the manual `migrate-d1.yml` workflow or `npx wrangler d1 migrations apply` (staging first, then production) BEFORE pushing code that needs them.
+- The Worker `wordsmith` is connected to `YEAHDOGS/wordsmith` through Workers Builds: root directory `api`, build command `cd .. && npm ci && npm run build`, deploy command `npx wrangler deploy`. Builds never run migrations: apply them with the manual `migrate-d1.yml` workflow or `npx wrangler d1 migrations apply` (staging first, then production) BEFORE pushing code that needs them.
 - Native release artifacts use the manually triggered GitHub Actions workflow. The generated app may target any selection of Web, Android, iOS, macOS, Windows, and Linux. Keep each selected target buildable without requiring unselected targets.
 
 ## Privacy

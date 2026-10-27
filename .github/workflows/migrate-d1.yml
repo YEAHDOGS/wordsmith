@@ -1,7 +1,7 @@
 name: Migrate Cloudflare D1
 
-# Manual only: applies SQL migrations to staging or production D1. Deploys themselves come from Cloudflare Pages'
-# Git integration (master -> production, other branches -> previews). Migrations are additive, so run them on staging,
+# Manual only: applies SQL migrations to staging or production D1. Deploys come from Workers Builds
+# (master -> the wordsmith Worker). Migrations are additive, so run them on staging,
 # then production, BEFORE pushing code that needs them. Production only migrates from master.
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
       - name: Apply production D1 migrations
         if: inputs.environment == 'production'
         working-directory: api
-        run: npx --yes wrangler d1 migrations apply "$PROJECT_NAME-production" --remote --env production
+        run: npx --yes wrangler d1 migrations apply "$PROJECT_NAME-production" --remote
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
