@@ -64,5 +64,6 @@
   "platforms": { "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
   "version": "Version",
   "latestPr": "Latest change",
+  "updated": "updated",
   "providers": { "github": "GitHub", "google": "Google", "apple": "Apple" }
 }

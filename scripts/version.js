@@ -24,7 +24,7 @@ const BUILD_NUMBER_DIGITS = 2;
 const FETCH_TIMEOUT_MS = 8_000;
 const LATEST_PR_PAGE_SIZE = 30;
 
-/** @typedef {{ number: number, title: string, url: string }} PullRequestRef */
+/** @typedef {{ number: number, title: string, url: string, mergedAt: number }} PullRequestRef */
 /** @typedef {{ version: string, latestPr: PullRequestRef | null, source: 'github' | 'git' | 'none' }} AppVersion */
 
 /** @param {number} merged @param {number} baseline */
@@ -60,7 +60,7 @@ async function fromGitHub() {
   const latest = merged[0];
   return {
     version: versionFrom(search.total_count + lagging, BASELINE_MERGED),
-    latestPr: latest ? { number: latest.number, title: String(latest.title), url: latest.html_url } : null,
+    latestPr: latest ? { number: latest.number, title: String(latest.title), url: latest.html_url, mergedAt: Date.parse(latest.merged_at) } : null,
     source: /** @type {const} */ ('github'),
   };
 }

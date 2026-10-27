@@ -7,5 +7,5 @@ const DEV_VERSION = '1.0.0.dev';
 /** Four-part app version without the "v", e.g. "1.0.0.01". @type {string} */
 export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : DEV_VERSION;
 
-/** The most recently merged pull request into master, or null offline. @type {{ number: number, title: string, url: string } | null} */
+/** The most recently merged pull request into master, or null offline. @type {{ number: number, title: string, url: string, mergedAt?: number } | null} */
 export const LATEST_PR = typeof __LATEST_PR__ === 'object' ? __LATEST_PR__ : null;
