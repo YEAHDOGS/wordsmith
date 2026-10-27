@@ -115,6 +115,12 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - uses: dtolnay/rust-toolchain@stable
+      - name: Set up Java
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Install macOS Rust targets
         if: matrix.platform == 'macos'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
@@ -129,15 +135,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf
       - name: Install Android tools
         if: matrix.platform == 'android'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
       - name: Initialize mobile project
         if: matrix.platform == 'android' || matrix.platform == 'ios'
         run: npx tauri ${{ matrix.platform }} init
       - name: Build native app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tauriScript: npx tauri
           args: ${{ matrix.args }}
           mobile: ${{ matrix.mobile }}
       - name: Collect into build/
