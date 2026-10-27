@@ -1,5 +1,5 @@
 <script>
-  // Settings → About: the Made by DOGS sticker, the running version (linked to the PR it shipped with) and, on the web,
+  // Settings → About: the Made by DOGS sticker, the running version (linked to the PR it shipped with, and when that merged) and, on the web,
   // installers for every platform from the latest GitHub release, the visitor's own platform first. Installers are
   // hidden inside the native app.
   import Download from '@lucide/svelte/icons/download';
@@ -10,6 +10,7 @@
   import { fade, fly } from 'svelte/transition';
   import { IS_NATIVE } from '../lib/api.js';
   import { APP_VERSION, LATEST_PR } from '../lib/version.js';
+  import { fullTime } from '../lib/time.js';
   import { latestRelease, visitorPlatform } from './settings-data.js';
   import { BOX, BUTTON, HEADING, HINT, SUBHEADING } from './settings-styles.js';
   import TEXT from './settings.json';
@@ -53,6 +54,8 @@
       title="{TEXT.latestPr}: {LATEST_PR.title}">
       <GitMerge class="size-3.5 shrink-0" /><span class="font-mono">#{LATEST_PR.number}</span><span class="truncate">{LATEST_PR.title}</span>
     </a>
+    <!-- When that pull request merged, i.e. when this update shipped: date and time in the visitor's locale -->
+    {#if LATEST_PR.mergedAt}<time class="font-mono text-xs text-ink-faint" datetime={new Date(LATEST_PR.mergedAt).toISOString()}>{TEXT.updated} {fullTime(LATEST_PR.mergedAt)}</time>{/if}
   {/if}
 </p>
 

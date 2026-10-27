@@ -142,12 +142,15 @@
 
   // FLIP: note where every card is before the DOM changes, slide them after. Covers sorting, regrouping, syncs,
   // resizes and the live preview while a card is dragged. The first render is left to the reveal action.
+  // The first render waits for the grid's width: before it's measured every card would sit in one column, and the next
+  // layout would FLIP them all across the page (the jump on page changes).
   let mounted = false;
   $effect.pre(() => {
     sections;
     columnCount;
     drag.zone;
     drag.index;
+    if (!width) return;
     if (!mounted) {
       mounted = true;
       return;
@@ -267,7 +270,7 @@
 
   {#if !shown.length}
     <p class="px-4 py-16 text-center text-fluid-sm text-ink-faint">{notes.length ? FILTERED_EMPTY : empty}</p>
-  {:else}
+  {:else if width}
     {#each sections as section (section.key)}
       {#if section.title}
         {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
