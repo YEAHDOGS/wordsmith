@@ -47,6 +47,8 @@
   "env": {
     // Staging: `npx wrangler deploy --env preview` deploys a separate Worker, wordsmith-preview, on staging data only.
     "preview": {
+      // No routes: inheriting the top-level custom domain would move wordsmith.dogs.red onto the staging Worker.
+      "routes": [],
       "workers_dev": true,
       "preview_urls": false,
       "assets": {
