@@ -2,6 +2,9 @@
 
 const THEME_KEY = 'ws_theme';
 const THEMES = ['system', 'dark', 'light'];
+const SORT_KEY = 'ws_sort';
+// Note grid order: newest created, most recently updated, or grouped by project.
+export const SORTS = /** @type {const} */ (['updated', 'created', 'project']);
 // Must match --ws-app in src/styles/theme.css for each theme: tints the browser and OS chrome.
 const THEME_COLOR_META = 'meta[name="theme-color"]';
 
@@ -10,6 +13,10 @@ class Ui {
   theme = $state(/** @type {any} */ (localStorage.getItem(THEME_KEY)) || 'system');
   query = $state('');
   drawerOpen = $state(false);
+  /** @type {'updated' | 'created' | 'project'} */
+  sort = $state(/** @type {any} */ (SORTS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
+  /** The project just created from the sidebar: its page opens the GitHub repo picker once. */
+  newProjectId = $state('');
   #media = matchMedia('(prefers-color-scheme: light)');
 
   constructor() {
@@ -27,6 +34,12 @@ class Ui {
     document.documentElement.dataset.theme = this.resolved;
     const app = getComputedStyle(document.documentElement).getPropertyValue('--ws-app').trim();
     document.querySelector(THEME_COLOR_META)?.setAttribute('content', app);
+  }
+
+  /** @param {'updated' | 'created' | 'project'} sort */
+  setSort(sort) {
+    this.sort = sort;
+    localStorage.setItem(SORT_KEY, sort);
   }
 
   cycleTheme() {

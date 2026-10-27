@@ -66,8 +66,9 @@
     {/each}
   </div>
 
+  <!-- Rows are pinned to the space available (minmax(0,1fr)), so every lane ends on screen and scrolls inside itself -->
   <div bind:this={lanes} {onscroll}
-    class="grid min-h-0 flex-1 snap-x snap-mandatory auto-cols-[100%] grid-flow-col gap-px overflow-x-auto overflow-y-hidden bg-line scrollbar-none md:snap-none md:auto-cols-auto md:grid-flow-row md:grid-cols-3 md:overflow-x-hidden tallscreen:grid-cols-1 tallscreen:grid-flow-row tallscreen:overflow-y-auto">
+    class="grid min-h-0 flex-1 snap-x snap-mandatory auto-cols-[100%] grid-flow-col grid-rows-[minmax(0,1fr)] gap-px overflow-x-auto overflow-y-hidden border-y border-line bg-line scrollbar-none sm:border md:snap-none md:auto-cols-auto md:grid-flow-row md:grid-cols-3 md:overflow-x-hidden tallscreen:grid-cols-1 tallscreen:grid-flow-row tallscreen:grid-rows-3">
     {#each columns as column (column.state)}
       {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (column.state)]}
       <section class="flex min-h-0 snap-start flex-col bg-app spring {dragOver === column.state ? 'bg-surface-raised' : ''}" aria-label={style.label}

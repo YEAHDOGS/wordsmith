@@ -11,7 +11,7 @@ const RECHECK_MS = 120_000;
 const MAX_NOTES_PER_REFRESH = 10;
 
 /** The signed-in user's GitHub OAuth token, else the shared GITHUB_TOKEN secret, else none (public repos only). @param {Record<string, any>} env @param {string} userId */
-async function githubToken(env, userId) {
+export async function githubToken(env, userId) {
   const row = await env.DB.prepare("SELECT access_token FROM identities WHERE user_id = ? AND provider = 'github' AND access_token IS NOT NULL").bind(userId).first();
   if (row?.access_token && env.TOKEN_ENCRYPTION_KEY) {
     try {

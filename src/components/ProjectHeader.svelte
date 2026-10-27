@@ -5,19 +5,29 @@
   import Trash from '@lucide/svelte/icons/trash';
   import { fade } from 'svelte/transition';
   import ColorPicker from './ColorPicker.svelte';
+  import RepoPicker from './RepoPicker.svelte';
+  import ProviderIcon from './ProviderIcon.svelte';
+  import { ui } from '../lib/ui.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { STATE_STYLE } from '../lib/colors.js';
-  import { MAX_NAME, MAX_REPO, FEATURE_STATES } from '../lib/models.js';
+  import { MAX_NAME, FEATURE_STATES } from '../lib/models.js';
 
   /** @type {{ project: any, features: any[], tab: string, ontab: (tab: string) => void }} */
   let { project, features, tab, ontab } = $props();
 
   const COPIED_MS = 1400;
-  const TABS = [{ id: 'board', label: 'Board' }, { id: 'notes', label: 'Notes' }];
+  const TABS = [{ id: 'board', label: 'Board' }, { id: 'notes', label: 'Notes' }, { id: 'prs', label: 'Pull requests' }];
   let copied = $state(false);
   let confirmDelete = $state(false);
+  // A project created a moment ago opens straight into the (optional) repo link step.
+  let pickingRepo = $state(false);
+  $effect.pre(() => {
+    if (!ui.newProjectId || ui.newProjectId !== project.id) return;
+    pickingRepo = true;
+    ui.newProjectId = '';
+  });
 
   const counts = $derived(Object.fromEntries(FEATURE_STATES.map((state) => [state, features.filter((note) => note.state === state).length])));
   const agentPrompt = $derived(`You have a wordsmith API token in $WORDSMITH_TOKEN. Work the "${project.name}" queue:
@@ -61,9 +71,16 @@
     </div>
   </div>
   <div class="flex flex-wrap items-center gap-2 px-4 pb-2 short:hidden">
-    <input value={project.repo} maxlength={MAX_REPO} placeholder="github owner/repo" aria-label="GitHub repository"
-      onchange={(event) => rename('repo', event.currentTarget.value)}
-      class="w-48 border border-line bg-surface px-2 py-1 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none" />
+    {#if project.repo}
+      <a href="https://github.com/{project.repo}" target="_blank" rel="noopener noreferrer" class="spring inline-flex items-center gap-1.5 border border-line px-2 py-1 font-mono text-xs text-ink hover:border-accent">
+        <ProviderIcon provider="github" class="size-3.5" />{project.repo}
+      </a>
+      <button class="spring press text-xs text-ink-faint hover:text-accent" onclick={() => (pickingRepo = !pickingRepo)}>change</button>
+    {:else}
+      <button class="spring press inline-flex items-center gap-1.5 border border-dashed border-line-strong px-2.5 py-1 text-xs text-ink-muted hover:border-accent hover:text-ink" onclick={() => (pickingRepo = true)}>
+        <ProviderIcon provider="github" class="size-3.5" />Link GitHub repo
+      </button>
+    {/if}
     <ColorPicker value={project.color} onchange={(color) => store.update('projects', project.id, { color })} />
     <button class="spring press flex items-center gap-1.5 border border-line px-2.5 py-1 text-xs text-ink-muted hover:border-accent hover:text-ink" onclick={copyPrompt}>
       <Copy class="size-3.5" />{copied ? 'Copied' : 'Copy agent prompt'}
@@ -79,6 +96,9 @@
       <button class="spring press p-1 text-ink-faint hover:text-accent" aria-label="Delete project" title="Delete project" onclick={() => (confirmDelete = true)}><Trash class="size-4" /></button>
     {/if}
   </div>
+  {#if pickingRepo}
+    <div class="px-4 pb-3"><RepoPicker {project} onclose={() => (pickingRepo = false)} /></div>
+  {/if}
   <div class="flex px-4" role="tablist">
     {#each TABS as item (item.id)}
       <button role="tab" aria-selected={tab === item.id} class="spring relative px-3 py-2 text-sm {tab === item.id ? 'text-ink' : 'text-ink-muted hover:text-ink'}" onclick={() => ontab(item.id)}>

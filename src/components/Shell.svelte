@@ -11,6 +11,7 @@
   import ProjectHeader from './ProjectHeader.svelte';
   import NoteEditor from './NoteEditor.svelte';
   import Settings from './Settings.svelte';
+  import PullRequests from './PullRequests.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
@@ -35,19 +36,18 @@
       || note.label_ids.some((/** @type {string} */ id) => labelNames.get(id)?.includes(query)));
   });
 
-  const byRecent = (/** @type {any} */ a, /** @type {any} */ b) => b.updated_at - a.updated_at;
   const view = $derived.by(() => {
     const active = matches.filter((note) => !note.archived);
     switch (route.view) {
       case 'features': return { title: 'Features', subtitle: 'Every project, in claim order', features: active.filter((note) => note.kind === 'feature') };
       case 'project': {
         const inProject = active.filter((note) => note.project_id === route.id);
-        return { title: project?.name || 'Project', subtitle: project?.repo || '', features: inProject.filter((note) => note.kind === 'feature'), notes: inProject.filter((note) => note.kind === 'note').sort(byRecent) };
+        return { title: project?.name || 'Project', subtitle: project?.repo || '', features: inProject.filter((note) => note.kind === 'feature'), notes: inProject.filter((note) => note.kind === 'note') };
       }
-      case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)).sort(byRecent) };
-      case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived).sort(byRecent) };
+      case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
+      case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'settings': return { title: 'Settings & agents', subtitle: '' };
-      default: return { title: 'All notes', subtitle: `${active.length} notes`, notes: active.sort(byRecent) };
+      default: return { title: 'All notes', subtitle: `${active.length} notes`, notes: active };
     }
   });
 
@@ -88,11 +88,19 @@
           {:else if route.view === 'project' || route.view === 'features'}
             {#if project}<ProjectHeader {project} features={view.features ?? []} tab={projectTab} ontab={(tab) => (projectTab = tab)} />{/if}
             {#if route.view !== 'project' || projectTab === 'board'}
-              <div class="{CONTENT} border-b border-line p-2 sm:p-3 short:hidden">
+              <div class="{CONTENT} p-2 sm:p-3 short:hidden">
                 <Composer projectId={project?.id ?? null} defaultKind="feature" />
               </div>
-              <div class="{CONTENT} min-h-0 flex-1 sm:border-x border-line">
+              <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-3 sm:pb-3">
                 <FeatureBoard features={view.features ?? []} showProject={!project} />
+              </div>
+            {:else if projectTab === 'prs' && project}
+              <div class="{CONTENT} min-h-0 flex-1">
+                {#if project.repo}
+                  <PullRequests {project} />
+                {:else}
+                  <p class="px-4 py-12 text-center text-sm text-ink-muted">Link a GitHub repo above to see its pull requests here.</p>
+                {/if}
               </div>
             {:else}
               <div class="min-h-0 flex-1 overflow-y-auto">

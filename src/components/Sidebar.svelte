@@ -60,6 +60,7 @@
     const name = newProject.trim();
     if (!name) return;
     const project = store.create('projects', { name });
+    ui.newProjectId = project.id;
     newProject = '';
     addingProject = false;
     go('project', project.id);
@@ -107,7 +108,7 @@
     </div>
     {#if addingProject && !compact}
       <form class="px-4 py-1" onsubmit={addProject} transition:slide={{ duration: 150 }}>
-        <input use:autofocus bind:value={newProject} maxlength={MAX_NAME} placeholder="Project name" aria-label="Project name"
+        <input use:autofocus bind:value={newProject} maxlength={MAX_NAME} placeholder="Project name" aria-label="New project name"
           class="w-full border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
           onkeydown={(event) => event.key === 'Escape' && (addingProject = false)} />
       </form>

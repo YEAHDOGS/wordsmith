@@ -73,7 +73,7 @@
   </div>
 
   {#if note.body}
-    <p class="line-clamp-6 whitespace-pre-wrap wrap-break-word text-[13px] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
+    <p class="line-clamp-10 whitespace-pre-wrap wrap-break-word text-[13px] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
   {/if}
 
   {#if isFeature && note.status}
