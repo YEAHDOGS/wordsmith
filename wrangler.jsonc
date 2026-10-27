@@ -9,9 +9,15 @@
   // Every deploy builds the web app first, so dist/ is never stale or missing whatever the Builds build command is.
   "build": { "command": "npm run build", "cwd": ".", "watch_dir": "src" },
   "compatibility_date": "2026-10-27",
-  // Production answers only on its custom domain: OAuth callbacks are built from the request's origin, so a second
-  // address (workers.dev) would send sign-ins to a callback GitHub doesn't know.
-  "routes": [{ "pattern": "wordsmith.dogs.red", "custom_domain": true }],
+  // Production answers on four custom domains. OAuth providers only accept callbacks on wordsmith.dogs.red, so the app
+  // sends the short names on to it (SHORT_HOSTS in src/lib/models.js: src/main.js for pages, api/worker.js for /api
+  // and /n). workers.dev stays off for the same reason. Every domain here must be in SHORT_HOSTS or be wordsmith.dogs.red.
+  "routes": [
+    { "pattern": "wordsmith.dogs.red", "custom_domain": true },
+    { "pattern": "ws.dogs.red", "custom_domain": true },
+    { "pattern": "word.dogs.red", "custom_domain": true },
+    { "pattern": "smith.dogs.red", "custom_domain": true }
+  ],
   "workers_dev": false,
   // Worker Previews get workers.dev URLs (production stays off workers.dev above). Previews run on the staging data
   // in "previews" below. Never use `wrangler versions upload` here: its version links would run on production data.
