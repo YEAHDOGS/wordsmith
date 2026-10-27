@@ -1,10 +1,13 @@
 <script>
   // Renders one attachment as an <img> or <video>. Web loads straight from the API with the session cookie;
-  // native apps fetch it with their bearer token into a blob URL (see mediaUrl in src/lib/api.js).
+  // native apps fetch it with their bearer token into a blob URL (see mediaUrl in src/lib/api.js). Media fades in once its URL is ready.
+  import { fade } from 'svelte/transition';
   import { mediaUrl } from '../lib/api.js';
 
   /** @type {{ file: any, class?: string, controls?: boolean }} */
   let { file, class: className = '', controls = false } = $props();
+
+  const FADE_MS = 200;
 
   let src = $state('');
   let failed = $state(false);
@@ -27,13 +30,13 @@
 </script>
 
 {#if failed}
-  <div class="flex items-center justify-center bg-surface-raised text-xs text-ink-faint {className}">Couldn't load</div>
+  <div class="flex items-center justify-center bg-surface-raised text-xs text-ink-faint {className}" in:fade={{ duration: FADE_MS }}>Couldn't load</div>
 {:else if !src}
   <div class="animate-pulse bg-surface-raised {className}"></div>
 {:else if isVideo}
   <!-- Attachments are user-provided recordings without captions -->
   <!-- svelte-ignore a11y_media_has_caption -->
-  <video {src} class={className} {controls} preload="metadata" playsinline muted={!controls}></video>
+  <video {src} class={className} {controls} preload="metadata" playsinline muted={!controls} in:fade={{ duration: FADE_MS }}></video>
 {:else}
-  <img {src} alt={file.name} class={className} loading="lazy" decoding="async" />
+  <img {src} alt={file.name} class={className} loading="lazy" decoding="async" in:fade={{ duration: FADE_MS }} />
 {/if}
