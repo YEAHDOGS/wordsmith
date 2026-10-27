@@ -3,33 +3,38 @@
   "compatibility_date": "2026-10-27",
   "pages_build_output_dir": "../dist",
   "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments" }],
+  // R2's free allowance (10 GB, 1M writes, 10M reads a month) is shared account-wide. dogs-data already uses ~5.75 GB,
+  // so production gets 3 GB and staging 0.5 GB: 9.25 GB worst case. See api/lib/attachments.js.
+  "vars": { "R2_MAX_GB": "1", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "wordsmith-production",
-      "database_id": "__PRODUCTION_D1_DATABASE_ID__",
+      "database_id": "d8ad86e0-ab1d-49d3-a72f-7951c1518503",
       "migrations_dir": "migrations"
     }
   ],
   "env": {
     "preview": {
+      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" },
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "wordsmith-staging",
-          "database_id": "__STAGING_D1_DATABASE_ID__",
+          "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b",
           "migrations_dir": "migrations"
         }
       ]
     },
     "production": {
+      "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000" },
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments" }],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "wordsmith-production",
-          "database_id": "__PRODUCTION_D1_DATABASE_ID__",
+          "database_id": "d8ad86e0-ab1d-49d3-a72f-7951c1518503",
           "migrations_dir": "migrations"
         }
       ]
