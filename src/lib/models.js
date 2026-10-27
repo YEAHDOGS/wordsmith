@@ -1,4 +1,4 @@
-// API contract shared by the Svelte app and the Pages Functions in api/.
+// API contract shared by the Svelte app and the Worker in api/.
 // Tables and columns live only in api/migrations/*.sql; this file says which of those columns a client
 // may write, their limits and allowed values. Client defaults and server validation both read it.
 
@@ -15,7 +15,7 @@ export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', '
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-// Pages Functions accept request bodies up to 100 MB on the free plan.
+// Workers accept request bodies up to 100 MB on the free plan.
 export const MAX_VIDEO_BYTES = 95 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;

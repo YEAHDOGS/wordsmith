@@ -30,7 +30,7 @@ on:
         type: boolean
         default: false
       api_base:
-        description: API origin native apps call, e.g. https://wordsmith.pages.dev (blank = repo variable WORDSMITH_API_BASE)
+        description: API origin native apps call, e.g. https://wordsmith.dogs.red (blank = repo variable WORDSMITH_API_BASE)
         type: string
         default: ''
 

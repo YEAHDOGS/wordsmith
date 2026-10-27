@@ -1,7 +1,7 @@
 // GET /n/<id> - a public note as a standalone server-rendered page. Link unfurlers (Slack, Discord, iMessage, X,
 // LinkedIn) never run the app's JavaScript, so the Open Graph and Twitter tags describing the note and its author
 // are written here on the server. Only notes their owner made public are served; everything else is a plain 404.
-// Pages are edge-cached for CACHE_SECONDS, so a note made private disappears within that window.
+// Responses are edge-cached for CACHE_SECONDS, so a note made private disappears within that window.
 import { escapeHtml } from '../../lib/http.js';
 import { isId } from '../../../src/lib/models.js';
 import { plainText, renderMarkdown } from '../../../src/lib/markdown.js';

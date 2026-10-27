@@ -11,7 +11,7 @@ TOKEN_ENCRYPTION_KEY=
 # Extra origins allowed to call the API cross-origin (comma separated). Tauri origins are built in.
 ALLOWED_ORIGINS=http://localhost:5173
 
-# Optional: pin OAuth callback URLs to one origin, e.g. https://wordsmith.pages.dev
+# Optional: pin OAuth callback URLs to one origin, e.g. https://wordsmith.dogs.red
 # APP_ORIGIN=
 
 # GitHub OAuth app (github.com/settings/developers). Callback: <origin>/api/auth/github/callback

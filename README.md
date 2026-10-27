@@ -2,7 +2,7 @@
 
 wordsmith, a notes app for ai agentic dev, made by DOGS.
 
-Built by DOGS with Vite, Svelte 5, Tailwind CSS v4, plain JavaScript, and Cloudflare Workers, D1, R2, and Pages. Database access uses native Cloudflare bindings and APIs. No ORM is used.
+Built by DOGS with Vite, Svelte 5, Tailwind CSS v4, plain JavaScript, and Cloudflare Workers, D1, and R2. Database access uses native Cloudflare bindings and APIs. No ORM is used.
 
 ## What it does
 
@@ -54,7 +54,7 @@ Configure separate preview and production D1 bindings in Cloudflare. Set a least
 
 ### Before the first deploy
 
-Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through **Workers Builds**: root directory `/` (repo root, where `wrangler.jsonc` lives), build command `npm ci`, deploy command `npx wrangler deploy`, non-production branch deploy command `npx wrangler versions upload`. `wrangler.jsonc` runs `npm run build` before every deploy, so `dist/` is always fresh. Never put `wrangler deploy` in the build command or use `wrangler pages deploy`: production is a Worker, not a Pages project. Never deploy production by hand; it ships only from a push to `master`. Every push to `master` deploys it. Static assets are served without invoking the Worker (`run_worker_first` is `/api/*` only), so only API calls count toward the free 100k requests/day. Staging is a separate Worker, `wordsmith-preview`, deployed by hand with `npm run cloudflare:deploy:preview`. Secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per Worker with `npx wrangler secret put NAME` (add `--env preview` for staging).
+Production is the Worker `wordsmith`, connected to `YEAHDOGS/wordsmith` through **Workers Builds**: root directory `/` (repo root, where `wrangler.jsonc` lives), build command `npm ci`, deploy command `npx wrangler deploy`, Preview command `node scripts/preview.js`. `wrangler.jsonc` runs `npm run build` before every deploy, so `dist/` is always fresh. The build command only installs: a `wrangler deploy` there would ship every branch to production. Every pull request branch gets its own Worker Preview (`npx wrangler preview`) on the staging D1 database and R2 bucket (the `previews` block in `wrangler.jsonc`), and `scripts/preview.js` puts its URL and build link on the first line of the PR description (build secret `GITHUB_PR_TOKEN`). Never deploy production by hand; it ships only from a push to `master`. Every push to `master` deploys it. Static assets are served without invoking the Worker (`run_worker_first` is only `/api/*` and `/n/*`), so only API calls count toward the free 100k requests/day. Staging is a separate Worker, `wordsmith-preview`, deployed by hand with `npm run cloudflare:deploy:preview`. Secrets (`TOKEN_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and the Google/Apple ones when added) are set per Worker with `npx wrangler secret put NAME` (add `--env preview` for staging).
 
 Builds never run migrations. Apply them before pushing code that needs them, staging first: `npx wrangler d1 migrations apply wordsmith-staging --remote --env preview`, then `npx wrangler d1 migrations apply wordsmith-production --remote`, or run the manual **Migrate Cloudflare D1** workflow (needs `CLOUDFLARE_API_TOKEN` with D1 edit and `CLOUDFLARE_ACCOUNT_ID` as repo secrets).
 

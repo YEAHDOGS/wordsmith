@@ -6,13 +6,13 @@ Rules for every AI agent working in this repository.
 - **Name**: wordsmith (`wordsmith`)
 - **What it is**: wordsmith, an agentic dev notes app, made by DOGS
 - **Target platforms**: web, android, ios, windows, macos, linux
-- **Main tech stack**: Vite, Svelte, Tailwind CSS, JavaScript with JSDoc, Cloudflare Workers, D1, R2, Pages, and Tauri. Database access uses Cloudflare bindings and APIs directly; no ORM.
+- **Main tech stack**: Vite, Svelte, Tailwind CSS, JavaScript with JSDoc, Cloudflare Workers, D1, R2, and Tauri. Database access uses Cloudflare bindings and APIs directly; no ORM.
 - Created from the DOGS Svelte template.
 - Wordsmith is a premier note taking app, akin to google keep, notion, one note, and evernote, but designed around ai agentic dev and jira tickets.
 - Made by DOGS (https://dogs.red)
 - Main tech stack = svelte, tailwindCSS, tauri, cloudflare serverless (workers, d2, r2, etc, must stay on free tier until further notice)
 - Must keep all dependencies up to date with latest stable versions
-- Codebase will be edited by claude, codex, muse, antigravity, through t3 code. website hosted on cloudflare pages.
+- Codebase will be edited by claude, codex, muse, antigravity, through t3 code. website hosted on a Cloudflare Worker.
 - must use manual github actions workflows to generate and output updateable windows + mac osx binaries, android apk, ios app, and website
 - Never git rebase, git reset, or do other destructive actions to the version control
 - Database updates require migrations. All database logic must be schema first. Do not repeat schemas. We are not using TypeScript, which should cut down significantly on this. Ideally, an object will have one schema file, and everything will import that file in. Do not write multiple times, like Animal class in a schema file, then Animal type in .ts or .js, then Animal graphql def, there should only exist the schema file and everything else imports or parses it directly. Single source of truth is imperative, non-negotiable.
@@ -21,7 +21,7 @@ Rules for every AI agent working in this repository.
 
 ## Cloudflare environments
 - Use Cloudflare Workers and D1 for serverless logic and relational data, with R2 for object storage when needed. Use Cloudflare bindings and D1 APIs directly. Stay inside the free tier, cache responses, lazy load, and keep data locally so each visitor makes as few requests as possible.
-- wordsmith runs as one Cloudflare **Worker** with static assets: `api/worker.js` serves `dist/` as assets and routes `/api/*` (its ROUTES table) to handlers in `api/functions/`, which keep the Pages Functions shape (`onRequestGet`... receiving `{ request, env, params, data, next }`). Add a route to ROUTES when adding a handler file. SQL migrations live in `api/migrations/`, Wrangler config in `wrangler.jsonc` at the repo root (top level = production, `env.preview` = staging). The optional Tauri shell lives in `src/tauri/`.
+- wordsmith runs as one Cloudflare **Worker** with static assets: `api/worker.js` serves `dist/` as assets and routes `/api/*` (its ROUTES table) to handlers in `api/functions/`, which export `onRequestGet`, `onRequestPost`... handlers receiving `{ request, env, params, data, next }`. Add a route to ROUTES when adding a handler file. SQL migrations live in `api/migrations/`, Wrangler config in `wrangler.jsonc` at the repo root (top level = production, `env.preview` = staging). The optional Tauri shell lives in `src/tauri/`.
 - Database changes require versioned SQL migrations. SQL migrations are the source of truth; do not duplicate database schemas in application code.
 - All apps use three isolated environments:
   - **Local**: `npm run cloudflare:dev` (`npx wrangler dev` from the repo root) runs the Worker locally with Miniflare. D1 uses a local SQLite database under `.wrangler/state/`; this data is machine-local and must never be committed or connected to production.
@@ -35,7 +35,7 @@ Rules for every AI agent working in this repository.
 - Store secrets in Cloudflare Worker secrets or GitHub Actions secrets, use least-privilege API tokens, and never commit credentials. Preview builds must not receive production secrets.
 - SQL migration files are the only database schema source. Apply them to local D1 while developing and to staging before production. Test migrations against staging before promoting them. Destructive production migrations require a tested recovery plan and explicit backup plan.
 - Keep dependencies current at stable releases when changing them. Prefer small, maintained packages and avoid unnecessary dependencies.
-- The Worker `wordsmith` is connected to `YEAHDOGS/wordsmith` through Workers Builds: root directory `/` (repo root, where `wrangler.jsonc` lives), build command `npm ci`, deploy command `npx wrangler deploy`, non-production branch deploy command `npx wrangler versions upload`. `wrangler.jsonc` runs `npm run build` before every deploy, so `dist/` is always fresh. Never put `wrangler deploy` in the build command or use `wrangler pages deploy`: production is a Worker, not a Pages project. Never deploy production by hand; it ships only from a push to `master`. Builds never run migrations: apply them with the manual `migrate-d1.yml` workflow or `npx wrangler d1 migrations apply` (staging first, then production) BEFORE pushing code that needs them.
+- The Worker `wordsmith` is connected to `YEAHDOGS/wordsmith` through Workers Builds: root directory `/` (repo root, where `wrangler.jsonc` lives), build command `npm ci`, deploy command `npx wrangler deploy`, Preview command `node scripts/preview.js`. `wrangler.jsonc` runs `npm run build` before every deploy, so `dist/` is always fresh. The build command only installs: a `wrangler deploy` there would ship every branch to production. Every pull request branch gets its own Worker Preview (`npx wrangler preview`) on the staging D1 database and R2 bucket (the `previews` block in `wrangler.jsonc`), and `scripts/preview.js` puts its URL and build link on the first line of the PR description (build secret `GITHUB_PR_TOKEN`). Never deploy production by hand; it ships only from a push to `master`. Builds never run migrations: apply them with the manual `migrate-d1.yml` workflow or `npx wrangler d1 migrations apply` (staging first, then production) BEFORE pushing code that needs them.
 - Native release artifacts use the manually triggered GitHub Actions workflow. The generated app may target any selection of Web, Android, iOS, macOS, Windows, and Linux. Keep each selected target buildable without requiring unselected targets.
 
 ## Privacy

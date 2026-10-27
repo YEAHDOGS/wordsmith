@@ -1,6 +1,6 @@
 // Worker entry: serves the built app (../dist) as static assets and routes /api/* to the handlers in functions/.
-// The handlers keep the Pages Functions shape (onRequestGet, onRequestPost, ... receiving { request, env, params, data,
-// next, waitUntil }), so this file only replaces Pages' file-based routing and middleware chaining.
+// Each handler file exports onRequestGet, onRequestPost, ... receiving { request, env, params, data, next, waitUntil };
+// this file does the routing and middleware chaining.
 // Static asset requests never reach this code (run_worker_first is /api/* only), so they are free and uncounted.
 import * as apiMiddleware from './functions/api/_middleware.js';
 import * as v1Middleware from './functions/api/v1/_middleware.js';
@@ -38,7 +38,7 @@ const NOT_FOUND = 404;
 const METHOD_NOT_ALLOWED = 405;
 const METHOD_EXPORTS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut', DELETE: 'onRequestDelete', HEAD: 'onRequestHead', OPTIONS: 'onRequestOptions' };
 
-// [pattern, handler module, runs the /api/v1 middleware]. ":name" segments become params, like Pages' [name] files.
+// [pattern, handler module, runs the /api/v1 middleware]. ":name" segments become params, like the [name] in handler file names.
 /** @type {[string, any, boolean][]} */
 const ROUTES = [
   ['/api/health', health, false],
@@ -116,7 +116,7 @@ export default {
     const final = handler ?? (() => Response.json({ error: module ? 'Method not allowed' : 'Not found' }, { status: module ? METHOD_NOT_ALLOWED : NOT_FOUND }));
     const chain = [apiMiddleware.onRequest, ...(v1 ? [v1Middleware.onRequest] : []), final];
 
-    // Same context object Pages Functions get; next() runs the following middleware, then the handler.
+    // One context object per request; next() runs the following middleware, then the handler.
     const context = { request, env, params, data: {}, waitUntil: ctx.waitUntil.bind(ctx), passThroughOnException() {}, next: () => Promise.resolve(new Response(null)) };
     let position = 0;
     context.next = () => chain[position++](context);
