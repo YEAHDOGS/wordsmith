@@ -52,7 +52,7 @@ For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api`
 - `src/`: the Svelte web app (the product).
 - `api/`: the Cloudflare Worker. `worker.js` serves `dist/` as static assets and routes `/api/*` to the handlers in `functions/`. Also SQL migrations (`migrations/`). Its config is `wrangler.jsonc` at the repo root.
 - `src/tauri/`: the Tauri 2 native shell, when native platforms are selected.
-- Short names: the app itself sends `ws.`, `word.` and `smith.dogs.red` to `wordsmith.dogs.red` (`SHORT_HOSTS` in `src/lib/models.js`, used by `src/main.js` and `api/worker.js`). `wordsmith.dogs.red` is the only domain in `wrangler.jsonc`, because GitHub OAuth only accepts callbacks there. Never deploy a second Wrangler config from `scripts/deploy.js`: Workers Builds deploys every config as the `wordsmith` Worker, replacing the app and its domains.
+- Short names: the app itself sends `ws.`, `word.` and `smith.dogs.red` to `wordsmith.dogs.red` (`SHORT_HOSTS` in `src/lib/models.js`, used by `src/main.js` and `api/worker.js`). All four are custom domains on the one `wordsmith` Worker (`wrangler.jsonc`), and OAuth providers only accept callbacks on `wordsmith.dogs.red`, so that's where sign-in always happens. Never deploy a second Wrangler config from `scripts/deploy.js`: Workers Builds deploys every config as the `wordsmith` Worker, replacing the app and its domains.
 
 ## The three environments
 

@@ -98,7 +98,7 @@ export const BOOL_FIELDS = ['pinned', 'archived', 'public'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
 // The one real address: GitHub OAuth only accepts callbacks there. The short names are sent to it by the app itself
-// (src/main.js for pages, api/worker.js for API and share links); wrangler.jsonc lists no other domain.
+// (src/main.js for pages, api/worker.js for API and share links). All four are custom domains in wrangler.jsonc.
 export const APP_HOST = 'wordsmith.dogs.red';
 export const SHORT_HOSTS = ['ws.dogs.red', 'word.dogs.red', 'smith.dogs.red'];
 
