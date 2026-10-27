@@ -76,7 +76,7 @@ export async function listNotes(env, userId, query, kind) {
   if (search) where.push('(instr(lower(title), lower(?)) > 0 OR instr(lower(body), lower(?)) > 0)'), binds.push(search, search);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(query.get('limit')) || DEFAULT_LIMIT));
 
-  const order = kind === 'feature' ? 'priority DESC, created_at ASC' : 'pinned DESC, updated_at DESC';
+  const order = kind === 'feature' ? 'priority DESC, COALESCE(position, created_at) ASC, created_at ASC' : 'pinned DESC, updated_at DESC';
   const { results } = await env.DB.prepare(`SELECT * FROM notes WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`).bind(...binds, limit).all();
   const maps = await lookups(env, userId);
   const label = query.get('label');
@@ -204,8 +204,8 @@ export async function claimFeature(env, userId, actor, id) {
 export async function claimNext(env, userId, actor, projectRef) {
   const project = await resolveProject(env, userId, projectRef);
   const query = project
-    ? env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND project_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, created_at ASC LIMIT ?").bind(userId, project.id, CLAIM_CANDIDATES)
-    : env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, created_at ASC LIMIT ?").bind(userId, CLAIM_CANDIDATES);
+    ? env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND project_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, COALESCE(position, created_at) ASC, created_at ASC LIMIT ?").bind(userId, project.id, CLAIM_CANDIDATES)
+    : env.DB.prepare("SELECT id FROM notes WHERE user_id = ? AND kind = 'feature' AND state = 'requested' AND deleted_at IS NULL AND archived = 0 ORDER BY priority DESC, COALESCE(position, created_at) ASC, created_at ASC LIMIT ?").bind(userId, CLAIM_CANDIDATES);
   const { results } = await query.all();
   for (const { id } of results) {
     const claimed = await claimFeature(env, userId, actor, String(id));

@@ -5,8 +5,11 @@ const THEME_KEY = 'ws_theme';
 const THEMES = ['system', 'dark', 'light'];
 const SORT_KEY = 'ws_sort';
 const GROUP_KEY = 'ws_group';
-// Note grid controls: the left button flips the time order, the right one cycles the grouping.
-export const ORDERS = /** @type {const} */ (['updated', 'created']);
+// Note grid controls: the left button cycles the order, the right one cycles the grouping.
+// manual = the order notes were dragged into (notes.position); priority = highest first, manual order within a level.
+export const ORDERS = /** @type {const} */ (['updated', 'created', 'priority', 'manual']);
+/** Orders a drag can't express: picking a card up switches to manual so the drop sticks. */
+export const TIME_ORDERS = /** @type {const} */ (['updated', 'created']);
 export const GROUPS = /** @type {const} */ (['all', 'project', 'season']);
 // Before grouping existed, "project" was a sort; carry that choice over.
 const LEGACY_PROJECT_SORT = 'project';
@@ -18,7 +21,7 @@ class Ui {
   theme = $state(/** @type {any} */ (localStorage.getItem(THEME_KEY)) || 'system');
   query = $state('');
   drawerOpen = $state(false);
-  /** @type {'updated' | 'created'} */
+  /** @type {'updated' | 'created' | 'priority' | 'manual'} */
   order = $state(/** @type {any} */ (ORDERS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
   /** @type {'all' | 'project' | 'season'} */
   group = $state(/** @type {any} */ (localStorage.getItem(SORT_KEY) === LEGACY_PROJECT_SORT ? 'project'
@@ -46,10 +49,10 @@ class Ui {
     document.querySelector(THEME_COLOR_META)?.setAttribute('content', app);
   }
 
-  /** Updated <-> created. */
-  flipOrder() {
-    this.order = this.order === 'updated' ? 'created' : 'updated';
-    localStorage.setItem(SORT_KEY, this.order);
+  /** @param {'updated' | 'created' | 'priority' | 'manual'} order */
+  setOrder(order) {
+    this.order = order;
+    localStorage.setItem(SORT_KEY, order);
   }
 
   /** @param {'all' | 'project' | 'season'} group */
