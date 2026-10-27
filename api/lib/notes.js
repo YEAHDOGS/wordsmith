@@ -1,6 +1,6 @@
 // Every note write (app sync, agent API, PR poll, GitHub webhook) goes through saveNotes, which applies the
 // feature lifecycle, stamps started_at / completed_at and appends note_events in the same D1 batch.
-import { cleanRow, newRow } from '../../src/lib/models.js';
+import { LEGACY_PRIORITY, cleanRow, newRow } from '../../src/lib/models.js';
 import { upsertStatement } from './rows.js';
 
 // Autosave sends many small edits; only one "edited" event is logged per note per window.
@@ -91,6 +91,13 @@ export async function saveNotes(env, userId, actor, changes) {
     // Deleted notes keep only their tombstone on the server.
     if (after.deleted_at) Object.assign(after, { title: '', body: '', public: false });
     if (patch.prs_checked_at !== undefined) after.prs_checked_at = patch.prs_checked_at;
+    // Two priority columns while old builds are around (migration 20261027040000): a patch without priority_level
+    // comes from an old build, or a row cached before the upgrade, so a changed old-scale value is converted up.
+    // Either way the old column then follows the level.
+    if (cleaned.priority_level === undefined && cleaned.priority !== undefined && cleaned.priority !== (before?.priority ?? 0)) {
+      after.priority_level = Math.max(0, LEGACY_PRIORITY.indexOf(cleaned.priority));
+    }
+    after.priority = LEGACY_PRIORITY[after.priority_level] ?? 0;
 
     const events = [...extraEvents, ...lifecycle(before, after, now, actor)];
     statements.push(upsertStatement(env, 'notes', after));

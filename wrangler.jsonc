@@ -1,6 +1,6 @@
 {
   // wordsmith runs as one Worker: static assets from dist/ (free, never invoke the Worker) plus /api/* through api/worker.js.
-  // Top level is PRODUCTION: Workers Builds' `npx wrangler deploy` on master deploys exactly this.
+  // Top level is PRODUCTION: Workers Builds' deploy command on master (`node scripts/deploy.js`: migrate D1, then `wrangler deploy`) deploys exactly this.
   // This file lives at the repo root so `npx wrangler deploy` finds it whatever directory the build runs from
   // (Wrangler searches upward). Without it, Wrangler auto-detects Vite and ships dist/ alone, with no API or bindings.
   // `wrangler dev` uses these bindings too, but only as local Miniflare copies under .wrangler/state, never the remote ones.
@@ -13,8 +13,9 @@
   // address (workers.dev) would send sign-ins to a callback GitHub doesn't know.
   "routes": [{ "pattern": "wordsmith.dogs.red", "custom_domain": true }],
   "workers_dev": false,
-  // Per-version preview links would run untested versions against production data, so they stay off.
-  "preview_urls": false,
+  // Worker Previews get workers.dev URLs (production stays off workers.dev above). Previews run on the staging data
+  // in "previews" below. Never use `wrangler versions upload` here: its version links would run on production data.
+  "preview_urls": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -33,9 +34,21 @@
   // R2's free allowance (10 GB, 1M writes, 10M reads a month) is shared account-wide. dogs-data already uses ~5.75 GB,
   // so production gets 3 GB and staging 0.5 GB: 9.25 GB worst case. See api/lib/attachments.js.
   "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000" },
+  // Worker Previews: every pull request branch gets its own Preview (`npx wrangler preview`, run by Workers Builds and
+  // scripts/preview.js) at <branch>-wordsmith.<subdomain>.workers.dev. Previews never inherit the production bindings
+  // above, so they are pointed at the staging D1 database and R2 bucket here: PR code never touches production data.
+  "previews": {
+    "d1_databases": [
+      { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }
+    ],
+    "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
+    "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
+  },
   "env": {
     // Staging: `npx wrangler deploy --env preview` deploys a separate Worker, wordsmith-preview, on staging data only.
     "preview": {
+      // No routes: inheriting the top-level custom domain would move wordsmith.dogs.red onto the staging Worker.
+      "routes": [],
       "workers_dev": true,
       "preview_urls": false,
       "assets": {
@@ -44,10 +57,12 @@
         "not_found_handling": "single-page-application",
         "run_worker_first": ["/api/*", "/n/*"]
       },
+      // "remote": true only affects `wrangler dev --env preview` (npm run dev): the Worker runs on
+      // your machine but reads and writes the real staging D1 and R2. Deploys ignore it.
       "d1_databases": [
-        { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }
+        { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations", "remote": true }
       ],
-      "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
+      "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging", "remote": true }],
       "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
     }
   }

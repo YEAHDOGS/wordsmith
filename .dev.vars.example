@@ -11,13 +11,15 @@ TOKEN_ENCRYPTION_KEY=
 # Extra origins allowed to call the API cross-origin (comma separated). Tauri origins are built in.
 ALLOWED_ORIGINS=http://localhost:5173
 
-# Optional: pin OAuth callback URLs to one origin, e.g. https://wordsmith.pages.dev
+# Optional: pin OAuth callback URLs to one origin, e.g. https://wordsmith.dogs.red
 # APP_ORIGIN=
 
 # GitHub OAuth app (github.com/settings/developers). Callback: <origin>/api/auth/github/callback
+# GitHub allows one callback URL per OAuth app, so local dev needs its OWN app ("wordsmith local") with callback
+# http://localhost:8788/api/auth/github/callback. The production app only accepts https://wordsmith.dogs.red.
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
-# Optional: "read:user user:email repo" lets PR auto-sync read private repos.
+# Optional: "read:user user:email read:org repo" lets the repo picker and PR auto-sync read private repos.
 # GITHUB_OAUTH_SCOPE=
 # Optional fallback token for PR status when you didn't sign in with GitHub.
 # GITHUB_TOKEN=

@@ -1,0 +1,37 @@
+{
+  "projects": [
+    { "key": "pawprint", "name": "Demo: Pawprint", "description": "Synthetic sample project: a dog-walking app", "color": "red" },
+    { "key": "site", "name": "Demo: Website refresh", "description": "Synthetic sample project: marketing site rebuild", "color": "blue" },
+    { "key": "mobile", "name": "Demo: Mobile app", "description": "Synthetic sample project: native shell polish", "color": "green" }
+  ],
+  "labels": [
+    { "key": "bug", "name": "bug", "color": "red" },
+    { "key": "frontend", "name": "frontend", "color": "purple" },
+    { "key": "backend", "name": "backend", "color": "teal" },
+    { "key": "design", "name": "design", "color": "pink" }
+  ],
+  "notes": [
+    { "project": "pawprint", "kind": "feature", "state": "requested", "priority_level": 5, "labels": ["backend"], "daysAgo": 2, "title": "Walk booking API", "body": "Add `POST /walks` so owners can book a walk.\n\n- validate the time slot\n- reject double bookings\n- return the walker's name" },
+    { "project": "pawprint", "kind": "feature", "state": "requested", "priority_level": 4, "labels": ["frontend"], "daysAgo": 3, "title": "Map view of nearby walkers", "body": "Show walkers within 2 km on a map. Tapping a pin opens their profile." },
+    { "project": "pawprint", "kind": "feature", "state": "requested", "priority_level": 3, "labels": ["frontend", "design"], "daysAgo": 6, "title": "Dark mode for the booking screen", "body": "The booking screen ignores the system theme. Match the rest of the app." },
+    { "project": "pawprint", "kind": "feature", "state": "requested", "priority_level": 2, "labels": [], "daysAgo": 9, "title": "Export walk history as CSV", "body": "Owners want a spreadsheet of past walks for their records." },
+    { "project": "pawprint", "kind": "feature", "state": "requested", "priority_level": 0, "labels": [], "daysAgo": 14, "title": "Walker badges", "body": "Small badges for 100 walks, 5-star streaks and so on. Nice to have." },
+    { "project": "pawprint", "kind": "feature", "state": "in_progress", "priority_level": 4, "labels": ["bug", "backend"], "daysAgo": 4, "assignee": "claude", "status": "Writing the migration for the new reviews table", "title": "Walk reviews", "body": "Owners rate a walk 1-5 with an optional comment after it ends." },
+    { "project": "pawprint", "kind": "feature", "state": "in_progress", "priority_level": 3, "labels": ["frontend"], "daysAgo": 5, "assignee": "codex", "status": "Pull request open, waiting on review", "title": "Push notification when a walk starts", "body": "Notify the owner when the walker checks in.", "pr": { "number": 2, "title": "Push notification when a walk starts", "state": "open" } },
+    { "project": "pawprint", "kind": "feature", "state": "complete", "priority_level": 3, "labels": ["bug"], "daysAgo": 20, "assignee": "claude", "status": "Merged", "title": "Fix time zones on the schedule", "body": "Walks booked across midnight showed on the wrong day.", "pr": { "number": 1, "title": "Fix time zones on the schedule", "state": "merged" } },
+    { "project": "site", "kind": "feature", "state": "requested", "priority_level": 4, "labels": ["design"], "daysAgo": 1, "title": "New hero section", "body": "Full-bleed hero with the product screenshot and one call to action." },
+    { "project": "site", "kind": "feature", "state": "requested", "priority_level": 1, "labels": ["frontend"], "daysAgo": 8, "title": "Pricing page FAQ", "body": "Collapsible FAQ under the pricing table. Copy is in the shared doc." },
+    { "project": "site", "kind": "feature", "state": "in_progress", "priority_level": 2, "labels": ["frontend"], "daysAgo": 7, "assignee": "muse", "status": "Swapping the image pipeline to AVIF", "title": "Faster image loading", "body": "Largest Contentful Paint is 3.8 s on mobile. Target under 2.5 s." },
+    { "project": "site", "kind": "feature", "state": "complete", "priority_level": 2, "labels": [], "daysAgo": 25, "assignee": "codex", "status": "Merged", "title": "Footer links", "body": "Add privacy, terms and contact links to the footer." },
+    { "project": "mobile", "kind": "feature", "state": "requested", "priority_level": 3, "labels": ["bug"], "daysAgo": 2, "title": "Back swipe closes the editor without saving", "body": "On Android the system back gesture drops unsaved text. Save first, then close." },
+    { "project": "mobile", "kind": "feature", "state": "requested", "priority_level": 2, "labels": ["design"], "daysAgo": 10, "title": "Adaptive app icon", "body": "Android 13 themed icon and an iOS tinted variant." },
+    { "project": "pawprint", "kind": "note", "pinned": true, "color": "yellow", "daysAgo": 1, "title": "Release checklist", "body": "1. Bump the version\n2. Run the build workflow\n3. Smoke test login on a phone\n4. Announce in the changelog" },
+    { "project": "pawprint", "kind": "note", "labels": ["design"], "color": "pink", "daysAgo": 3, "title": "Color ideas", "body": "Warm red accent, off-white surfaces, **one** highlight color only." },
+    { "project": "pawprint", "kind": "note", "daysAgo": 12, "title": "Interview notes: dog owners", "body": "- most book walks the night before\n- price matters less than trust\n- want photos during the walk" },
+    { "project": "site", "kind": "note", "daysAgo": 4, "title": "Copy tone", "body": "Short sentences. No jargon. Talk to one person, not \"users\"." },
+    { "project": "mobile", "kind": "note", "color": "blue", "daysAgo": 6, "title": "Devices to test on", "body": "Small Android phone, iPhone SE, a tablet in landscape, and a TV browser." },
+    { "project": null, "kind": "note", "pinned": true, "daysAgo": 0, "title": "Welcome to staging", "body": "Everything here is **synthetic test data** from `npm run seed:staging`. Edit, drag, archive and delete freely." },
+    { "project": null, "kind": "note", "color": "green", "daysAgo": 5, "title": "Grocery list (sample)", "body": "- coffee\n- oats\n- dog treats" },
+    { "project": null, "kind": "note", "archived": true, "daysAgo": 30, "title": "Old idea (archived)", "body": "An archived note so the Archive view has something in it." }
+  ]
+}

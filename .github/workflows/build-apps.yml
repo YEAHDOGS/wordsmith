@@ -2,6 +2,7 @@ name: Build apps
 
 # Manual only: Actions → Build apps → Run workflow, then tick the platforms you want.
 # Every platform's installers land in one "build" artifact per platform, named like build/wordsmith-win-x64.exe.
+# Tick "release" to also publish them as a GitHub release tagged v<app version>; the app's Settings → Install app reads it.
 on:
   workflow_dispatch:
     inputs:
@@ -30,9 +31,13 @@ on:
         type: boolean
         default: false
       api_base:
-        description: API origin native apps call, e.g. https://wordsmith.pages.dev (blank = repo variable WORDSMITH_API_BASE)
+        description: API origin native apps call, e.g. https://wordsmith.dogs.red (blank = repo variable WORDSMITH_API_BASE)
         type: string
         default: ''
+      release:
+        description: Publish a GitHub release (tag v<app version>) with every installer built above. Settings → Install app downloads from the latest one.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -142,3 +147,45 @@ jobs:
           name: ${{ matrix.platform }}
           path: build/*
           if-no-files-found: error
+
+  # Optional: gathers every platform's build/ files into one GitHub release tagged with the app version
+  # (scripts/version.js, e.g. v1.0.0.02). Runs when at least one native build succeeded; failed platforms are skipped.
+  release:
+    name: Release
+    needs: [plan, native]
+    if: ${{ !cancelled() && inputs.release && needs.plan.outputs.matrix != '[]' && contains(fromJSON('["success","failure"]'), needs.native.result) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Full history so the version falls back to counting merges if the GitHub API is unreachable
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # Native artifacts only: the web artifact (dist/) holds index.html and an assets/ folder, which are not installers
+      - uses: actions/download-artifact@v8
+        with:
+          path: build
+          pattern: '{windows,linux,macos,android,ios}'
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=()
+          for f in build/wordsmith-*; do [ -f "$f" ] && files+=("$f"); done
+          if [ ${#files[@]} -eq 0 ]; then echo "No installers were built; nothing to release."; exit 1; fi
+          version=$(node -e 'import("./scripts/version.js").then(async (m) => console.log((await m.readVersion()).version))')
+          case "$version" in *.dev) echo "Could not work out the app version; not releasing."; exit 1;; esac
+          tag="v${version}"
+          echo "Releasing ${tag} with: ${files[*]}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --title "wordsmith ${version}" --generate-notes --latest
+          fi

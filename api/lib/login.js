@@ -12,15 +12,18 @@ export const LOGIN_RATE_WINDOW_MS = 600_000;
 const USER_CODE_LENGTH = 6;
 const REDIRECT_STATUS = 303;
 const LOCAL_HOSTNAMES = ['localhost', '127.0.0.1'];
+// Private LAN addresses (10.x, 172.16-31.x, 192.168.x), so a phone on the same Wi-Fi can use the dev login too.
+const PRIVATE_IPV4 = /^(10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+$/;
 
 /**
- * The dev-only login button: needs DEV_LOGIN=true (set only in .dev.vars) AND a localhost request,
+ * The dev-only login button: needs DEV_LOGIN=true (set only in .dev.vars) AND a localhost or private-LAN request,
  * so it can never switch on in preview or production.
  * @param {Request} request
  * @param {Record<string, any>} env
  */
 export function devLoginEnabled(request, env) {
-  return env.DEV_LOGIN === 'true' && LOCAL_HOSTNAMES.includes(new URL(request.url).hostname);
+  const { hostname } = new URL(request.url);
+  return env.DEV_LOGIN === 'true' && (LOCAL_HOSTNAMES.includes(hostname) || PRIVATE_IPV4.test(hostname));
 }
 
 /** Throws 404 unless the provider exists and has credentials. @param {Record<string, any>} env @param {string} provider */

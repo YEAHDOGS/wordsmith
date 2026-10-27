@@ -1,7 +1,7 @@
 // Fetch wrapper for the wordsmith API. The web app uses its HttpOnly session cookie; native apps send a bearer token.
 import { isTauri } from '@tauri-apps/api/core';
 
-// Native bundles have no same-origin API, so they are built with VITE_API_BASE=https://<your pages domain>.
+// Native bundles have no same-origin API, so they are built with VITE_API_BASE=https://wordsmith.dogs.red.
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const TOKEN_KEY = 'ws_session_token';
 const NO_CONTENT = 204;

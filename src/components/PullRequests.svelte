@@ -88,7 +88,7 @@
         <span class="truncate">{pr.title}</span><span class="shrink-0 font-mono text-xs font-normal text-ink-faint">#{pr.number}</span>
         <ExternalLink class="size-3 shrink-0 opacity-0 group-hover:opacity-100" />
       </a>
-      <p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-ink-faint">
+      <p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.6875rem] text-ink-faint">
         <span class="inline-flex items-center gap-1">
           {#if pr.avatar_url}<img src={pr.avatar_url} alt="" class="size-3.5 rounded-full" loading="lazy" />{/if}{pr.author}
         </span>
@@ -118,7 +118,7 @@
 
 <div class="flex h-full min-h-0 flex-col">
   <div class="flex items-center gap-3 px-4 py-2">
-    <p class="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint">
+    <p class="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-ink-faint">
       {#if data}
         {project.repo} · {data.source === 'graphql' ? 'live from GitHub' : 'public data (sign in with GitHub for checks, reviews and private repos)'} · fetched {ago(data.fetched_at)}
       {:else}
@@ -136,11 +136,11 @@
     {:else if !data}
       <p class="px-4 py-10 text-center text-xs text-ink-faint">Loading pull requests from GitHub…</p>
     {:else}
-      <h3 class="px-4 pt-2 pb-1 font-mono text-[11px] uppercase tracking-widest text-ink-faint sm:px-0">Open · {data.open.length}</h3>
+      <h3 class="px-4 pt-2 pb-1 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint sm:px-0">Open · {data.open.length}</h3>
       <ul class="flex flex-col gap-px border-y border-line bg-line sm:border">
         {#each data.open as pr, index (pr.url)}{@render row(pr, index)}{:else}<li class="bg-app px-4 py-6 text-center text-xs text-ink-faint">No open pull requests.</li>{/each}
       </ul>
-      <h3 class="px-4 pt-5 pb-1 font-mono text-[11px] uppercase tracking-widest text-ink-faint sm:px-0">Recently merged · {data.merged.length}</h3>
+      <h3 class="px-4 pt-5 pb-1 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint sm:px-0">Recently merged · {data.merged.length}</h3>
       <ul class="flex flex-col gap-px border-y border-line bg-line sm:border">
         {#each data.merged as pr, index (pr.url)}{@render row(pr, index)}{:else}<li class="bg-app px-4 py-6 text-center text-xs text-ink-faint">Nothing merged recently.</li>{/each}
       </ul>

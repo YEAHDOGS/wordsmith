@@ -3,6 +3,7 @@
   // content capped at max-w-7xl. Ultra-wide: content spreads. Only lists scroll; the frame never does.
   import { untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
+  import { cubicIn, quintOut } from 'svelte/easing';
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
   import BottomNav from './BottomNav.svelte';
@@ -20,6 +21,11 @@
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
+  // Page changes: the old page fades out while the new one rises in, stacked in the same box so nothing shifts.
+  const PAGE_IN = { y: 10, duration: 260, delay: 60, easing: quintOut };
+  const PAGE_OUT = { duration: 120, easing: cubicIn };
+  const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
+  const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -48,7 +54,7 @@
       }
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
-      case 'settings': return { title: 'Settings & agents', subtitle: '' };
+      case 'settings': return { title: 'Settings', subtitle: '' };
       default: return { title: 'All notes', subtitle: `${active.length} notes`, notes: active };
     }
   });
@@ -60,8 +66,12 @@
     return view.notes ?? [];
   });
 
-  /** Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
+  /** Escape closes the phone drawer; Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
   function onkeydown(event) {
+    if (event.key === 'Escape' && ui.drawerOpen) {
+      ui.drawerOpen = false;
+      return;
+    }
     if (event.key.toLowerCase() !== 'a' || !(event.ctrlKey || event.metaKey) || route.note || !visible.length) return;
     const target = /** @type {HTMLElement} */ (event.target);
     if (target.closest('input, textarea, select, [contenteditable]')) return;
@@ -110,9 +120,9 @@
       {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} />{/if}
     </div>
 
-    <main class="min-h-0 flex-1 overflow-hidden">
+    <main class="relative min-h-0 flex-1 overflow-hidden">
       {#key route.view + route.id}
-        <div class="flex h-full flex-col" in:fade={{ duration: 150 }}>
+        <div class="absolute inset-0 flex flex-col" in:fly={PAGE_IN} out:fade={PAGE_OUT}>
           {#if route.view === 'settings'}
             <Settings />
           {:else if route.view === 'project' && !project}
@@ -120,7 +130,7 @@
           {:else if route.view === 'project' || route.view === 'features'}
             {#if project}<ProjectHeader {project} features={view.features ?? []} tab={projectTab} ontab={(tab) => (projectTab = tab)} />{/if}
             {#if route.view !== 'project' || projectTab === 'board'}
-              <div class="{CONTENT} p-2 sm:p-3 short:hidden">
+              <div class="{CONTENT} px-2 py-1.5 sm:p-3 short:hidden">
                 <Composer projectId={project?.id ?? null} defaultKind="feature" />
               </div>
               <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-3 sm:pb-3">
@@ -159,8 +169,8 @@
 
   {#if ui.drawerOpen}
     <div class="fixed inset-0 z-40 flex lg:hidden">
-      <button class="absolute inset-0 bg-scrim" aria-label="Close navigation" onclick={() => (ui.drawerOpen = false)} transition:fade={{ duration: 150 }}></button>
-      <div class="relative h-full w-72 max-w-[85vw] border-r border-line" transition:fly={{ x: -300, duration: 220, opacity: 1 }}>
+      <button class="absolute inset-0 bg-scrim" aria-label="Close navigation" onclick={() => (ui.drawerOpen = false)} in:fade={{ duration: 220 }} out:fade={{ duration: 180 }}></button>
+      <div class="relative h-full w-72 max-w-[85vw] border-r border-line" in:fly={DRAWER_IN} out:fly={DRAWER_OUT}>
         <Sidebar />
       </div>
     </div>
