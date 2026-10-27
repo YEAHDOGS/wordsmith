@@ -25,8 +25,8 @@ Rules for every AI agent working in this repository.
 - Database changes require versioned SQL migrations. SQL migrations are the source of truth; do not duplicate database schemas in application code.
 - All apps use three isolated environments:
   - **Local**: `npx wrangler pages dev ../dist`, run from `api/`, runs Pages Functions on Workers locally with Miniflare. D1 uses a local SQLite database under `api/.wrangler/state/`; this data is machine-local and must never be committed or connected to production. Standalone Workers use `npx wrangler dev`.
-  - **Staging / Preview**: Cloudflare Pages preview deployments run on Cloudflare's edge and share a dedicated staging D1 database populated only with synthetic test data. Deployed by manually running `deploy-cloudflare.yml` with `staging` (no automatic deploys for now). Fork pull requests cannot access deployment secrets and are not deployed.
-  - **Production**: Cloudflare Pages and Workers run on Cloudflare's edge for live users and use the production D1 database. Deployed by manually running `deploy-cloudflare.yml` with `production`, only from `master`.
+  - **Staging / Preview**: Cloudflare Pages preview deployments run on Cloudflare's edge and share a dedicated staging D1 database populated only with synthetic test data. Deployed by Cloudflare Pages' Git integration: every pushed branch other than `master` builds a preview. Fork pull requests cannot access deployment secrets and are not deployed.
+  - **Production**: Cloudflare Pages and Workers run on Cloudflare's edge for live users and use the production D1 database. Deployed by Cloudflare Pages' Git integration on every push to `master`.
 - Never point local or staging at the production D1 database. Keep staging and production bindings separate in Cloudflare configuration.
 - All branch previews share staging D1. Keep migrations additive and backward compatible, use unique timestamped migration names, and never reset or destructively seed the shared staging database from a preview.
 - Native apps call the same Cloudflare APIs as the web app. Never connect a client app directly to D1 or embed Cloudflare credentials in browser code, Vite `VITE_*` variables, or native bundles.
@@ -35,7 +35,7 @@ Rules for every AI agent working in this repository.
 - Store secrets in Cloudflare Worker secrets or GitHub Actions secrets, use least-privilege API tokens, and never commit credentials. Preview builds must not receive production secrets.
 - SQL migration files are the only database schema source. Apply them to local D1 while developing and to staging before production. Test migrations against staging before promoting them. Destructive production migrations require a tested recovery plan and explicit backup plan.
 - Keep dependencies current at stable releases when changing them. Prefer small, maintained packages and avoid unnecessary dependencies.
-- Website and Pages Functions deployments use GitHub Actions: every branch and same-repository pull request goes to preview; only `master` goes to production. Test preview deployments before merging.
+- Website and Pages Functions deploy through the Cloudflare Pages project `wordsmith`, connected to `YEAHDOGS/wordsmith` (root directory `api`). Pages never runs migrations: apply them with the manual `migrate-d1.yml` workflow or `npx wrangler d1 migrations apply` (staging first, then production) BEFORE pushing code that needs them.
 - Native release artifacts use the manually triggered GitHub Actions workflow. The generated app may target any selection of Web, Android, iOS, macOS, Windows, and Linux. Keep each selected target buildable without requiring unselected targets.
 
 ## Privacy
