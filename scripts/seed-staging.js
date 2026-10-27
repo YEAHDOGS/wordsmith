@@ -53,9 +53,9 @@ function statementsFor(userId, now) {
   const labelIds = Object.fromEntries(SEED.labels.map((/** @type {any} */ l) => [l.key, `${prefix}-l-${l.key}`]));
 
   const projects = SEED.projects.map((/** @type {any} */ { key, ...values }) =>
-    insert('projects', newRow('projects', { ...values, id: projectIds[key], user_id: userId, created_at: at(40), updated_at: at(40) })));
+    insert('projects', newRow('projects', { ...values, id: projectIds[key], user_id: userId, created_at: at(40), updated_at: now })));
   const labels = SEED.labels.map((/** @type {any} */ { key, ...values }) =>
-    insert('labels', newRow('labels', { ...values, id: labelIds[key], user_id: userId, created_at: at(40), updated_at: at(40) })));
+    insert('labels', newRow('labels', { ...values, id: labelIds[key], user_id: userId, created_at: at(40), updated_at: now })));
   const notes = SEED.notes.map((/** @type {any} */ { project, labels: names = [], daysAgo, pr, ...values }, /** @type {number} */ index) => {
     const created = at(daysAgo, -index);
     const started = values.state === 'in_progress' || values.state === 'complete' ? created + HOUR_MS : null;
@@ -67,7 +67,8 @@ function statementsFor(userId, now) {
     return insert('notes', newRow('notes', {
       ...values, priority: LEGACY_PRIORITY[values.priority_level ?? 0], id: `${prefix}-n${String(index).padStart(2, '0')}`, user_id: userId,
       project_id: project ? projectIds[project] : null, label_ids: names.map((/** @type {string} */ name) => labelIds[name]),
-      pull_requests: pullRequests, started_at: started, completed_at: completed, created_at: created, updated_at: started ? completed ?? started : created,
+      // updated_at must be now: sync only pulls rows changed after a device's cursor, so a backdated row is never seen.
+      pull_requests: pullRequests, started_at: started, completed_at: completed, created_at: created, updated_at: now,
     }));
   });
   return [...projects, ...labels, ...notes];
