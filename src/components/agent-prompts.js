@@ -1,5 +1,5 @@
-// The two copy-paste prompts in Settings → Connect an agent. Both are built from the API's own address, so a
-// pasted prompt always points at the server this app talks to.
+// Copy-paste prompts: the two in Settings → Connect an agent, and the per-project one in project settings. All are built
+// from the API's own address, so a pasted prompt always points at the server this app talks to.
 import { DIFFICULTY_LABELS, SMALL_DIFFICULTY } from '../lib/models.js';
 
 const TOKEN_HEADER = 'Your wordsmith token is in the WORDSMITH_TOKEN environment variable. Send it as "Authorization: Bearer $WORDSMITH_TOKEN".';
@@ -37,4 +37,14 @@ API: ${url('/api/v1')}
 4. Push and open (or update) the one pull request for the batch. List every feature in its description. PATCH each feature with {"pr_url":"..."} and POST its analysis with {"analysis_append":"Done: what changed and how it was checked"}.
 5. Something turned out bigger than it looked? Stop, append why to its analysis, raise its difficulty and move it to batch "discuss".
 6. Never merge and never mark features complete. The owner reviews the batch PR; merging completes its features.`;
+}
+
+/** Work one project's queue, for the copy button in project settings. @param {{ id: string, name: string, repo: string }} project @param {(path: string) => string} url */
+export function projectPrompt(project, url) {
+  return `You have a wordsmith API token in $WORDSMITH_TOKEN. Work the "${project.name}" queue:
+1. curl -s -X POST ${url('/api/v1/features/next')} -H "Authorization: Bearer $WORDSMITH_TOKEN" -H "Content-Type: application/json" -d '{"project":"${project.id}"}'
+   (204 = nothing queued). This claims the feature for you.
+2. As you work, PATCH ${url('/api/v1/notes/<id>')} with {"status":"what you're doing"}.
+3. Open a PR${project.repo ? ` on ${project.repo}` : ''}, then PATCH {"pr_url":"https://github.com/..."}.
+4. Repeat. Merged PRs complete features automatically. API docs: GET ${url('/api/v1')}`;
 }

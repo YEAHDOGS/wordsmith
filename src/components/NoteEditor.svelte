@@ -6,8 +6,6 @@
   import Archive from '@lucide/svelte/icons/archive';
   import Trash from '@lucide/svelte/icons/trash';
   import Copy from '@lucide/svelte/icons/copy';
-  import Lightbulb from '@lucide/svelte/icons/lightbulb';
-  import StickyNote from '@lucide/svelte/icons/sticky-note';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import ExternalLink from '@lucide/svelte/icons/external-link';
@@ -98,12 +96,6 @@
   function set(patch) {
     flush();
     store.update('notes', id, patch);
-  }
-
-  /** Notes and features keep hand-placed positions in different implied ranges, so switching kind drops the old one. @param {'note' | 'feature'} kind */
-  function setKind(kind) {
-    if (note.kind === kind) return;
-    set({ kind, position: null });
   }
 
   function close() {
@@ -216,7 +208,7 @@
               </div>
             {:else}
               <textarea bind:this={bodyField} bind:value={body} oninput={queueSave} use:markdownKeys maxlength={MAX_BODY} aria-label="Body" in:fade={{ duration: 120 }}
-                placeholder={note.kind === 'feature' ? 'Describe the feature. Agents read this verbatim. Markdown works: **bold**, - lists, 1. steps' : 'Note. Markdown works: **bold**, _italic_, # headings, - lists'}
+                placeholder="Write anything. Agents read it verbatim. Markdown works: **bold**, _italic_, # headings, - lists"
                 class="min-h-32 flex-1 resize-none bg-transparent py-2 lg:min-h-48 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
             {/if}
             <!-- Formatting lives in the box's bottom-right corner -->
@@ -225,13 +217,9 @@
             </div>
           </div>
 
-          <!-- Details: kind, project, feature fields and labels, as tidy wrapping rows under the body -->
+          <!-- Details: project, feature fields and labels, as tidy wrapping rows under the body (every note is a feature) -->
           <section class="flex flex-col gap-2 tv:gap-3" aria-label="Details">
             <div class="flex flex-wrap gap-2">
-              <div class="flex border border-line" role="group" aria-label="Kind">
-                <button class="{TOOL} {note.kind === 'note' ? 'bg-surface-raised text-ink' : ''}" aria-pressed={note.kind === 'note'} onclick={() => setKind('note')}><StickyNote class="size-4" />Note</button>
-                <button class="{TOOL} {note.kind === 'feature' ? 'bg-accent-soft text-accent' : ''}" aria-pressed={note.kind === 'feature'} onclick={() => setKind('feature')}><Lightbulb class="size-4" />Feature</button>
-              </div>
               <select class="spring min-w-0 flex-1 basis-40 border border-line bg-surface px-2 py-2 text-xs text-ink hover:border-line-strong focus:border-accent focus:outline-none sm:max-w-64 sm:flex-none" aria-label="Project"
                 value={note.project_id ?? ''} onchange={(event) => set({ project_id: event.currentTarget.value || null })}>
                 <option value="">No project</option>
@@ -239,7 +227,6 @@
               </select>
             </div>
 
-            {#if note.kind === 'feature'}
               <div class="flex flex-col gap-2 tv:gap-3" transition:slide={{ duration: BLOCK_MS }}>
                 <div class="grid grid-cols-3 gap-px border border-line bg-line" role="radiogroup" aria-label="State">
                   {#each FEATURE_STATES as state (state)}
@@ -263,7 +250,6 @@
                     onchange={(event) => set({ assignee: event.currentTarget.value.trim() })} />
                 </div>
               </div>
-            {/if}
 
             <LabelPicker selected={note.label_ids} onchange={(label_ids) => set({ label_ids })} />
 
@@ -276,7 +262,6 @@
 
           <Attachments bind:this={attachments} noteId={id} />
 
-          {#if note.kind === 'feature'}
             <section class="border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
               <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
               {#each note.pull_requests as pr (pr.url)}
@@ -293,7 +278,6 @@
               </form>
               {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
             </section>
-          {/if}
 
           <!-- What an agent decided when it triaged this (POST /api/v1/notes/:id/analysis): read-only here -->
           {#if note.analysis || note.batch}

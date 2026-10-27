@@ -1,6 +1,6 @@
 // Delta sync for the offline-first app.
-// GET  /api/sync?since=<ms>  -> { projects, labels, notes, events, cursor, more }
-// POST /api/sync { projects?, labels?, notes? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, events, attachments, cursor, more }
+// POST /api/sync { projects?, labels?, notes?, boards? } -> { saved: { table: rows }, rejected: [{ id, error }] }
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
@@ -34,11 +34,9 @@ export async function onRequestGet(context) {
   const more = pageEnds.length > 0;
   const cursor = more ? Math.min(...pageEnds) - 1 : Math.max(since, now - CURSOR_OVERLAP_MS);
 
-  const [projects, labels, notes, events, attachments] = results;
+  const [events, attachments] = results.slice(SYNCED_TABLES.length);
   return json({
-    projects: projects.map(toApi),
-    labels: labels.map(toApi),
-    notes: notes.map(toApi),
+    ...Object.fromEntries(SYNCED_TABLES.map((table, index) => [table, results[index].map(toApi)])),
     events: events.map((/** @type {any} */ event) => ({ ...event, data: safeJson(event.data, {}) })),
     attachments: attachments.map(presentAttachment),
     cursor,
@@ -58,7 +56,7 @@ export async function onRequestPost(context) {
   /** @type {{ id: unknown, error: string }[]} */
   const rejected = [];
   /** @type {Record<string, any[]>} */
-  const saved = { projects: [], labels: [], notes: [] };
+  const saved = Object.fromEntries(SYNCED_TABLES.map((table) => [table, /** @type {any[]} */ ([])]));
   const now = Date.now();
 
   for (const table of SYNCED_TABLES) {

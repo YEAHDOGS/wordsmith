@@ -1,9 +1,9 @@
 // Tiny promise wrapper over IndexedDB: the on-device copy of your notes. One database per signed-in user.
 
 const DB_PREFIX = 'wordsmith-';
-// v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache).
-const DB_VERSION = 2;
-export const STORES = ['projects', 'labels', 'notes', 'events', 'attachments', 'meta'];
+// v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards.
+const DB_VERSION = 3;
+export const STORES = ['projects', 'labels', 'notes', 'boards', 'events', 'attachments', 'meta'];
 
 /** @param {IDBRequest} request @returns {Promise<any>} */
 function done(request) {
@@ -24,8 +24,11 @@ function committed(tx) {
 
 /** Local database for one user. */
 export class LocalDb {
-  /** @param {string} userId */
-  constructor(userId) {
+  /**
+   * @param {string} userId
+   * @param {() => void} [onblocked] another tab still holds an older version open, so the upgrade waits for it
+   */
+  constructor(userId, onblocked = () => {}) {
     this.name = DB_PREFIX + userId;
     /** @type {Promise<IDBDatabase>} */
     this.ready = new Promise((resolve, reject) => {
@@ -35,7 +38,16 @@ export class LocalDb {
           if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: store === 'meta' ? 'key' : 'id' });
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      // The upgrade resumes by itself once the other tab closes or reloads.
+      request.onblocked = onblocked;
+      request.onsuccess = () => {
+        // A newer build opened in another tab: step aside and reload into it, so its upgrade never waits on this tab.
+        request.result.onversionchange = () => {
+          request.result.close();
+          location.reload();
+        };
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error);
     });
   }

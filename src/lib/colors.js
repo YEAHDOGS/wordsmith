@@ -1,5 +1,6 @@
 // Class names for the theme tokens each model color and feature state maps to (see src/styles/theme.css).
 // Written out in full so Tailwind can find them.
+import { STATE_LABELS } from './models.js';
 
 /** Card backgrounds per note color. */
 export const TINT_BG = {
@@ -29,9 +30,9 @@ export const DOT_BG = {
 
 /** Feature states: label, text color, soft background, and the dot color. */
 export const STATE_STYLE = {
-  requested: { label: 'Requested', text: 'text-requested', soft: 'bg-requested-soft', dot: 'bg-requested', border: 'border-requested' },
-  in_progress: { label: 'In progress', text: 'text-progress', soft: 'bg-progress-soft', dot: 'bg-progress', border: 'border-progress' },
-  complete: { label: 'Complete', text: 'text-complete', soft: 'bg-complete-soft', dot: 'bg-complete', border: 'border-complete' },
+  requested: { label: STATE_LABELS.requested, text: 'text-requested', soft: 'bg-requested-soft', dot: 'bg-requested', border: 'border-requested' },
+  in_progress: { label: STATE_LABELS.in_progress, text: 'text-progress', soft: 'bg-progress-soft', dot: 'bg-progress', border: 'border-progress' },
+  complete: { label: STATE_LABELS.complete, text: 'text-complete', soft: 'bg-complete-soft', dot: 'bg-complete', border: 'border-complete' },
 };
 
 /** PR states. */

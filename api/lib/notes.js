@@ -8,6 +8,7 @@ import { upsertStatement } from './rows.js';
 const EDIT_EVENT_WINDOW_MS = 600_000;
 const STATE_IN_PROGRESS = 'in_progress';
 const STATE_COMPLETE = 'complete';
+const FEATURE_KIND = 'feature';
 
 /** @typedef {{ type: 'user' | 'agent' | 'github', name: string }} Actor */
 
@@ -98,7 +99,8 @@ export async function saveNotes(env, userId, actor, changes) {
     // Publishing is the owner's call: agent tokens and GitHub can never make a note public.
     if (actor.type !== 'user') delete cleaned.public;
     const base = before ?? newRow('notes', { id: patch.id, created_at: Math.min(Number(patch.created_at) || now, now) });
-    const after = { ...base, ...cleaned, user_id: userId, updated_at: now };
+    // Every note is a feature (migration 20261027070000): older app builds and the agent API may still send "note".
+    const after = { ...base, ...cleaned, kind: FEATURE_KIND, user_id: userId, updated_at: now };
     if (patch.deleted_at !== undefined) after.deleted_at = patch.deleted_at ? Math.min(Number(patch.deleted_at), now) : null;
     // Deleted notes keep only their tombstone on the server.
     if (after.deleted_at) Object.assign(after, { title: '', body: '', analysis: '', public: false });
