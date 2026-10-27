@@ -7,7 +7,8 @@
   // created, highest priority, or manual) and grouping by nothing, project, or season (winter is December to February).
   // Hold and slide a card to move it: each band is a drop zone (src/lib/reorder.svelte.js); a drop in a time order
   // switches to manual so it sticks. Every reorder, sort change and resize slides cards with FLIP.
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
+  import { router } from '../lib/router.svelte.js';
   import CheckCheck from '@lucide/svelte/icons/check-check';
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
@@ -59,7 +60,8 @@
   // Month index (0 = January) -> season. Winter runs December through February.
   const SEASONS = ['Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall', 'Winter'];
   const DECEMBER = 11;
-  const TOGGLE = 'spring press flex items-center gap-1.5 bg-app px-2.5 py-1 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
+  // Toolbar toggles: equal columns at one height on phones (labels truncate), natural width from sm up.
+  const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:justify-start sm:px-2.5 tv:h-11 tv:text-base';
   const NO_PROJECT = 'No project';
   const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
   const FILTERED_EMPTY = 'No features in this state.';
@@ -103,7 +105,7 @@
   const hasFeatures = $derived(ui.stateFilter !== 'all' || notes.some((note) => note.kind === 'feature'));
   const shown = $derived(notes.filter((note) => ui.showsState(note)));
 
-  const sorted = $derived.by(() => {
+  const naturalOrder = $derived.by(() => {
     const compare = COMPARE[ui.order] ?? COMPARE.updated;
     if (group !== 'project') return [...shown].sort(compare);
     return [...shown].sort((a, b) => {
@@ -112,6 +114,20 @@
       return compare(a, b);
     });
   });
+
+  // While a note is open in the editor the grid keeps the order it had when the note opened, so editing doesn't send
+  // the note to the top behind the editor. Closing it releases the order and the FLIP below slides it to its new place,
+  // so you see where it was and where it went. Notes that appear meanwhile go first.
+  /** @type {Map<string, number> | null} */
+  let frozenRanks = $state(null);
+  $effect.pre(() => {
+    const open = Boolean(router.route.note);
+    if (open && !frozenRanks) frozenRanks = new Map(untrack(() => naturalOrder).map((note, index) => [note.id, index]));
+    else if (!open && frozenRanks) frozenRanks = null;
+  });
+  const sorted = $derived(frozenRanks
+    ? [...naturalOrder].sort((a, b) => (frozenRanks?.get(a.id) ?? -1) - (frozenRanks?.get(b.id) ?? -1))
+    : naturalOrder);
 
   /** Pinned first, then one "Others" band, or one band per project or per season. */
   const sections = $derived.by(() => {
@@ -227,28 +243,29 @@
 
 <div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
   {#if notes.length}
-    <div class="flex items-center justify-end gap-2 pt-2 pb-2 sm:pt-4">
-      <button class="spring press mr-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-line px-2.5 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink"
-        onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together">
-        <CheckCheck class="size-3.5" />Select all
+    <!-- Phones: Select all as an icon, then the toggles split the rest of the row evenly. From sm up: label, toggles on the right -->
+    <div class="flex items-stretch gap-2 pt-2 pb-2 sm:pt-4">
+      <button class="spring press flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border border-line text-xs text-ink-muted hover:border-line-strong hover:text-ink sm:w-auto sm:px-2.5 tv:h-11 tv:text-base"
+        onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together" aria-label="Select all">
+        <CheckCheck class="size-3.5 shrink-0" /><span class="hidden sm:inline">Select all</span>
       </button>
-      <div class="flex gap-px border border-line bg-line" role="group" aria-label="Sort notes">
+      <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex sm:flex-none" role="group" aria-label="Sort notes">
         <!-- Every label sits in one grid cell, so the button keeps the width of its longest label and never jumps -->
         <button class="{TOGGLE}" onclick={() => ui.setOrder(ORDERS[(ORDERS.indexOf(ui.order) + 1) % ORDERS.length])}
           title="{ORDER_HINTS[ui.order]}. Tap to cycle {ORDERS.map((option) => ORDER_LABELS[option]).join(', ')}" aria-label="Order: {ORDER_HINTS[ui.order]}">
           <ArrowDownWideNarrow class="size-3.5 shrink-0" />
-          <span class="grid">
+          <span class="grid min-w-0">
             {#each Object.entries(ORDER_LABELS) as [value, label] (value)}
-              <span class="spring col-start-1 row-start-1 {ui.order === value ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.order !== value}>{label}</span>
+              <span class="spring col-start-1 row-start-1 truncate {ui.order === value ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.order !== value}>{label}</span>
             {/each}
           </span>
         </button>
         <button class="{TOGGLE}" onclick={() => ui.setGroup(groupOptions[(groupOptions.indexOf(group) + 1) % groupOptions.length])}
           title="Grouped by {GROUP_LABELS[group].toLowerCase()}. Tap to cycle {groupOptions.map((option) => GROUP_LABELS[option]).join(', ')}" aria-label="Group: {GROUP_LABELS[group]}">
           <Layers class="size-3.5 shrink-0" />
-          <span class="grid">
+          <span class="grid min-w-0">
             {#each groupOptions as option (option)}
-              <span class="spring col-start-1 row-start-1 {group === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={group !== option}>{GROUP_LABELS[option]}</span>
+              <span class="spring col-start-1 row-start-1 truncate {group === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={group !== option}>{GROUP_LABELS[option]}</span>
             {/each}
           </span>
         </button>
@@ -257,9 +274,9 @@
           <button class="{TOGGLE} {style ? style.text : ''}" onclick={() => ui.setStateFilter(STATE_FILTERS[(STATE_FILTERS.indexOf(ui.stateFilter) + 1) % STATE_FILTERS.length])}
             title="Showing {STATE_FILTER_LABELS[ui.stateFilter].toLowerCase()}. Tap to cycle {STATE_FILTERS.map((option) => STATE_FILTER_LABELS[option]).join(', ')}" aria-label="Feature state: {STATE_FILTER_LABELS[ui.stateFilter]}">
             <ListFilter class="size-3.5 shrink-0" />
-            <span class="grid">
+            <span class="grid min-w-0">
               {#each STATE_FILTERS as option (option)}
-                <span class="spring col-start-1 row-start-1 {ui.stateFilter === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.stateFilter !== option}>{STATE_FILTER_LABELS[option]}</span>
+                <span class="spring col-start-1 row-start-1 truncate {ui.stateFilter === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.stateFilter !== option}>{STATE_FILTER_LABELS[option]}</span>
               {/each}
             </span>
           </button>

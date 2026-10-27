@@ -16,9 +16,13 @@ export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', '
 // Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
-export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-// Workers accept request bodies up to 100 MB on the free plan.
-export const MAX_VIDEO_BYTES = 95 * 1024 * 1024;
+// Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
+// and the server rejects anything larger.
+export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
+// Videos can't be re-encoded in the browser without a large library, so they're only capped: about a minute of 720p screen recording.
+export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+// Images up to this size are accepted for shrinking on the device before upload.
+export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];

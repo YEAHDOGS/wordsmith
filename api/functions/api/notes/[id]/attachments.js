@@ -31,7 +31,13 @@ export async function onRequestPost(context) {
   const id = crypto.randomUUID();
   const key = `${auth.user.id}/${id}`;
   try {
-    await files.put(key, request.body, { httpMetadata: { contentType: type } });
+    const stored = await files.put(key, request.body, { httpMetadata: { contentType: type } });
+    // Content-Length was checked up front; check what actually landed too, so a client that understated it can't
+    // leave a large file in R2.
+    if (!stored || stored.size > size) {
+      await files.delete(key);
+      throw new HttpError(413, 'The upload was larger than its declared size');
+    }
   } catch (error) {
     await release(env, size);
     throw error;

@@ -1,6 +1,6 @@
 <script>
   // Project toolbar: one slim row under the top bar (which already shows the project name and the settings gear).
-  // Board / Notes / Pull requests tabs on the left; queue counts and the GitHub repo on the right. Name, color, the agent
+  // Board / Notes / Pull requests / Media tabs on the left; queue counts and the GitHub repo on the right. Name, color, the agent
   // prompt, board columns and delete live in project settings (BoardSettings). Tablets and up fit one line (short tab
   // labels below lg); if a window is too narrow the repo wraps under the tabs.
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -15,7 +15,7 @@
   let { project, features, tab, ontab } = $props();
 
   const FULL_WIDTH_PERCENT = 100;
-  const TABS = [{ id: 'board', label: 'Board', short: 'Board' }, { id: 'notes', label: 'Notes', short: 'Notes' }, { id: 'prs', label: 'Pull requests', short: 'PRs' }];
+  const TABS = [{ id: 'board', label: 'Board', short: 'Board' }, { id: 'notes', label: 'Notes', short: 'Notes' }, { id: 'prs', label: 'Pull requests', short: 'PRs' }, { id: 'media', label: 'Media', short: 'Media' }];
   /** Arrow key -> how far the tab choice moves. */
   const TAB_STEPS = { ArrowRight: 1, ArrowLeft: -1 };
   const ICON_BUTTON = 'spring press flex size-8 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink tv:size-11';
@@ -66,7 +66,7 @@
     <!-- Paper tabs, the full height of the row. The chosen one is an outlined sheet with no bottom edge: it reaches 1px
          past the row (-mb-px) to cover the header's bottom line, so it opens straight into the page below. The sheet
          slides (transform only) and every label keeps one weight and size, so switching never moves a thing. -->
-    <div class="relative -mb-px grid min-w-0 flex-1 grid-cols-3 sm:max-w-sm sm:flex-none" role="tablist" aria-label="Project view" tabindex="-1" onkeydown={onTabKey}>
+    <div class="relative -mb-px grid min-w-0 flex-1 grid-cols-4 sm:max-w-md sm:flex-none" role="tablist" aria-label="Project view" tabindex="-1" onkeydown={onTabKey}>
       <span aria-hidden="true" class="absolute inset-y-0 left-0 rounded-t-ui-sm border-x border-t border-line-strong bg-app transition-transform duration-200 ease-out-soft"
         style:width="calc(100% / {TABS.length})" style:transform="translateX({tabIndex * FULL_WIDTH_PERCENT}%)"></span>
       {#each TABS as item (item.id)}

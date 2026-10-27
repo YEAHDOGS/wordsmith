@@ -12,10 +12,10 @@
   import { fade, scale, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { store } from '../lib/store.svelte.js';
-  import { DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, parsePullRequestUrl } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, parsePullRequestUrl } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
-  import PriorityPicker from './PriorityPicker.svelte';
+  import LevelWheel from './LevelWheel.svelte';
 
   /** @type {{ projectId?: string | null, labelId?: string | null }} */
   let { projectId = null, labelId = null } = $props();
@@ -32,7 +32,13 @@
   const LEVELS = PRIORITY_LABELS.map((_, level) => level);
   const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
   const ERROR_TYPE = 'Only images and videos can be attached.';
-  const ERROR_SIZE = 'Some files were too large to attach.';
+  const BYTES_PER_MB = 1024 * 1024;
+  const GIF = 'image/gif';
+  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
+  // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs and videos
+  // can't be shrunk, so their real limit applies.
+  /** @param {File} file */
+  const sizeLimit = (file) => (file.type === GIF ? MAX_IMAGE_BYTES : IMAGE_TYPES.includes(file.type) ? MAX_SOURCE_IMAGE_BYTES : MAX_VIDEO_BYTES);
   const ERROR_COUNT = `A note holds up to ${MAX_ATTACHMENTS_PER_NOTE} files.`;
   const ERROR_PR = 'That pull request link should look like https://github.com/owner/repo/pull/123';
   const FIELD = 'h-9 min-w-0 border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
@@ -77,7 +83,7 @@
     fileError = '';
     const media = list.filter((file) => IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type));
     if (media.length < list.length) fileError = ERROR_TYPE;
-    const fitting = media.filter((file) => file.size <= (IMAGE_TYPES.includes(file.type) ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES));
+    const fitting = media.filter((file) => file.size <= sizeLimit(file));
     if (fitting.length < media.length) fileError = ERROR_SIZE;
     const room = MAX_ATTACHMENTS_PER_NOTE - queued.length;
     if (fitting.length > room) fileError = ERROR_COUNT;
@@ -240,14 +246,10 @@
       {#if detailsOpen}
         <section id="feature-details-{projectId ?? labelId ?? 'all'}" class="border-t border-line bg-app" aria-label="Feature details" transition:slide={{ duration: PANEL_MS }}>
           <div class="grid gap-3 px-3 py-3 sm:px-4 lg:grid-cols-2" in:fade={{ duration: PANEL_MS, delay: PANEL_MS / 2 }}>
-            <div class="min-w-0">
-              <span class={LABEL}>Priority</span>
-              <PriorityPicker value={priority} levels={LEVELS} onselect={(level) => (priority = level)} class="grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 xl:grid-cols-6" />
-            </div>
-            <div class="min-w-0">
-              <span class={LABEL}>Difficulty</span>
-              <PriorityPicker value={difficulty} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => (difficulty = level)}
-                class="grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 xl:grid-cols-6" />
+            <!-- Priority and difficulty as two scroll wheels side by side -->
+            <div class="grid grid-cols-2 gap-2 lg:col-span-2">
+              <LevelWheel value={priority} levels={LEVELS} onselect={(level) => (priority = level)} />
+              <LevelWheel value={difficulty} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => (difficulty = level)} />
             </div>
             <label class="min-w-0">
               <span class={LABEL}>Project</span>

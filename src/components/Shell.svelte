@@ -15,6 +15,7 @@
   import NoteEditor from './NoteEditor.svelte';
   import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
+  import ProjectMedia from './ProjectMedia.svelte';
   import SelectionBar from './SelectionBar.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
@@ -71,7 +72,7 @@
   /** The cards on screen right now: what "select all" picks. */
   const visible = $derived.by(() => {
     if (route.view === 'features' || (project && projectTab === 'board')) return view.features ?? [];
-    if (project && projectTab === 'prs') return [];
+    if (project && (projectTab === 'prs' || projectTab === 'media')) return [];
     return (view.notes ?? []).filter((note) => ui.showsState(note));
   });
 
@@ -147,6 +148,8 @@
               <div class="{CONTENT} min-h-0 flex-1 pb-2 sm:px-4 sm:pb-4" in:fade={TAB_IN}>
                 <FeatureBoard features={view.features ?? []} scope={project ? project.id : FEATURES_SCOPE} showProject={!project} />
               </div>
+            {:else if projectTab === 'media' && project}
+              <div class="{CONTENT} min-h-0 flex-1 px-2 sm:px-4" in:fade={TAB_IN}><ProjectMedia notes={view.features ?? []} /></div>
             {:else if projectTab === 'prs' && project}
               <div class="{CONTENT} min-h-0 flex-1" in:fade={TAB_IN}>
                 {#if project.repo}
