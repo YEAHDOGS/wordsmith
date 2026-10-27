@@ -2,6 +2,7 @@
 // Pages shown outside a normal login (device confirmation, errors) are rendered by the SPA from query params.
 import { HttpError } from './http.js';
 import { configuredProviders } from './oauth.js';
+import { APP_HOST, SHORT_HOSTS } from '../../src/lib/models.js';
 
 export const STATE_COOKIE = 'ws_oauth';
 export const STATE_TTL_MS = 600_000;
@@ -24,6 +25,19 @@ const PRIVATE_IPV4 = /^(10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+$/;
 export function devLoginEnabled(request, env) {
   const { hostname } = new URL(request.url);
   return env.DEV_LOGIN === 'true' && (LOCAL_HOSTNAMES.includes(hostname) || PRIVATE_IPV4.test(hostname));
+}
+
+/**
+ * The password sign-in on Worker Previews (OAuth only calls back to wordsmith.dogs.red, so a Preview has no other way
+ * in). Needs the PREVIEW_PASSWORD secret, which is set only in the Previews base config (`npx wrangler preview
+ * base-config secret put PREVIEW_PASSWORD`), never on the production Worker; the host check keeps it off the
+ * production domains even if it were.
+ * @param {Request} request
+ * @param {Record<string, any>} env
+ */
+export function previewLoginEnabled(request, env) {
+  const { hostname } = new URL(request.url);
+  return Boolean(env.PREVIEW_PASSWORD) && hostname !== APP_HOST && !SHORT_HOSTS.includes(hostname);
 }
 
 /** Throws 404 unless the provider exists and has credentials. @param {Record<string, any>} env @param {string} provider */

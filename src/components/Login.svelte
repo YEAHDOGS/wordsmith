@@ -20,6 +20,7 @@
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
 
   let busy = $state('');
+  let password = $state('');
   // Start-up may have trusted a cached user and skipped the session request; the sign-in buttons need its provider list.
   $effect(() => {
     if (!auth.sessionFetched) auth.load();
@@ -28,6 +29,16 @@
   const confirmHref = $derived(
     notice?.kind === 'device_confirm' ? `/api/auth/${notice.provider}/start?device=${encodeURIComponent(notice.device || '')}&confirm=1` : '',
   );
+
+  /** @param {SubmitEvent} event */
+  async function unlockPreview(event) {
+    event.preventDefault();
+    if (!password) return;
+    busy = 'preview';
+    await auth.previewSignIn(password);
+    password = '';
+    busy = '';
+  }
 
   /** @param {string} provider */
   async function signIn(provider) {
@@ -93,6 +104,14 @@
         {/each}
       </ol>
 
+      {#if auth.previewLogin}
+        <form class="flex flex-col gap-px border border-line bg-line" onsubmit={unlockPreview} in:fly={{ y: 8, delay: 200, duration: 300 }}>
+          <input type="password" bind:value={password} autocomplete="current-password" maxlength="200" placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
+            class="bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised" />
+          <button type="submit" class={BUTTON_CLASS} disabled={Boolean(busy) || !password}>{TEXT.previewButton}</button>
+        </form>
+        <p class="short:hidden text-center text-fluid-sm text-ink-muted">{TEXT.previewHint}</p>
+      {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
         {#each available as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>
@@ -104,7 +123,7 @@
           <button class="{BUTTON_CLASS} border-dashed font-mono text-ink-muted" onclick={() => auth.devSignIn()}>{TEXT.dev}</button>
         {/if}
       </div>
-      {#if !available.length && !auth.devLogin}
+      {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}
       <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
