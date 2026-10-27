@@ -1,18 +1,19 @@
 <script>
-  // Title and search in one compact row. Search filters the current view on-device (no requests). On phones search
+  // Title (with a settings gear on board pages) and search in one compact row. Search filters the current view on-device (no requests). On phones search
   // is an icon that expands over the row, so the header stays one slim line. Sync lives in the sidebar; the menu
   // button carries a yellow dot when sync has a problem, because the sidebar is a hidden drawer on phones.
   import Menu from '@lucide/svelte/icons/menu';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
+  import Settings2 from '@lucide/svelte/icons/settings-2';
   import { fade, fly, scale } from 'svelte/transition';
   import { backOut, cubicIn } from 'svelte/easing';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { syncProblem } from './sync-problem.js';
 
-  /** @type {{ title: string, subtitle?: string }} */
-  let { title, subtitle = '' } = $props();
+  /** @type {{ title: string, subtitle?: string, onsettings?: (() => void) | null }} */
+  let { title, subtitle = '', onsettings = null } = $props();
 
   const ICON_BUTTON = 'spring press relative flex size-10 tv:size-12 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink';
   const TITLE_IN = { y: 10, duration: 220, easing: backOut };
@@ -56,6 +57,11 @@
       {/key}
     </div>
   </div>
+
+  <!-- Board settings for the page (Features, a project); appears beside the title only where there are any -->
+  {#if onsettings}
+    <button class="{ICON_BUTTON} -ml-1 sm:ml-0" aria-label="{title} settings" title="{title} settings" onclick={onsettings} transition:scale={BADGE}><Settings2 class="size-5" /></button>
+  {/if}
 
   <label class="group relative ml-auto hidden min-w-0 flex-1 items-center sm:flex sm:max-w-md">
     <Search class="pointer-events-none absolute left-3 size-4 text-ink-faint" />

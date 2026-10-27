@@ -1,8 +1,9 @@
-// Hash router. Routes: #/notes, #/features, #/project/<id>, #/label/<id>, #/archive, #/settings.
+// Hash router. Routes: #/notes, #/features, #/project/<id>, #/label/<id>, #/archive, #/settings, and the board
+// settings pages #/features-settings and #/project-settings/<id>.
 // An open note adds ?note=<id>, so the back button and mobile back-swipe close it.
 
 const DEFAULT_VIEW = 'notes';
-const VIEWS = ['notes', 'features', 'project', 'label', 'archive', 'settings'];
+const VIEWS = ['notes', 'features', 'project', 'label', 'archive', 'settings', 'features-settings', 'project-settings'];
 
 /** @typedef {{ view: string, id: string, note: string }} Route */
 

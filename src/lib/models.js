@@ -4,6 +4,8 @@
 
 export const NOTE_KINDS = ['note', 'feature'];
 export const FEATURE_STATES = ['requested', 'in_progress', 'complete'];
+// Display names of the states. Boards start with one column per state under these names.
+export const STATE_LABELS = { requested: 'Requested', in_progress: 'In progress', complete: 'Complete' };
 export const PR_STATES = ['open', 'merged', 'closed'];
 // Card and label tints. Each maps to a --color-tint-* token in src/styles/theme.css.
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
@@ -24,11 +26,17 @@ export const ACTOR_TYPES = ['user', 'agent', 'github'];
 export const MAX_TITLE = 300;
 export const MAX_BODY = 100_000;
 export const MAX_NAME = 80;
+const MAX_ID = 64;
 export const MAX_STATUS = 500;
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;
 export const MAX_SYNC_BATCH = 200;
+// Feature boards (the boards table): the Features page uses scope FEATURES_SCOPE, a project uses its id. Each column
+// plays one state's role; a board needs every state at least once so any feature has somewhere to sit.
+export const FEATURES_SCOPE = 'features';
+export const MAX_COLUMNS = 8;
+export const DEFAULT_COLUMNS = FEATURE_STATES.map((state) => ({ id: state, name: STATE_LABELS[/** @type {keyof typeof STATE_LABELS} */ (state)], state }));
 // Note priority (notes.priority_level): 0 = none, then 1..5 where 5 is the most important. Index = stored value;
 // every UI reads these.
 export const PRIORITY_LABELS = ['None', 'Low', 'Normal', 'High', 'Urgent', 'Critical'];
@@ -47,7 +55,7 @@ export const MAX_DIFFICULTY = DIFFICULTY_LABELS.length - 1;
 export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
 export const MAX_ANALYSIS = 20_000;
 
-/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number }} FieldRule */
+/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number }} FieldRule */
 
 /** Writable fields per synced table, with defaults for new rows. @type {Record<string, Record<string, FieldRule & { default: any }>>} */
 export const MODELS = {
@@ -85,15 +93,21 @@ export const MODELS = {
     // An agent's triage notes (scope, files, plan, work done) and the batch it ships in. See POST /api/v1/notes/:id/analysis.
     analysis: { type: 'text', max: MAX_ANALYSIS, default: '' },
     batch: { type: 'text', max: MAX_NAME, default: '' },
+    // Board column the feature sits in (boards.columns[].id). '' = the first column with its state.
+    column_id: { type: 'text', max: MAX_ID, default: '' },
+  },
+  boards: {
+    scope: { type: 'text', max: MAX_ID, default: FEATURES_SCOPE },
+    columns: { type: 'columns', max: MAX_COLUMNS, default: DEFAULT_COLUMNS },
   },
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'] };
+export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
-export const JSON_FIELDS = ['label_ids', 'pull_requests'];
+export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
 export const BOOL_FIELDS = ['pinned', 'archived', 'public'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
@@ -117,6 +131,18 @@ export function parsePullRequestUrl(url) {
 
 /** @param {unknown} value */
 export const isId = (value) => typeof value === 'string' && ID_PATTERN.test(value);
+
+/**
+ * Board columns: unique ids, a name each, a known state each, and every state at least once.
+ * @param {string} name @param {any[]} value
+ */
+function cleanColumns(name, value) {
+  const columns = value.map((column) => ({ id: column?.id, name: String(column?.name ?? '').trim().slice(0, MAX_NAME), state: column?.state }));
+  if (columns.some((column) => !isId(column.id) || !column.name || !FEATURE_STATES.includes(column.state))) throw new Error(`${name} need an id, a name and a state each`);
+  if (new Set(columns.map((column) => column.id)).size !== columns.length) throw new Error(`${name} need unique ids`);
+  if (FEATURE_STATES.some((state) => !columns.some((column) => column.state === state))) throw new Error(`${name} need at least one column for every state`);
+  return columns;
+}
 
 /**
  * Checks one field against its rule and returns the cleaned value, or throws with a readable message.
@@ -151,6 +177,7 @@ function cleanField(name, rule, value) {
     return value;
   }
   if (!Array.isArray(value) || value.length > rule.max) throw new Error(`${name} must be a list of at most ${rule.max}`);
+  if (rule.type === 'columns') return cleanColumns(name, value);
   if (rule.type === 'ids') {
     if (!value.every(isId)) throw new Error(`${name} must contain ids`);
     return [...new Set(value)];

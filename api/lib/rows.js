@@ -3,7 +3,7 @@ import { BOOL_FIELDS, JSON_FIELDS, MODELS, SERVER_FIELDS } from '../../src/lib/m
 
 // D1 caps bound parameters per query at 100.
 export const MAX_BIND_PARAMS = 100;
-export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes']);
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards']);
 
 /** Every column a synced table stores, in a fixed order. @param {keyof typeof MODELS} table */
 export const columnsOf = (table) => ['id', 'user_id', ...Object.keys(MODELS[table]), ...SERVER_FIELDS[table], 'created_at', 'updated_at', 'deleted_at'];

@@ -1,5 +1,5 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, isId, parsePullRequestUrl } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
@@ -15,7 +15,6 @@ const MAX_BATCH_NOTES = 500;
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
 const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
-const STATE_LABELS = { requested: 'Requested', in_progress: 'In progress', complete: 'Complete' };
 
 /**
  * Finds a project by id or case-insensitive name.
