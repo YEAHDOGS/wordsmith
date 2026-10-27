@@ -240,7 +240,6 @@ class Store {
   }
 
   async #pull() {
-    this.#lastPull = Date.now();
     let more = true;
     while (more) {
       const result = await api(`/api/sync?since=${this.#cursor}`);
@@ -261,6 +260,8 @@ class Store {
       more = result.more;
     }
     await this.#db?.setMeta('cursor', this.#cursor);
+    // Only a pull that finished counts as fresh; a failed one (offline, error) lets the next tick or focus retry.
+    this.#lastPull = Date.now();
   }
 
   /** Asks the server to re-check open PRs on GitHub, so merges show up even without the webhook. */

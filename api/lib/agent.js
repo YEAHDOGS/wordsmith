@@ -123,8 +123,12 @@ export async function listNotes(env, userId, query, kind) {
     .filter((note) => !label || note.labels.some((/** @type {string} */ name) => name.toLowerCase() === label.toLowerCase()));
 }
 
-/** @param {Record<string, any>} env @param {string} userId @param {string} id */
-export async function getNote(env, userId, id) {
+/**
+ * One note with its attachments, as agents see it.
+ * @param {Record<string, any>} env @param {string} userId @param {string} id
+ * @param {Awaited<ReturnType<typeof lookups>> | null} [maps] reuse a lookup the caller already made
+ */
+export async function getNote(env, userId, id, maps = null) {
   if (!isId(id)) throw new HttpError(400, 'Bad id');
   const [notes, files] = await env.DB.batch([
     env.DB.prepare('SELECT * FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').bind(id, userId),
@@ -133,7 +137,7 @@ export async function getNote(env, userId, id) {
   const row = notes.results[0];
   if (!row) throw new HttpError(404, 'Note not found');
   // Agents download these with the same bearer token, e.g. to look at a screenshot of the bug.
-  return { ...present(toApi(row), await lookups(env, userId)), attachments: files.results.map(presentAttachment) };
+  return { ...present(toApi(row), maps ?? await lookups(env, userId)), attachments: files.results.map(presentAttachment) };
 }
 
 /** Timeline for one note, oldest first. @param {Record<string, any>} env @param {string} userId @param {string} noteId */
@@ -143,10 +147,9 @@ export async function noteEvents(env, userId, noteId) {
   return results.map((/** @type {any} */ event) => ({ ...event, data: safeJson(event.data, {}) }));
 }
 
-/** Label names -> ids, ignoring unknown names. @param {Record<string, any>} env @param {string} userId @param {unknown} names */
-async function labelIds(env, userId, names) {
+/** Label names -> ids, ignoring unknown names. @param {Awaited<ReturnType<typeof lookups>>} maps @param {unknown} names */
+function labelIds(maps, names) {
   if (!Array.isArray(names)) return undefined;
-  const maps = await lookups(env, userId);
   const wanted = names.map((name) => String(name).toLowerCase());
   return [...maps.labels].filter(([, name]) => wanted.includes(String(name).toLowerCase())).map(([id]) => id);
 }
@@ -161,6 +164,7 @@ async function labelIds(env, userId, names) {
  */
 export async function createNote(env, userId, actor, input, kind) {
   const project = await resolveProject(env, userId, input.project);
+  const maps = await lookups(env, userId);
   const patch = {
     id: crypto.randomUUID(),
     kind,
@@ -169,11 +173,11 @@ export async function createNote(env, userId, actor, input, kind) {
     body: input.body ?? '',
     priority_level: input.priority ?? 0,
     status: input.status ?? '',
-    label_ids: (await labelIds(env, userId, input.labels)) ?? [],
+    label_ids: labelIds(maps, input.labels) ?? [],
   };
   if (!patch.title && !patch.body) throw new HttpError(400, 'title or body is required');
   const [saved] = await saveNotes(env, userId, actor, [{ before: null, patch }]);
-  return getNote(env, userId, saved.id);
+  return getNote(env, userId, saved.id, maps);
 }
 
 /**
@@ -185,7 +189,9 @@ export async function createNote(env, userId, actor, input, kind) {
  * @param {Record<string, any>} input
  */
 export async function updateNote(env, userId, actor, id, input) {
-  const before = await getNote(env, userId, id);
+  // One lookup of projects, labels and boards serves the whole update (it used to run up to four times).
+  const maps = await lookups(env, userId);
+  const before = await getNote(env, userId, id, maps);
   /** @type {Record<string, any>} */
   const patch = {};
   for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
@@ -198,13 +204,13 @@ export async function updateNote(env, userId, actor, id, input) {
   if (input.project !== undefined) patch.project_id = (await resolveProject(env, userId, input.project))?.id ?? null;
   // Move to a column (id or name) on the note's board, its project's or the Features page's; the column's role sets the state.
   if (input.column !== undefined) {
-    const { columns } = boardOf(await lookups(env, userId), patch.project_id !== undefined ? patch.project_id : before.project?.id ?? null);
+    const { columns } = boardOf(maps, patch.project_id !== undefined ? patch.project_id : before.project?.id ?? null);
     const wanted = String(input.column).toLowerCase();
     const column = columns.find((entry) => entry.id === input.column || entry.name.toLowerCase() === wanted);
     if (!column) throw new HttpError(400, `No column "${input.column}" on this board. GET /api/v1/boards lists them.`);
     Object.assign(patch, { column_id: column.id, state: column.state });
   }
-  const ids = await labelIds(env, userId, input.labels);
+  const ids = labelIds(maps, input.labels);
   if (ids) patch.label_ids = ids;
 
   let linkedPr = false;
@@ -219,7 +225,7 @@ export async function updateNote(env, userId, actor, id, input) {
   await saveNotes(env, userId, actor, [{ before, patch }]);
   // Look the new PR up right away so its title and state show up without waiting for the next poll.
   if (linkedPr) await refreshPullRequests(env, userId, [id]).catch(() => []);
-  return getNote(env, userId, id);
+  return getNote(env, userId, id, maps);
 }
 
 /**

@@ -5,7 +5,7 @@
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
-import { actorForRequest, saveNotes } from '../../lib/notes.js';
+import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
 import { MAX_SYNC_BATCH, cleanRow, isId, newRow } from '../../../src/lib/models.js';
 
@@ -89,7 +89,7 @@ export async function onRequestPost(context) {
           rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
         }
       }
-      saved.notes = await saveNotes(env, auth.user.id, await actorForRequest(env, auth), changes);
+      saved.notes = await saveNotes(env, auth.user.id, actorFor(auth), changes);
       continue;
     }
 

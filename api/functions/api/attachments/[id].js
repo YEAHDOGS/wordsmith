@@ -4,7 +4,7 @@
 import { requireAuth } from '../../../lib/auth.js';
 import { bucket, release, reserve } from '../../../lib/attachments.js';
 import { HttpError, json } from '../../../lib/http.js';
-import { actorForRequest } from '../../../lib/notes.js';
+import { actorFor } from '../../../lib/notes.js';
 import { isId } from '../../../../src/lib/models.js';
 
 const CACHE_FOREVER = 'private, max-age=31536000, immutable';
@@ -68,7 +68,7 @@ export async function onRequestDelete(context) {
   const { auth, row } = await load(context);
   await files.delete(row.r2_key);
   const now = Date.now();
-  const actor = await actorForRequest(env, auth);
+  const actor = actorFor(auth);
   await env.DB.batch([
     env.DB.prepare('UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE id = ?').bind(now, now, row.id),
     env.DB.prepare('INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')

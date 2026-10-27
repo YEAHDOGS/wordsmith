@@ -12,16 +12,9 @@ const FEATURE_KIND = 'feature';
 
 /** @typedef {{ type: 'user' | 'agent' | 'github', name: string }} Actor */
 
-/** Who is acting, for the timeline. @param {import('./auth.js').Auth} auth @param {string} [tokenName] @returns {Actor} */
-export function actorFor(auth, tokenName = '') {
-  return auth.via === 'token' ? { type: 'agent', name: tokenName || 'agent' } : { type: 'user', name: auth.user.name || 'you' };
-}
-
-/** Looks up the name of the API token in use, so agent events say which agent acted. @param {Record<string, any>} env @param {import('./auth.js').Auth} auth */
-export async function actorForRequest(env, auth) {
-  if (auth.via !== 'token') return actorFor(auth);
-  const row = await env.DB.prepare('SELECT name FROM api_tokens WHERE token_hash = ?').bind(auth.tokenHash).first();
-  return actorFor(auth, row?.name);
+/** Who is acting, for the timeline. Agents go by their token's name, which the auth lookup already read. @param {import('./auth.js').Auth} auth @returns {Actor} */
+export function actorFor(auth) {
+  return auth.via === 'token' ? { type: 'agent', name: auth.tokenName || 'agent' } : { type: 'user', name: auth.user.name || 'you' };
 }
 
 /**
