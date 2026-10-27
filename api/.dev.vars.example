@@ -1,0 +1,36 @@
+# Copy to api/.dev.vars for local `wrangler pages dev`. Never commit .dev.vars.
+# In preview and production set these as Pages secrets (wrangler pages secret put NAME), never as plain vars.
+
+# Local only: shows a "Local dev" sign-in button on localhost so you can work before OAuth apps exist.
+DEV_LOGIN=true
+
+# 32 random bytes, base64url. Encrypts stored GitHub OAuth tokens (PR auto-sync).
+# node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+TOKEN_ENCRYPTION_KEY=
+
+# Extra origins allowed to call the API cross-origin (comma separated). Tauri origins are built in.
+ALLOWED_ORIGINS=http://localhost:5173
+
+# Optional: pin OAuth callback URLs to one origin, e.g. https://wordsmith.pages.dev
+# APP_ORIGIN=
+
+# GitHub OAuth app (github.com/settings/developers). Callback: <origin>/api/auth/github/callback
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+# Optional: "read:user user:email repo" lets PR auto-sync read private repos.
+# GITHUB_OAUTH_SCOPE=
+# Optional fallback token for PR status when you didn't sign in with GitHub.
+# GITHUB_TOKEN=
+# Optional: secret for the repo webhook at <origin>/api/github/webhook (Pull requests events).
+# GITHUB_WEBHOOK_SECRET=
+
+# Google OAuth client (console.cloud.google.com, Web application). Redirect: <origin>/api/auth/google/callback
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Sign in with Apple (developer.apple.com): Services ID, Team ID, Key ID and the .p8 key contents.
+# Apple requires an https return URL, so test Apple on a preview deployment, not plain localhost.
+APPLE_CLIENT_ID=
+APPLE_TEAM_ID=
+APPLE_KEY_ID=
+APPLE_PRIVATE_KEY=

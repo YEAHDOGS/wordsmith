@@ -1,0 +1,98 @@
+// Delta sync for the offline-first app.
+// GET  /api/sync?since=<ms>  -> { projects, labels, notes, events, cursor, more }
+// POST /api/sync { projects?, labels?, notes? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
+import { requireAuth } from '../../lib/auth.js';
+import { HttpError, json, readJson } from '../../lib/http.js';
+import { actorForRequest, saveNotes } from '../../lib/notes.js';
+import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
+import { MAX_SYNC_BATCH, cleanRow, isId, newRow } from '../../../src/lib/models.js';
+
+const PULL_LIMIT = 500;
+// Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
+const CURSOR_OVERLAP_MS = 5_000;
+
+/** @param {{ request: Request, env: Record<string, any> }} context */
+export async function onRequestGet(context) {
+  const { user } = await requireAuth(context);
+  const { env, request } = context;
+  const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
+  const now = Date.now();
+
+  const queries = SYNCED_TABLES.map((table) =>
+    env.DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?`).bind(user.id, since, PULL_LIMIT));
+  queries.push(env.DB.prepare('SELECT id, note_id, type, actor_type, actor_name, data, created_at FROM note_events WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT ?')
+    .bind(user.id, since, PULL_LIMIT));
+  const results = (await env.DB.batch(queries)).map((/** @type {any} */ result) => result.results);
+
+  // A full page means there is more to fetch: continue from the oldest page end so nothing is skipped.
+  const pageEnds = results.filter((rows) => rows.length === PULL_LIMIT)
+    .map((rows) => Number(rows.at(-1).updated_at ?? rows.at(-1).created_at));
+  const more = pageEnds.length > 0;
+  const cursor = more ? Math.min(...pageEnds) - 1 : Math.max(since, now - CURSOR_OVERLAP_MS);
+
+  const [projects, labels, notes, events] = results;
+  return json({
+    projects: projects.map(toApi),
+    labels: labels.map(toApi),
+    notes: notes.map(toApi),
+    events: events.map((/** @type {any} */ event) => ({ ...event, data: safeJson(event.data, {}) })),
+    cursor,
+    server_time: now,
+    more,
+  });
+}
+
+/** @param {{ request: Request, env: Record<string, any> }} context */
+export async function onRequestPost(context) {
+  const auth = await requireAuth(context);
+  const { env, request } = context;
+  const body = await readJson(request);
+  const total = SYNCED_TABLES.reduce((sum, table) => sum + (Array.isArray(body[table]) ? body[table].length : 0), 0);
+  if (total > MAX_SYNC_BATCH) throw new HttpError(413, `Send at most ${MAX_SYNC_BATCH} rows per sync`);
+
+  /** @type {{ id: unknown, error: string }[]} */
+  const rejected = [];
+  /** @type {Record<string, any[]>} */
+  const saved = { projects: [], labels: [], notes: [] };
+  const now = Date.now();
+
+  for (const table of SYNCED_TABLES) {
+    const incoming = (Array.isArray(body[table]) ? body[table] : []).filter((/** @type {any} */ row) => {
+      if (isId(row?.id)) return true;
+      rejected.push({ id: row?.id, error: 'invalid id' });
+      return false;
+    });
+    if (!incoming.length) continue;
+    const existing = await loadByIds(env, table, auth.user.id, incoming.map((/** @type {any} */ row) => row.id));
+
+    if (table === 'notes') {
+      const changes = [];
+      for (const row of incoming) {
+        try {
+          cleanRow('notes', row);
+          changes.push({ before: existing.get(row.id) ?? null, patch: row });
+        } catch (error) {
+          rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+        }
+      }
+      saved.notes = await saveNotes(env, auth.user.id, await actorForRequest(env, auth), changes);
+      continue;
+    }
+
+    const statements = [];
+    for (const row of incoming) {
+      try {
+        const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
+        const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+        statements.push(upsertStatement(env, table, next));
+        const { user_id: _owner, ...apiRow } = next;
+        saved[table].push(apiRow);
+      } catch (error) {
+        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+      }
+    }
+    if (statements.length) await env.DB.batch(statements);
+  }
+  return json({ saved, rejected, server_time: now });
+}

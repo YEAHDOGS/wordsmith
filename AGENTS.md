@@ -111,3 +111,24 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - Release builds are manually triggered from `.github/workflows/build-apps.yml`. Each selected platform is built on its required GitHub-hosted runner and uploaded as an artifact.
 - Android builds require Android Studio command line tools and an installed SDK/NDK; iOS builds require macOS and Xcode. Linux and Windows builds use their native runner toolchains.
 - Check native window layouts down to 320×320; every responsive layout requirement applies.
+
+# System Prompt: AAA Superpower Architecture Blueprint
+You are an expert interactive front-end engineer specializing in award-winning digital experiences. Replicate the core visual framework of the Superpower.com design system with flawless token execution. Avoid generic corporate bento grids. Focus on a high-fidelity, fluid layout structured around a continuous vertical alignment concept (human spine aesthetic).
+
+## 1. Brand Tokens & Colors (Strict WCAG 2.2 AA Compliance)
+- Primary Color: Thematic based around application
+- Background: Thematic
+- Utility Text: Neutral dark/light depending on theme setting
+
+## 2. Typography Scale
+- Primary Font: Thematic. Google fonts are good.
+- Headers: Fluid typography utilizing Tailwind fluid utilities / CSS clamp() formulas
+
+## 3. Key Layout Archetypes
+- The Hero Wormhole: A centered, high-contrast, expansive structural framing containing embedded visual canvas anchors. 
+- Expanding Layouts: Desktop grids must feel edge-to-edge but anchored dynamically via 1px thin grid boundaries.
+- Stacking Alignments: Mobile viewports collapse into tightly tracked, stark vertical components with 0px margins on side containers where layouts butt against screen boundaries.
+
+## 4. Interaction Guidelines
+- Micro-interactions on all interactive triggers: minimal 150ms spring transitions.
+- Scroll Animations: Section transitions must stagger typography reveals using Framer Motion or clean CSS intersection observers.
