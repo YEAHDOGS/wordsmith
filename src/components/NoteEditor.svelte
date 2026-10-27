@@ -19,7 +19,7 @@
   import Attachments from './Attachments.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
-  import PriorityPicker from './PriorityPicker.svelte';
+  import LevelWheel from './LevelWheel.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
@@ -102,6 +102,17 @@
     flush();
     router.closeNote();
   }
+
+  // However the editor closes (button, Escape, back-swipe, another note opening), a note left completely empty is
+  // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
+  $effect(() => () => {
+    flush();
+    const current = store.find('notes', id);
+    if (!current || current.deleted_at) return;
+    const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
+    const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
+    if (!hasContent && !hasFiles) store.remove('notes', id);
+  });
 
   function addPr() {
     const parsed = parsePullRequestUrl(prInput);
@@ -237,12 +248,10 @@
                     </button>
                   {/each}
                 </div>
-                <!-- Priority and difficulty 0-5 as segmented controls: three per row on phones, all six in one row from sm up,
-                     side by side (three per row again) from xl up -->
-                <div class="grid gap-2 xl:grid-cols-2">
-                  <PriorityPicker value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} class="grid-cols-3 sm:grid-cols-6 xl:grid-cols-3" />
-                  <PriorityPicker value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY}
-                    onselect={(level) => set({ difficulty: level })} class="grid-cols-3 sm:grid-cols-6 xl:grid-cols-3" />
+                <!-- Priority and difficulty 0-5 as two scroll wheels side by side -->
+                <div class="grid grid-cols-2 gap-2">
+                  <LevelWheel value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} />
+                  <LevelWheel value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
                 </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
