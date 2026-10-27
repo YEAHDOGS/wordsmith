@@ -1,6 +1,6 @@
 // Delta sync for the offline-first app.
-// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, events, attachments, cursor, more }
-// POST /api/sync { projects?, labels?, notes?, boards? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, note_groups, events, attachments, cursor, more }
+// POST /api/sync { projects?, labels?, notes?, boards?, note_groups? } -> { saved: { table: rows }, rejected: [{ id, error }] }
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';

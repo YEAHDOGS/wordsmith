@@ -1,9 +1,9 @@
 // Tiny promise wrapper over IndexedDB: the on-device copy of your notes. One database per signed-in user.
 
 const DB_PREFIX = 'wordsmith-';
-// v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards.
-const DB_VERSION = 3;
-export const STORES = ['projects', 'labels', 'notes', 'boards', 'events', 'attachments', 'meta'];
+// v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards, v4 note_groups.
+const DB_VERSION = 4;
+export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'events', 'attachments', 'meta'];
 
 /** @param {IDBRequest} request @returns {Promise<any>} */
 function done(request) {

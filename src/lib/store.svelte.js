@@ -10,7 +10,7 @@ import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
 import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
 
-const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards']);
+const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
 const SYNC_DEBOUNCE_MS = 2_500;
 // Poll every minute while you're using the app, every five once you've been idle for five.
 const POLL_MS = 60_000;
@@ -25,7 +25,7 @@ const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
 const UNAUTHORIZED = 401;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
-/** @typedef {'projects' | 'labels' | 'notes' | 'boards'} Table */
+/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups'} Table */
 
 /** @param {any} value */
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -35,6 +35,7 @@ class Store {
   /** @type {any[]} */ labels = $state([]);
   /** @type {any[]} */ notes = $state([]);
   /** Custom feature boards, one per scope (models.js FEATURES_SCOPE or a project id). @type {any[]} */ boards = $state([]);
+  /** Note groups in projects (src/lib/groups.js). @type {any[]} */ note_groups = $state([]);
   /** @type {any[]} */ events = $state([]);
   /** @type {any[]} */ attachments = $state([]);
   /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);
@@ -82,13 +83,13 @@ class Store {
     this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
-    const [projects, labels, notes, boards, events, attachments, cursor, outbox] = await Promise.all([
-      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('events'), this.#db.all('attachments'),
+    const [projects, labels, notes, boards, note_groups, events, attachments, cursor, outbox] = await Promise.all([
+      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
     ]);
     // Notes cached before migration 20261027040000 only carry the old 0..3 priority; derive the 0..5 level.
     for (const note of notes) note.priority_level ??= Math.max(0, LEGACY_PRIORITY.indexOf(note.priority));
-    Object.assign(this, { projects, labels, notes, boards, events, attachments });
+    Object.assign(this, { projects, labels, notes, boards, note_groups, events, attachments });
     this.#cursor = cursor || 0;
     this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));
     this.pending = this.#outbox.size;
@@ -114,7 +115,7 @@ class Store {
     this.close();
     await this.#db?.destroy().catch(() => {});
     this.#db = null;
-    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
+    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
     this.#outbox.clear();
     this.#cursor = 0;
   }

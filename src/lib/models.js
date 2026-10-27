@@ -100,20 +100,29 @@ export const MODELS = {
     batch: { type: 'text', max: MAX_NAME, default: '' },
     // Board column the feature sits in (boards.columns[].id). '' = the first column with its state.
     column_id: { type: 'text', max: MAX_ID, default: '' },
+    // The note group it's in (note_groups.id). null, or a group that's gone, = not grouped.
+    group_id: { type: 'id', nullable: true, default: null },
   },
   boards: {
     scope: { type: 'text', max: MAX_ID, default: FEATURES_SCOPE },
     columns: { type: 'columns', max: MAX_COLUMNS, default: DEFAULT_COLUMNS },
   },
+  // Named, colored bundles of a project's notes that fold away under one header (src/lib/groups.js).
+  note_groups: {
+    project_id: { type: 'id', nullable: true, default: null },
+    name: { type: 'text', max: MAX_NAME, default: '' },
+    color: { type: 'enum', values: COLORS, default: 'default' },
+    collapsed: { type: 'bool', default: false },
+  },
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [] };
+export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
-export const BOOL_FIELDS = ['pinned', 'archived', 'public'];
+export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
 // The one real address: GitHub OAuth only accepts callbacks there. The short names are sent to it by the app itself
