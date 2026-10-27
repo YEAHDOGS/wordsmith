@@ -29,8 +29,11 @@ import * as v1Notes from './functions/api/v1/notes/index.js';
 import * as v1Note from './functions/api/v1/notes/[id]/index.js';
 import * as v1NoteEvents from './functions/api/v1/notes/[id]/events.js';
 import * as v1NoteClaim from './functions/api/v1/notes/[id]/claim.js';
+import * as sharedNote from './functions/n/[id].js';
+import { SHARE_PATH } from '../src/lib/models.js';
 
 const API_PREFIX = '/api';
+const READ_METHODS = ['GET', 'HEAD'];
 const NOT_FOUND = 404;
 const METHOD_NOT_ALLOWED = 405;
 const METHOD_EXPORTS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut', DELETE: 'onRequestDelete', HEAD: 'onRequestHead', OPTIONS: 'onRequestOptions' };
@@ -90,6 +93,11 @@ export default {
    */
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // Public notes (/n/<id>) are server-rendered pages, outside the API's CORS and JSON error handling.
+    if (url.pathname.startsWith(SHARE_PATH) && READ_METHODS.includes(request.method)) {
+      // Ids are URL-safe already, so the raw segment is used as is (isId rejects anything else).
+      return sharedNote.onRequestGet({ request, env, params: { id: url.pathname.slice(SHARE_PATH.length) }, waitUntil: ctx.waitUntil.bind(ctx) });
+    }
     if (url.pathname !== API_PREFIX && !url.pathname.startsWith(`${API_PREFIX}/`)) return env.ASSETS.fetch(request);
 
     const segments = url.pathname.split('/').filter(Boolean);

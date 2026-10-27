@@ -1,4 +1,5 @@
-// UI preferences and transient UI state shared across components: theme, search, the mobile drawer.
+// UI preferences and transient UI state shared across components: theme, search, the mobile drawer, selected notes.
+import { SvelteSet } from 'svelte/reactivity';
 
 const THEME_KEY = 'ws_theme';
 const THEMES = ['system', 'dark', 'light'];
@@ -17,6 +18,8 @@ class Ui {
   sort = $state(/** @type {any} */ (SORTS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
   /** The project just created from the sidebar: its page opens the GitHub repo picker once. */
   newProjectId = $state('');
+  /** Ids of the notes picked for bulk actions (copy, archive). Non-empty = selection mode. */
+  selected = new SvelteSet();
   #media = matchMedia('(prefers-color-scheme: light)');
 
   constructor() {
@@ -40,6 +43,17 @@ class Ui {
   setSort(sort) {
     this.sort = sort;
     localStorage.setItem(SORT_KEY, sort);
+  }
+
+  /** @param {string} id */
+  toggleSelected(id) {
+    if (this.selected.has(id)) this.selected.delete(id);
+    else this.selected.add(id);
+  }
+
+  /** @param {string[]} ids */
+  selectAll(ids) {
+    for (const id of ids) this.selected.add(id);
   }
 
   cycleTheme() {

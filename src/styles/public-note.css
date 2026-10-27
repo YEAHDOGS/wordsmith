@@ -1,0 +1,267 @@
+/* Public note page (/n/<id>), served by the Worker (api/functions/n/[id].js) without the app's bundle, so this file
+   carries literal copies of the theme.css palette: dark by default, light when the visitor's system asks for it.
+   Keep the values in step with theme.css. Imported by the Worker as text (see "rules" in wrangler.jsonc). */
+
+:root {
+  color-scheme: dark light;
+  --app: #050508;        /* page background (theme.css --ws-app) */
+  --surface: #0c0c11;    /* code blocks and quotes (--ws-surface) */
+  --line: #22222c;       /* the spine and 1px rules (--ws-line) */
+  --ink: #f4f4f7;        /* body text (--ws-ink) */
+  --muted: #a3a3b4;      /* byline and secondary text (--ws-ink-muted) */
+  --faint: #7c7c8e;      /* kicker and footer (--ws-ink-faint) */
+  --accent: #ff3344;     /* DOGS red: links, spine glow, wordmark (--ws-accent) */
+  --requested: #f5b83d;  /* feature state colors (--ws-requested, --ws-progress, --ws-complete) */
+  --progress: #5aa8ff;
+  --complete: #3ddc84;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --app: #f6f6f3;
+    --surface: #ffffff;
+    --line: #e1e1dc;
+    --ink: #121216;
+    --muted: #4d4d57;
+    --faint: #6a6a74;
+    --accent: #d3142a;
+    --requested: #8a5a00;
+    --progress: #1f5fbf;
+    --complete: #17773f;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--app);
+  color: var(--ink);
+  font: 400 clamp(1rem, 0.94rem + 0.3vw, 1.25rem) / 1.7 "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The vertical spine every page hangs off, drawn downward on load */
+.spine {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: max(1rem, calc(50% - 22rem));
+  width: 1px;
+  background: var(--line);
+  transform-origin: top;
+  animation: grow 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+main,
+footer {
+  position: relative;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem 0 2.25rem;
+}
+
+main {
+  padding-top: clamp(2.5rem, 8vh, 6rem);
+  padding-bottom: 3rem;
+}
+
+main > * {
+  animation: rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+main > :nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.kicker {
+  margin: 0 0 0.5rem;
+  font: 400 0.75rem / 1.4 "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.state-requested {
+  color: var(--requested);
+}
+
+.state-in_progress {
+  color: var(--progress);
+}
+
+.state-complete {
+  color: var(--complete);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 1.25rem 0 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.byline img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.byline span {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.byline time,
+.muted {
+  color: var(--faint);
+}
+
+.status {
+  margin: 1rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--progress);
+}
+
+article {
+  padding-top: 1.5rem;
+  overflow-wrap: anywhere;
+}
+
+article h1,
+article h2,
+article h3,
+article h4 {
+  margin: 1.8em 0 0.4em;
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+article h2 {
+  font-size: 1.2em;
+}
+
+article h3,
+article h4 {
+  font-size: 1.05em;
+}
+
+article p,
+article ul,
+article ol,
+article pre,
+article blockquote {
+  margin: 0 0 1em;
+}
+
+article > :first-child {
+  margin-top: 0;
+}
+
+article ul,
+article ol {
+  padding-left: 1.5em;
+}
+
+article li.task {
+  list-style: none;
+  margin-left: -1.5em;
+}
+
+article a,
+footer a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+article code,
+article pre {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+article code {
+  padding: 0.1em 0.35em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+article pre {
+  padding: 1rem;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+article pre code {
+  padding: 0;
+  border: 0;
+}
+
+article blockquote {
+  padding-left: 1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+
+article hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+footer {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--faint);
+}
+
+footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+footer b span {
+  color: var(--accent);
+}
+
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spine,
+  main > * {
+    animation: none;
+  }
+}

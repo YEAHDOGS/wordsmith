@@ -11,16 +11,23 @@
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import ExternalLink from '@lucide/svelte/icons/external-link';
+  import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
+  import Check from '@lucide/svelte/icons/check';
   import { fly, fade } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import ColorPicker from './ColorPicker.svelte';
   import Attachments from './Attachments.svelte';
+  import ShareMenu from './ShareMenu.svelte';
+  import MarkdownToolbar from './MarkdownToolbar.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
   import { FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_PRIORITY, MAX_STATUS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
+  import { copyText, noteMarkdown } from '../lib/export.js';
+  import { renderMarkdown } from '../lib/markdown.js';
+  import { markdownKeys } from '../lib/markdown-input.js';
 
   /** @type {{ id: string }} */
   let { id } = $props();
@@ -45,6 +52,10 @@
   let prInput = $state('');
   let prError = $state('');
   let copied = $state(false);
+  let copiedNote = $state(false);
+  let preview = $state(false);
+  /** @type {HTMLTextAreaElement | undefined} */
+  let bodyField = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
   let loadedId = '';
@@ -104,6 +115,12 @@
     setTimeout(() => (copied = false), COPIED_MS);
   }
 
+  /** The whole note as Markdown, including edits still waiting for autosave. */
+  async function copyNote() {
+    copiedNote = await copyText(noteMarkdown({ ...note, title, body, status }));
+    setTimeout(() => (copiedNote = false), COPIED_MS);
+  }
+
   /** Files dropped anywhere on the note, or pasted into it, become attachments. @param {DragEvent} event */
   function ondrop(event) {
     dropping = false;
@@ -121,9 +138,9 @@
     attachments?.add(files);
   }
 
-  /** Escape closes the attachment viewer first, not the whole note. @param {Event} event */
+  /** Escape closes the attachment viewer or share panel first, not the whole note. @param {Event} event */
   function oncancel(event) {
-    if (document.querySelector('[data-lightbox]')) event.preventDefault();
+    if (document.querySelector('[data-lightbox], [data-popover]')) event.preventDefault();
   }
 
   /** Double-clicking the backdrop closes; a single stray click outside the note does nothing. @param {MouseEvent} event */
@@ -152,6 +169,10 @@
         </select>
         <ColorPicker value={note.color} onchange={(color) => set({ color })} />
         <span class="flex-1"></span>
+        <button class="{TOOL} {copiedNote ? 'text-complete' : ''}" onclick={copyNote} title="Copy the whole note as Markdown">
+          {#if copiedNote}<Check class="size-4" />{:else}<ClipboardCopy class="size-4" />{/if}<span class="hidden sm:inline">{copiedNote ? 'Copied' : 'Copy'}</span>
+        </button>
+        <ShareMenu {note} class={TOOL} />
         <button class="{TOOL} {note.pinned ? 'text-accent' : ''}" aria-pressed={note.pinned} onclick={() => set({ pinned: !note.pinned })} title="Pin"><Pin class="size-4" /></button>
         <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden sm:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
         <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
@@ -185,8 +206,22 @@
             </div>
           {/if}
 
-          <textarea bind:value={body} oninput={queueSave} maxlength={MAX_BODY} placeholder={note.kind === 'feature' ? 'Describe the feature. Agents read this verbatim.' : 'Note'} aria-label="Body"
-            class="min-h-32 flex-1 resize-none bg-transparent lg:min-h-48 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+          <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
+            {#if preview}
+              <!-- Rendered by src/lib/markdown.js, which escapes all input -->
+              <div class="markdown selectable min-h-0 flex-1 overflow-y-auto py-2 text-fluid-sm text-ink" in:fade={{ duration: 120 }}>
+                {#if body.trim()}{@html renderMarkdown(body)}{:else}<p class="text-ink-faint">Nothing to preview yet.</p>{/if}
+              </div>
+            {:else}
+              <textarea bind:this={bodyField} bind:value={body} oninput={queueSave} use:markdownKeys maxlength={MAX_BODY} aria-label="Body"
+                placeholder={note.kind === 'feature' ? 'Describe the feature. Agents read this verbatim. Markdown works: **bold**, - lists, 1. steps' : 'Note. Markdown works: **bold**, _italic_, # headings, - lists'}
+                class="min-h-32 flex-1 resize-none bg-transparent py-2 lg:min-h-48 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+            {/if}
+            <!-- Formatting lives in the box's bottom-right corner -->
+            <div class="flex justify-end border-t border-line">
+              <MarkdownToolbar textarea={bodyField} bind:preview showPreview class="-mr-1 py-0.5" />
+            </div>
+          </div>
 
           <Attachments bind:this={attachments} noteId={id} />
 

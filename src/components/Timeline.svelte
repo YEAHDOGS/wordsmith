@@ -56,6 +56,8 @@
       case 'restored': return 'restored it';
       case 'attached': return `attached ${data.type?.startsWith('video/') ? 'a video' : 'an image'}: ${data.name}`;
       case 'detached': return `removed ${data.name}`;
+      case 'published': return 'made it public';
+      case 'unpublished': return 'made it private';
       default: return event.type;
     }
   }

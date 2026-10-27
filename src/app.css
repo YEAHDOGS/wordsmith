@@ -5,6 +5,7 @@
 @import "./styles/theme.css";
 @import "./styles/legacy-fallback.css";
 @import "./styles/motion.css";
+@import "./styles/markdown.css";
 
 body {
   margin: 0;
@@ -73,9 +74,12 @@ textarea,
   background: var(--color-accent);
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-line-strong) transparent;
+/* In the base layer so utilities like scrollbar-none can override it (unlayered CSS would beat every utility) */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
 }
 
 /* Hide scrollbars but keep scrolling functionality (sideways swipe lists) */

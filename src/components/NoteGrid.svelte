@@ -4,6 +4,7 @@
   // content, not measured, so cards never jump after they render. Sort by updated, created, or group by project.
   import { flip } from 'svelte/animate';
   import { scale } from 'svelte/transition';
+  import CheckCheck from '@lucide/svelte/icons/check-check';
   import NoteCard from './NoteCard.svelte';
   import { store } from '../lib/store.svelte.js';
   import { ui, SORTS } from '../lib/ui.svelte.js';
@@ -102,7 +103,11 @@
 <div bind:clientWidth={width} class="px-2 sm:px-0">
   {#if notes.length}
     <div class="flex items-center justify-end gap-2 pt-2 pb-1">
-      <span class="font-mono text-[11px] uppercase tracking-widest text-ink-faint">Sort</span>
+      <button class="spring press mr-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-line px-2.5 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink"
+        onclick={() => ui.selectAll(notes.map((note) => note.id))} title="Select every note here to copy or archive them together">
+        <CheckCheck class="size-3.5" />Select all
+      </button>
+      <span class="hidden font-mono text-[11px] uppercase tracking-widest text-ink-faint sm:inline">Sort</span>
       <div class="flex gap-px border border-line bg-line" role="radiogroup" aria-label="Sort notes">
         {#each sortOptions as option (option)}
           <button role="radio" aria-checked={sort === option} onclick={() => ui.setSort(option)}

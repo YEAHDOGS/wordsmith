@@ -1,6 +1,7 @@
 <script>
   // Signed-in layout. Phones: one column + bottom nav + drawer. Tablets: icon rail. Desktop: full sidebar,
   // content capped at max-w-7xl. Ultra-wide: content spreads. Only lists scroll; the frame never does.
+  import { untrack } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
@@ -12,6 +13,7 @@
   import NoteEditor from './NoteEditor.svelte';
   import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
+  import SelectionBar from './SelectionBar.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
@@ -51,6 +53,22 @@
     }
   });
 
+  /** The cards on screen right now: what "select all" picks. */
+  const visible = $derived.by(() => {
+    if (route.view === 'features' || (project && projectTab === 'board')) return view.features ?? [];
+    if (project && projectTab === 'prs') return [];
+    return view.notes ?? [];
+  });
+
+  /** Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
+  function onkeydown(event) {
+    if (event.key.toLowerCase() !== 'a' || !(event.ctrlKey || event.metaKey) || route.note || !visible.length) return;
+    const target = /** @type {HTMLElement} */ (event.target);
+    if (target.closest('input, textarea, select, [contenteditable]')) return;
+    event.preventDefault();
+    ui.selectAll(visible.map((note) => note.id));
+  }
+
   /** Bottom-nav "+": a blank note in the current context, opened straight into the editor. */
   function newNote() {
     const inProject = route.view === 'project';
@@ -62,12 +80,23 @@
     router.openNote(note.id);
   }
 
+  // A selection belongs to the page it was made on.
+  $effect(() => {
+    route.view;
+    route.id;
+    projectTab;
+    // untrack: clearing reads the set, which would make every new selection clear itself.
+    untrack(() => ui.selected.clear());
+  });
+
   // Leaving a project resets its tab.
   $effect(() => {
     route.id;
     projectTab = 'board';
   });
 </script>
+
+<svelte:window {onkeydown} />
 
 <div class="flex h-dvh w-full overflow-hidden bg-app text-ink">
   <aside class="hidden w-16 shrink-0 border-r border-line md:block lg:w-64 ultrawide:w-72 tv:w-80">
@@ -76,7 +105,10 @@
   </aside>
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <TopBar title={view.title} subtitle={view.subtitle} />
+    <div class="relative">
+      <TopBar title={view.title} subtitle={view.subtitle} />
+      {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} />{/if}
+    </div>
 
     <main class="min-h-0 flex-1 overflow-hidden">
       {#key route.view + route.id}

@@ -2,7 +2,8 @@
    Palette values are CSS variables on :root (dark) and [data-theme="light"]; @theme inline maps them to Tailwind
    utilities, e.g. --color-accent -> text-accent, bg-accent. Themed colors can't take /opacity modifiers on the
    app's browser floor (color-mix needs Chrome 111), so every translucent shade gets its own token below.
-   Literal copies exist only in src/styles/legacy-fallback.css (Chrome 40 page) and the theme-color meta in index.html.
+   Literal copies exist only in src/styles/legacy-fallback.css (Chrome 40 page), src/styles/public-note.css (public /n/<id>
+   pages, rendered without the app bundle) and the theme-color meta in index.html.
    All ink-on-surface pairs meet WCAG 2.2 AA (4.5:1 text, 3:1 UI). */
 
 /* Short screens (phones on their side, small phones, squat displays): compact layout variant, e.g. short:hidden */
