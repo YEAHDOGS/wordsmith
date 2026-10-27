@@ -4,8 +4,12 @@ import { SvelteSet } from 'svelte/reactivity';
 const THEME_KEY = 'ws_theme';
 const THEMES = ['system', 'dark', 'light'];
 const SORT_KEY = 'ws_sort';
-// Note grid order: newest created, most recently updated, or grouped by project.
-export const SORTS = /** @type {const} */ (['updated', 'created', 'project']);
+const GROUP_KEY = 'ws_group';
+// Note grid controls: the left button flips the time order, the right one cycles the grouping.
+export const ORDERS = /** @type {const} */ (['updated', 'created']);
+export const GROUPS = /** @type {const} */ (['all', 'project', 'season']);
+// Before grouping existed, "project" was a sort; carry that choice over.
+const LEGACY_PROJECT_SORT = 'project';
 // Must match --ws-app in src/styles/theme.css for each theme: tints the browser and OS chrome.
 const THEME_COLOR_META = 'meta[name="theme-color"]';
 
@@ -14,8 +18,11 @@ class Ui {
   theme = $state(/** @type {any} */ (localStorage.getItem(THEME_KEY)) || 'system');
   query = $state('');
   drawerOpen = $state(false);
-  /** @type {'updated' | 'created' | 'project'} */
-  sort = $state(/** @type {any} */ (SORTS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
+  /** @type {'updated' | 'created'} */
+  order = $state(/** @type {any} */ (ORDERS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
+  /** @type {'all' | 'project' | 'season'} */
+  group = $state(/** @type {any} */ (localStorage.getItem(SORT_KEY) === LEGACY_PROJECT_SORT ? 'project'
+    : GROUPS.includes(/** @type {any} */ (localStorage.getItem(GROUP_KEY))) ? localStorage.getItem(GROUP_KEY) : 'all'));
   /** The project just created from the sidebar: its page opens the GitHub repo picker once. */
   newProjectId = $state('');
   /** Ids of the notes picked for bulk actions (copy, archive). Non-empty = selection mode. */
@@ -39,10 +46,16 @@ class Ui {
     document.querySelector(THEME_COLOR_META)?.setAttribute('content', app);
   }
 
-  /** @param {'updated' | 'created' | 'project'} sort */
-  setSort(sort) {
-    this.sort = sort;
-    localStorage.setItem(SORT_KEY, sort);
+  /** Updated <-> created. */
+  flipOrder() {
+    this.order = this.order === 'updated' ? 'created' : 'updated';
+    localStorage.setItem(SORT_KEY, this.order);
+  }
+
+  /** @param {'all' | 'project' | 'season'} group */
+  setGroup(group) {
+    this.group = group;
+    localStorage.setItem(GROUP_KEY, group);
   }
 
   /** @param {string} id */

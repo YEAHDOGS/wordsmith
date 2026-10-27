@@ -1,13 +1,16 @@
 <script>
   // Notes as a staggered masonry (Google Keep style): two columns on phones, more as the screen widens.
   // Reading order runs left to right; each note goes into the currently shortest column. Heights are estimated from
-  // content, not measured, so cards never jump after they render. Sort by updated, created, or group by project.
+  // content, not measured, so cards never jump after they render. Two toggles: newest updated or newest created first,
+  // and grouping by nothing, project, or season (winter is December to February).
   import { flip } from 'svelte/animate';
   import { scale } from 'svelte/transition';
   import CheckCheck from '@lucide/svelte/icons/check-check';
   import NoteCard from './NoteCard.svelte';
   import { store } from '../lib/store.svelte.js';
-  import { ui, SORTS } from '../lib/ui.svelte.js';
+  import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
+  import Layers from '@lucide/svelte/icons/layers';
+  import { ui, GROUPS } from '../lib/ui.svelte.js';
   import { reveal } from '../lib/reveal.js';
 
   /** @type {{ notes: any[], showProject?: boolean, empty?: string }} */
@@ -27,7 +30,12 @@
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
   const COVER_RATIO = 9 / 16;
-  const SORT_LABELS = { updated: 'Updated', created: 'Created', project: 'Project' };
+  const ORDER_LABELS = { updated: 'Updated', created: 'Created' };
+  const GROUP_LABELS = { all: 'All', project: 'Projects', season: 'Seasons' };
+  // Month index (0 = January) -> season. Winter runs December through February.
+  const SEASONS = ['Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall', 'Winter'];
+  const DECEMBER = 11;
+  const TOGGLE = 'spring press flex items-center gap-1.5 bg-app px-2.5 py-1 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   const NO_PROJECT = 'No project';
 
   let width = $state(0);
@@ -36,8 +44,20 @@
     return Math.max(1, Math.min(MAX_COLUMNS, Math.floor((width + GAP_PX) / (min + GAP_PX))));
   });
   const columnWidth = $derived((width - GAP_PX * (columnCount - 1)) / columnCount);
-  const sortOptions = $derived(SORTS.filter((sort) => showProject || sort !== 'project'));
-  const sort = $derived(!showProject && ui.sort === 'project' ? 'updated' : ui.sort);
+  // Inside one project, grouping by project means nothing, so that step is skipped.
+  const groupOptions = $derived(GROUPS.filter((option) => showProject || option !== 'project'));
+  const group = $derived(groupOptions.includes(/** @type {any} */ (ui.group)) ? ui.group : 'all');
+  const timeField = $derived(ui.order === 'created' ? 'created_at' : 'updated_at');
+
+  /** "Winter 2025–26", "Spring 2026" for a timestamp. @param {number} at */
+  function seasonOf(at) {
+    const date = new Date(at);
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    if (SEASONS[month] !== 'Winter') return `${SEASONS[month]} ${year}`;
+    const start = month === DECEMBER ? year : year - 1;
+    return `Winter ${start}–${String(start + 1).slice(-2)}`;
+  }
 
   /** @param {any} note */
   function projectName(note) {
@@ -45,8 +65,8 @@
   }
 
   const sorted = $derived.by(() => {
-    const byTime = sort === 'created' ? (/** @type {any} */ a, /** @type {any} */ b) => b.created_at - a.created_at : (/** @type {any} */ a, /** @type {any} */ b) => b.updated_at - a.updated_at;
-    if (sort !== 'project') return [...notes].sort(byTime);
+    const byTime = (/** @type {any} */ a, /** @type {any} */ b) => b[timeField] - a[timeField];
+    if (group !== 'project') return [...notes].sort(byTime);
     return [...notes].sort((a, b) => {
       const [nameA, nameB] = [projectName(a), projectName(b)];
       if (nameA !== nameB) return nameA === NO_PROJECT ? 1 : nameB === NO_PROJECT ? -1 : nameA.localeCompare(nameB);
@@ -54,17 +74,18 @@
     });
   });
 
-  /** Pinned first, then either one "Others" band or one band per project. */
+  /** Pinned first, then one "Others" band, or one band per project or per season. */
   const sections = $derived.by(() => {
     const pinned = sorted.filter((note) => note.pinned);
     const rest = sorted.filter((note) => !note.pinned);
     /** @type {{ key: string, title: string, notes: any[] }[]} */
     const list = [];
     if (pinned.length) list.push({ key: 'pinned', title: 'Pinned', notes: pinned });
-    if (sort === 'project') {
+    if (group !== 'all') {
+      // Notes arrive already ordered by project or by time, so each band is one consecutive run.
       for (const note of rest) {
-        const name = projectName(note);
-        if (list.at(-1)?.key !== `project:${name}`) list.push({ key: `project:${name}`, title: name, notes: [] });
+        const name = group === 'project' ? projectName(note) : seasonOf(note[timeField]);
+        if (list.at(-1)?.key !== `${group}:${name}`) list.push({ key: `${group}:${name}`, title: name, notes: [] });
         list.at(-1)?.notes.push(note);
       }
     } else if (rest.length) {
@@ -107,12 +128,26 @@
         onclick={() => ui.selectAll(notes.map((note) => note.id))} title="Select every note here to copy or archive them together">
         <CheckCheck class="size-3.5" />Select all
       </button>
-      <span class="hidden font-mono text-[11px] uppercase tracking-widest text-ink-faint sm:inline">Sort</span>
-      <div class="flex gap-px border border-line bg-line" role="radiogroup" aria-label="Sort notes">
-        {#each sortOptions as option (option)}
-          <button role="radio" aria-checked={sort === option} onclick={() => ui.setSort(option)}
-            class="spring press px-2.5 py-1 text-xs {sort === option ? 'bg-accent-soft text-ink' : 'bg-app text-ink-muted hover:text-ink'}">{SORT_LABELS[option]}</button>
-        {/each}
+      <div class="flex gap-px border border-line bg-line" role="group" aria-label="Sort notes">
+        <!-- Every label sits in one grid cell, so the button keeps the width of its longest label and never jumps -->
+        <button class="{TOGGLE}" onclick={() => ui.flipOrder()} title="Newest {ui.order} first. Switch to {ui.order === 'updated' ? 'created' : 'updated'}"
+          aria-label="Order: newest {ui.order} first">
+          <ArrowDownWideNarrow class="size-3.5 shrink-0" />
+          <span class="grid">
+            {#each Object.entries(ORDER_LABELS) as [value, label] (value)}
+              <span class="spring col-start-1 row-start-1 {ui.order === value ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={ui.order !== value}>{label}</span>
+            {/each}
+          </span>
+        </button>
+        <button class="{TOGGLE}" onclick={() => ui.setGroup(groupOptions[(groupOptions.indexOf(group) + 1) % groupOptions.length])}
+          title="Grouped by {GROUP_LABELS[group].toLowerCase()}. Tap to cycle {groupOptions.map((option) => GROUP_LABELS[option]).join(', ')}" aria-label="Group: {GROUP_LABELS[group]}">
+          <Layers class="size-3.5 shrink-0" />
+          <span class="grid">
+            {#each groupOptions as option (option)}
+              <span class="spring col-start-1 row-start-1 {group === option ? 'opacity-100' : 'translate-y-1 opacity-0'}" aria-hidden={group !== option}>{GROUP_LABELS[option]}</span>
+            {/each}
+          </span>
+        </button>
       </div>
     </div>
   {/if}
