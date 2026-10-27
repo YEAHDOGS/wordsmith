@@ -97,7 +97,7 @@
       <button class="spring press p-1 text-ink-muted hover:text-ink" aria-label="Close" onclick={() => (viewing = null)}><X class="size-5" /></button>
     </div>
     <div class="relative flex min-h-0 flex-1 items-center justify-center p-4">
-      <button class="absolute inset-0 cursor-default" aria-label="Close" tabindex="-1" onclick={() => (viewing = null)}></button>
+      <button class="absolute inset-0 cursor-default" aria-label="Close" tabindex="-1" ondblclick={() => (viewing = null)}></button>
       <div class="relative flex max-h-full max-w-full" in:scale={{ start: 0.95, duration: 200 }}>
         <AttachmentMedia file={viewing} controls class="max-h-[calc(100dvh-6rem)] max-w-full object-contain" />
       </div>

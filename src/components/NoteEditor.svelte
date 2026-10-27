@@ -126,14 +126,14 @@
     if (document.querySelector('[data-lightbox]')) event.preventDefault();
   }
 
-  /** Backdrop click closes. @param {MouseEvent} event */
+  /** Double-clicking the backdrop closes; a single stray click outside the note does nothing. @param {MouseEvent} event */
   function onBackdrop(event) {
     if (event.target === dialog) close();
   }
 </script>
 
 {#if note}
-  <dialog bind:this={dialog} aria-label={note.title || 'Note'} onclose={close} {oncancel} onclick={onBackdrop}
+  <dialog bind:this={dialog} aria-label={note.title || 'Note'} onclose={close} {oncancel} ondblclick={onBackdrop}
     class="m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 text-ink backdrop:bg-scrim sm:m-auto sm:h-[min(92dvh,56rem)] sm:w-[min(96vw,72rem)] tv:w-[min(90vw,96rem)]">
     <div class="spring flex h-full flex-col bg-app sm:border {dropping ? 'border-accent' : 'border-line'}" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 120 }} role="presentation"
       ondragover={(event) => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); dropping = true; } }}
