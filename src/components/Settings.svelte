@@ -118,7 +118,8 @@ Every call is timestamped on the feature's timeline under your token's name.`);
       </div>
     </section>
 
-    <section class={CARD} in:fly={{ y: 12, duration: 250, delay: 60 }}>
+    <!-- Flex column so the token list can fill whatever height the Account card sets for this row -->
+    <section class="{CARD} flex min-h-0 flex-col" in:fly={{ y: 12, duration: 250, delay: 60 }}>
       <h2 class={HEADING}>{TEXT.tokens}</h2>
       <p class={HINT}>{TEXT.tokensHint}</p>
       <form class="mb-3 flex" onsubmit={createToken}>
@@ -136,20 +137,23 @@ Every call is timestamped on the feature's timeline under your token's name.`);
         </div>
       {/if}
       {#if error}<p class="mb-3 text-xs text-accent" role="alert">{error}</p>{/if}
-      <ul class="divide-y divide-line border border-line">
-        {#each tokens as token (token.id)}
-          <li class="flex items-center gap-3 px-3 py-2" transition:slide={{ duration: 150 }}>
-            <KeyRound class="size-4 text-ink-faint" />
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-semibold">{token.name}</p>
-              <p class="font-mono text-[11px] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
-            </div>
-            <button class="spring press px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
-          </li>
-        {:else}
-          <li class="px-3 py-4 text-center text-xs text-ink-faint">No tokens yet.</li>
-        {/each}
-      </ul>
+      <!-- The list is absolutely positioned so it never grows the row: the Account card sets the height, the list scrolls inside it -->
+      <div class="relative min-h-40 flex-1">
+        <ul class="absolute inset-0 divide-y divide-line overflow-y-auto overscroll-contain border border-line">
+          {#each tokens as token (token.id)}
+            <li class="flex items-center gap-3 px-3 py-2" transition:slide={{ duration: 150 }}>
+              <KeyRound class="size-4 shrink-0 text-ink-faint" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-semibold">{token.name}</p>
+                <p class="font-mono text-[11px] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
+              </div>
+              <button class="spring press px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
+            </li>
+          {:else}
+            <li class="px-3 py-4 text-center text-xs text-ink-faint">No tokens yet.</li>
+          {/each}
+        </ul>
+      </div>
     </section>
 
     <section class="{CARD} lg:col-span-2 ultrawide:col-span-1" in:fly={{ y: 12, duration: 250, delay: 120 }}>
