@@ -1,14 +1,26 @@
 // Offline-first data store. Every edit lands in memory and IndexedDB first, joins an outbox, and syncs to
 // Cloudflare in the background: push the outbox, then pull everything changed since the last cursor.
 // Sync runs on edits (debounced), on focus, on reconnect, and on a slow poll so agent updates show up.
+// Every request counts against Cloudflare's free tier, so sync is frugal: edits wait for a pause in typing, a push
+// skips the pull right after it when one ran recently, the poll slows down once you stop using the app and stops
+// while it's hidden, and coming back only syncs if the last pull is a little stale. The server answers "nothing
+// new" polls with a single small query (api/functions/api/sync.js).
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
 
 const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards']);
-const SYNC_DEBOUNCE_MS = 900;
+const SYNC_DEBOUNCE_MS = 2_500;
+// Poll every minute while you're using the app, every five once you've been idle for five.
 const POLL_MS = 60_000;
-const PR_REFRESH_MS = 120_000;
+const IDLE_POLL_MS = 300_000;
+const IDLE_AFTER_MS = 300_000;
+// A push skips its follow-up pull when the last pull is this fresh; focus only syncs when it's older than FOCUS_STALE_MS.
+const PULL_AFTER_PUSH_MS = 30_000;
+const FOCUS_STALE_MS = 15_000;
+// The GitHub webhook makes merges instant; this re-check is the fallback for repos without it.
+const PR_REFRESH_MS = 600_000;
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
 const UNAUTHORIZED = 401;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
@@ -39,10 +51,19 @@ class Store {
   #cursor = 0;
   #again = false;
   #lastPrRefresh = 0;
+  #lastPull = 0;
+  #lastActivity = Date.now();
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #debounce;
   /** @type {ReturnType<typeof setInterval> | undefined} */ #poll;
 
-  #onFocus = () => document.visibilityState === 'visible' && this.sync();
+  #onFocus = () => document.visibilityState === 'visible' && Date.now() - this.#lastPull > FOCUS_STALE_MS && this.sync();
+  #onActivity = () => (this.#lastActivity = Date.now());
+  /** Every minute: sync if visible and the last pull is older than the active or idle poll interval. */
+  #onTick = () => {
+    if (document.visibilityState !== 'visible') return;
+    const interval = Date.now() - this.#lastActivity > IDLE_AFTER_MS ? IDLE_POLL_MS : POLL_MS;
+    if (Date.now() - this.#lastPull >= interval - SYNC_DEBOUNCE_MS) this.sync();
+  };
   #onOnline = () => {
     this.online = navigator.onLine;
     if (this.online) this.sync();
@@ -66,7 +87,8 @@ class Store {
     addEventListener('online', this.#onOnline);
     addEventListener('offline', this.#onOnline);
     document.addEventListener('visibilitychange', this.#onFocus);
-    this.#poll = setInterval(() => document.visibilityState === 'visible' && this.sync(), POLL_MS);
+    for (const type of ACTIVITY_EVENTS) addEventListener(type, this.#onActivity, { passive: true });
+    this.#poll = setInterval(this.#onTick, POLL_MS);
     this.sync();
   }
 
@@ -74,6 +96,7 @@ class Store {
     removeEventListener('online', this.#onOnline);
     removeEventListener('offline', this.#onOnline);
     document.removeEventListener('visibilitychange', this.#onFocus);
+    for (const type of ACTIVITY_EVENTS) removeEventListener(type, this.#onActivity);
     clearInterval(this.#poll);
     clearTimeout(this.#debounce);
   }
@@ -157,8 +180,9 @@ class Store {
     }
     this.syncing = true;
     try {
-      await this.#push();
-      await this.#pull();
+      const pushed = await this.#push();
+      // The push already returned the saved rows; other devices' changes can wait for the next poll.
+      if (!pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
       this.online = true;
       this.lastSync = Date.now();
       this.error = '';
@@ -177,8 +201,11 @@ class Store {
     }
   }
 
+  /** Sends the outbox in batches. @returns {Promise<boolean>} whether anything was sent */
   async #push() {
+    let sent = false;
     while (this.#outbox.size) {
+      sent = true;
       const batch = [...this.#outbox].slice(0, MAX_SYNC_BATCH);
       /** @type {Record<string, any[]>} */
       const body = Object.fromEntries(SYNCED.map((table) => [table, /** @type {any[]} */ ([])]));
@@ -209,9 +236,11 @@ class Store {
       for (const table of SYNCED) await this.#db?.put(table, saved.filter(([name]) => name === table).map(([, row]) => row));
       this.#persistOutbox();
     }
+    return sent;
   }
 
   async #pull() {
+    this.#lastPull = Date.now();
     let more = true;
     while (more) {
       const result = await api(`/api/sync?since=${this.#cursor}`);

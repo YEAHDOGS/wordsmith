@@ -20,6 +20,17 @@ export async function onRequestGet(context) {
   const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
   const now = Date.now();
 
+  // Most polls find nothing new: answer those with one small query instead of one per table.
+  if (since) {
+    // EXISTS checks rather than a UNION: D1 caps compound SELECTs at a few terms.
+    const checks = [...[...SYNCED_TABLES, 'attachments'].map((table) => `EXISTS (SELECT 1 FROM ${table} WHERE user_id = ?1 AND updated_at > ?2)`),
+      'EXISTS (SELECT 1 FROM note_events WHERE user_id = ?1 AND created_at > ?2)'];
+    const { changed } = /** @type {{ changed: number }} */ (await env.DB.prepare(`SELECT (${checks.join(' OR ')}) AS changed`).bind(user.id, since).first());
+    if (!changed) {
+      return json({ ...Object.fromEntries(SYNCED_TABLES.map((table) => [table, []])), events: [], attachments: [], cursor: since, server_time: now, more: false });
+    }
+  }
+
   const queries = SYNCED_TABLES.map((table) =>
     env.DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?`).bind(user.id, since, PULL_LIMIT));
   queries.push(env.DB.prepare('SELECT id, note_id, type, actor_type, actor_name, data, created_at FROM note_events WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT ?')
