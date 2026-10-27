@@ -1,5 +1,5 @@
 // Workers Builds "Preview command" for every non-production branch: `node scripts/preview.js`.
-// Runs `npx wrangler preview` (a branch-isolated Worker Preview on staging data, see "previews" in wrangler.jsonc),
+// Applies pending D1 migrations to staging, then runs `npx wrangler preview` (a branch-isolated Worker Preview on staging data, see "previews" in wrangler.jsonc),
 // then writes the Preview URL and a link to this build onto the first line of the branch's open pull request.
 // The PR step needs the build secret GITHUB_PR_TOKEN (fine-grained token, Pull requests: read and write, this repo
 // only). Without it, or before the PR exists, the Preview still deploys and the step is skipped.
@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 const REPO = 'YEAHDOGS/wordsmith';
 const WORKER = 'wordsmith';
+const STAGING_DB = 'wordsmith-staging';
 const GITHUB_API = 'https://api.github.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
 // The first line of a PR body starting with this is ours and gets replaced on every push.
@@ -14,6 +15,11 @@ const MARKER = '**Preview:**';
 const SHORT_SHA = 7;
 
 const { WORKERS_CI_BRANCH: branch, WORKERS_CI_BUILD_UUID: buildId, WORKERS_CI_COMMIT_SHA: sha = '', GITHUB_PR_TOKEN: githubToken } = process.env;
+
+// Pending migrations go to staging first, so the Preview never runs against an older schema. A failed migration
+// fails the build before anything deploys. All Previews share staging D1, so migrations must stay additive.
+const migrate = spawnSync(`npx --yes wrangler d1 migrations apply ${STAGING_DB} --remote --env preview`, { shell: true, stdio: 'inherit', env: { ...process.env, CI: 'true' } });
+if (migrate.status !== 0) process.exit(migrate.status ?? 1);
 
 // Wrangler prints build logs on stderr and the result as JSON on stdout.
 const run = spawnSync('npx --yes wrangler preview --json', { shell: true, encoding: 'utf8', stdio: ['inherit', 'pipe', 'inherit'] });

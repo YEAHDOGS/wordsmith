@@ -1,6 +1,6 @@
 {
   // wordsmith runs as one Worker: static assets from dist/ (free, never invoke the Worker) plus /api/* through api/worker.js.
-  // Top level is PRODUCTION: Workers Builds' `npx wrangler deploy` on master deploys exactly this.
+  // Top level is PRODUCTION: Workers Builds' deploy command on master (`node scripts/deploy.js`: migrate D1, then `wrangler deploy`) deploys exactly this.
   // This file lives at the repo root so `npx wrangler deploy` finds it whatever directory the build runs from
   // (Wrangler searches upward). Without it, Wrangler auto-detects Vite and ships dist/ alone, with no API or bindings.
   // `wrangler dev` uses these bindings too, but only as local Miniflare copies under .wrangler/state, never the remote ones.
