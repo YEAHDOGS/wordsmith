@@ -10,6 +10,9 @@
   import { store } from '../lib/store.svelte.js';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import Layers from '@lucide/svelte/icons/layers';
+  import Square from '@lucide/svelte/icons/square';
+  import SquareCheck from '@lucide/svelte/icons/square-check';
+  import SquareMinus from '@lucide/svelte/icons/square-minus';
   import { ui, GROUPS } from '../lib/ui.svelte.js';
   import { reveal } from '../lib/reveal.js';
 
@@ -94,6 +97,12 @@
     return list;
   });
 
+  /** A band's check box: picks every note in it, or clears them when all are picked already. @param {any[]} list */
+  function toggleBand(list) {
+    if (list.every((note) => ui.selected.has(note.id))) for (const note of list) ui.selected.delete(note.id);
+    else ui.selectAll(list.map((note) => note.id));
+  }
+
   /** Estimated rendered height of a card at the current column width. @param {any} note */
   function estimate(note) {
     const chars = Math.max(12, columnWidth / CHAR_PX);
@@ -157,7 +166,14 @@
   {:else}
     {#each sections as section (section.key)}
       {#if section.title}
-        <h2 class="pt-4 pb-2 font-mono text-[11px] tv:text-sm uppercase tracking-widest text-ink-faint">{section.title} <span class="text-ink-faint">· {section.notes.length}</span></h2>
+        {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
+        <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[11px] tv:text-sm uppercase tracking-widest text-ink-faint">
+          <button class="spring press -m-1 p-1 {picked ? 'text-accent' : 'hover:text-ink'}" role="checkbox" aria-checked={picked === section.notes.length ? 'true' : picked ? 'mixed' : 'false'}
+            aria-label="Select all in {section.title}" title="Select all in {section.title}" onclick={() => toggleBand(section.notes)}>
+            {#if picked === section.notes.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}
+          </button>
+          {section.title} <span class="text-ink-faint">· {section.notes.length}</span>
+        </h2>
       {/if}
       <div class="flex items-start gap-2">
         {#each columnsFor(section.notes) as column, columnIndex (columnIndex)}
