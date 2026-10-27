@@ -13,6 +13,8 @@
   let { notice = null, message = '' } = $props();
 
   const WEAREDOGS_URL = 'https://wearedogs.net';
+  const DOGS_URL = 'https://dogs.red';
+  const REPO_URL = 'https://github.com/YEAHDOGS/wordsmith';
   const STEP_STAGGER_MS = 90;
   const BUTTON_CLASS =
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
@@ -36,11 +38,15 @@
   <div class="spine-line pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
 
   <header class="relative z-10 flex items-center justify-between border-b border-line bg-app px-4 py-3 short:py-2 sm:px-8">
-    <div class="flex items-center gap-2.5">
-      <img src={logo} alt="DOGS logo" class="size-8 short:size-6 object-contain spring hover:rotate-12" />
-      <span class="text-fluid-base font-bold tracking-[0.2em]">DOGS</span>
-    </div>
-    <span class="font-mono text-xs text-ink-faint">wordsmith</span>
+    <!-- Same box as the old wrapper div, so the branding doesn't shift; the icon sits before "wordsmith" for the same reason -->
+    <a href={DOGS_URL} target="_blank" rel="noopener noreferrer" class="group flex items-center gap-2.5" aria-label="DOGS (dogs.red)">
+      <img src={logo} alt="DOGS logo" class="size-8 short:size-6 object-contain spring group-hover:rotate-12" />
+      <span class="spring text-fluid-base font-bold tracking-[0.2em] group-hover:text-accent">DOGS</span>
+    </a>
+    <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-1.5 text-ink-faint hover:text-ink" aria-label="wordsmith on GitHub">
+      <ProviderIcon provider="github" class="size-3.5 spring group-hover:rotate-0" />
+      <span class="font-mono text-xs">wordsmith</span>
+    </a>
   </header>
 
   <section class="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-stretch justify-center gap-6 short:gap-3 overflow-y-auto px-4 py-6 short:py-2 tv:max-w-2xl">
