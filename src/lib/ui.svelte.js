@@ -1,8 +1,9 @@
 // UI preferences and transient UI state shared across components: theme, search, the mobile drawer, selected notes.
 import { SvelteSet } from 'svelte/reactivity';
+import { appearance, crossfade } from './appearance.svelte.js';
 
 const THEME_KEY = 'ws_theme';
-const THEMES = ['system', 'dark', 'light'];
+export const THEMES = /** @type {const} */ (['system', 'dark', 'light']);
 const SORT_KEY = 'ws_sort';
 const GROUP_KEY = 'ws_group';
 // Note grid controls: the left button flips the time order, the right one cycles the grouping.
@@ -10,8 +11,6 @@ export const ORDERS = /** @type {const} */ (['updated', 'created']);
 export const GROUPS = /** @type {const} */ (['all', 'project', 'season']);
 // Before grouping existed, "project" was a sort; carry that choice over.
 const LEGACY_PROJECT_SORT = 'project';
-// Must match --ws-app in src/styles/theme.css for each theme: tints the browser and OS chrome.
-const THEME_COLOR_META = 'meta[name="theme-color"]';
 
 class Ui {
   /** @type {'system' | 'dark' | 'light'} */
@@ -40,10 +39,20 @@ class Ui {
     return this.#media.matches ? 'light' : 'dark';
   }
 
+  /** Sets <html data-theme>, then lets appearance layer custom colors and tint the browser chrome. */
   apply() {
     document.documentElement.dataset.theme = this.resolved;
-    const app = getComputedStyle(document.documentElement).getPropertyValue('--ws-app').trim();
-    document.querySelector(THEME_COLOR_META)?.setAttribute('content', app);
+    appearance.apply();
+  }
+
+  /** Settings → Appearance. The page crossfades into the new theme. @param {'system' | 'dark' | 'light'} theme */
+  setTheme(theme) {
+    if (!THEMES.includes(theme)) return;
+    crossfade(() => {
+      this.theme = theme;
+      localStorage.setItem(THEME_KEY, theme);
+      this.apply();
+    });
   }
 
   /** Updated <-> created. */
@@ -70,9 +79,7 @@ class Ui {
   }
 
   cycleTheme() {
-    this.theme = /** @type {any} */ (THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length]);
-    localStorage.setItem(THEME_KEY, this.theme);
-    this.apply();
+    this.setTheme(THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length]);
   }
 }
 

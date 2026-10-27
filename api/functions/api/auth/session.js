@@ -10,7 +10,8 @@ export async function onRequestGet({ request, env }) {
   const auth = await getAuth(request, env);
   const base = { providers: configuredProviders(env), dev_login: devLoginEnabled(request, env) };
   if (!auth || auth.via === 'token') return json({ ...base, user: null });
-  const { results } = await env.DB.prepare('SELECT provider, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all();
+  // provider_user_id is the account's public id at the provider (GitHub's numeric user id): Settings uses it to link the profile
+  const { results } = await env.DB.prepare('SELECT provider, provider_user_id, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all();
   return json({ ...base, user: auth.user, linked: results });
 }
 
