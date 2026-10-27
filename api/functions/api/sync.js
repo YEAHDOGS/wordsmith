@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
       'EXISTS (SELECT 1 FROM note_events WHERE user_id = ?1 AND created_at > ?2)'];
     const { changed } = /** @type {{ changed: number }} */ (await env.DB.prepare(`SELECT (${checks.join(' OR ')}) AS changed`).bind(user.id, since).first());
     if (!changed) {
-      return json({ ...Object.fromEntries(SYNCED_TABLES.map((table) => [table, []])), events: [], attachments: [], cursor: since, server_time: now, more: false });
+      return json({ ...Object.fromEntries(SYNCED_TABLES.map((table) => [table, []])), events: [], attachments: [], cursor: since, server_time: now, more: false, user_id: user.id });
     }
   }
 
@@ -53,6 +53,8 @@ export async function onRequestGet(context) {
     cursor,
     server_time: now,
     more,
+    // Whose data this is: the app checks it against the user it started with (it may trust a cached sign-in).
+    user_id: user.id,
   });
 }
 

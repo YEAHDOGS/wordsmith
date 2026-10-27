@@ -44,6 +44,8 @@ class Store {
   error = $state('');
   /** Called when the server says the session is gone. */
   onUnauthorized = () => {};
+  /** Called when the server's signed-in user isn't the one this store opened for (start-up trusted a stale cache). */
+  onOtherUser = () => {};
 
   /** @type {LocalDb | null} */ #db = null;
   /** @type {Map<string, number>} outbox key "table:id" -> local version */ #outbox = new Map();
@@ -52,6 +54,9 @@ class Store {
   #again = false;
   #lastPrRefresh = 0;
   #lastPull = 0;
+  #userId = '';
+  /** The server has confirmed it is signed in as #userId; nothing is pushed before that. */
+  #verified = false;
   #lastActivity = Date.now();
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #debounce;
   /** @type {ReturnType<typeof setInterval> | undefined} */ #poll;
@@ -72,6 +77,8 @@ class Store {
   /** Loads the local copy for a user, then syncs. @param {string} userId */
   async open(userId) {
     this.close();
+    this.#userId = userId;
+    this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
     const [projects, labels, notes, boards, events, attachments, cursor, outbox] = await Promise.all([
@@ -180,6 +187,9 @@ class Store {
     }
     this.syncing = true;
     try {
+      // First sync after opening: pull first, so the server confirms whose data this is before anything is pushed.
+      if (!this.#verified) await this.#pull();
+      if (!this.#verified) return;
       const pushed = await this.#push();
       // The push already returned the saved rows; other devices' changes can wait for the next poll.
       if (!pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
@@ -243,6 +253,11 @@ class Store {
     let more = true;
     while (more) {
       const result = await api(`/api/sync?since=${this.#cursor}`);
+      if (result.user_id && result.user_id !== this.#userId) {
+        this.onOtherUser();
+        return;
+      }
+      this.#verified = true;
       for (const table of SYNCED) {
         const incoming = (result[table] || []).filter((/** @type {any} */ row) => !this.#outbox.has(`${table}:${row.id}`));
         for (const row of incoming) this.#upsertLocal(table, row);

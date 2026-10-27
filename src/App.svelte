@@ -19,11 +19,14 @@
     : params.get('auth') === 'device_done' ? { kind: /** @type {const} */ ('device_done') } : null;
   const message = params.get('auth_error') || '';
 
-  // Strip the one-time params so a reload doesn't replay them.
-  if (NOTICE_PARAMS.some((key) => params.has(key))) history.replaceState(null, '', location.pathname + location.hash);
+  // Coming back from a sign-in carries one-time params: strip them so a reload doesn't replay them, and ask the server.
+  // Any other start trusts the cached user (one request saved per start); the first sync corrects it if needed.
+  const returning = NOTICE_PARAMS.some((key) => params.has(key));
+  if (returning) history.replaceState(null, '', location.pathname + location.hash);
 
   store.onUnauthorized = () => auth.expired();
-  auth.load();
+  store.onOtherUser = () => auth.load();
+  auth.load(!returning);
 
   let openedFor = '';
   $effect(() => {

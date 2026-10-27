@@ -68,6 +68,8 @@
   }
   $effect(() => {
     loadTokens();
+    // Linked accounts come with the session, which start-up may have skipped.
+    if (!auth.sessionFetched) auth.load();
   });
 
   $effect(() => {
