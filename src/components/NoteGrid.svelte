@@ -238,7 +238,7 @@
     {#each sections as section (section.key)}
       {#if section.title}
         {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
-        <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[11px] tv:text-sm uppercase tracking-widest text-ink-faint">
+        <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint">
           <button class="spring press -m-1 p-1 {picked ? 'text-accent' : 'hover:text-ink'}" role="checkbox" aria-checked={picked === section.notes.length ? 'true' : picked ? 'mixed' : 'false'}
             aria-label="Select all in {section.title}" title="Select all in {section.title}" onclick={() => toggleBand(section.notes)}>
             {#if picked === section.notes.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}

@@ -94,6 +94,12 @@
     store.update('notes', id, patch);
   }
 
+  /** Notes and features keep hand-placed positions in different implied ranges, so switching kind drops the old one. @param {'note' | 'feature'} kind */
+  function setKind(kind) {
+    if (note.kind === kind) return;
+    set({ kind, position: null });
+  }
+
   function close() {
     flush();
     router.closeNote();
@@ -217,8 +223,8 @@
           <section class="flex flex-col gap-2 tv:gap-3" aria-label="Details">
             <div class="flex flex-wrap gap-2">
               <div class="flex border border-line" role="group" aria-label="Kind">
-                <button class="{TOOL} {note.kind === 'note' ? 'bg-surface-raised text-ink' : ''}" aria-pressed={note.kind === 'note'} onclick={() => set({ kind: 'note' })}><StickyNote class="size-4" />Note</button>
-                <button class="{TOOL} {note.kind === 'feature' ? 'bg-accent-soft text-accent' : ''}" aria-pressed={note.kind === 'feature'} onclick={() => set({ kind: 'feature' })}><Lightbulb class="size-4" />Feature</button>
+                <button class="{TOOL} {note.kind === 'note' ? 'bg-surface-raised text-ink' : ''}" aria-pressed={note.kind === 'note'} onclick={() => setKind('note')}><StickyNote class="size-4" />Note</button>
+                <button class="{TOOL} {note.kind === 'feature' ? 'bg-accent-soft text-accent' : ''}" aria-pressed={note.kind === 'feature'} onclick={() => setKind('feature')}><Lightbulb class="size-4" />Feature</button>
               </div>
               <select class="spring min-w-0 flex-1 basis-40 border border-line bg-surface px-2 py-2 text-xs text-ink hover:border-line-strong focus:border-accent focus:outline-none sm:max-w-64 sm:flex-none" aria-label="Project"
                 value={note.project_id ?? ''} onchange={(event) => set({ project_id: event.currentTarget.value || null })}>
@@ -244,7 +250,7 @@
                     {@const on = note.priority === value}
                     <button role="radio" aria-checked={on} onclick={() => set({ priority: value })} title="{label} priority"
                       class="spring press flex min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-semibold {on ? (value >= HIGH_PRIORITY ? 'bg-accent-soft text-accent' : 'bg-surface-raised text-ink') : 'bg-app text-ink-muted hover:bg-surface-raised'}">
-                      <span class="font-mono text-[10px] {on ? '' : 'text-ink-faint'}">{value || '–'}</span><span class="truncate">{label}</span>
+                      <span class="font-mono text-[0.625rem] {on ? '' : 'text-ink-faint'}">{value || '–'}</span><span class="truncate">{label}</span>
                     </button>
                   {/each}
                 </div>
@@ -269,12 +275,12 @@
 
           {#if note.kind === 'feature'}
             <section class="border border-line" aria-label="Pull requests" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
-              <h3 class="border-b border-line px-3 py-2 font-mono text-[11px] uppercase tracking-widest text-ink-faint">Pull requests</h3>
+              <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
               {#each note.pull_requests as pr (pr.url)}
                 <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
                   {#if pr.state === 'merged'}<GitMerge class="size-4 {PR_STYLE.merged}" />{:else}<GitPullRequest class="size-4 {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" />{/if}
                   <span class="min-w-0 flex-1 truncate">{pr.title || `${pr.repo}#${pr.number}`}</span>
-                  <span class="font-mono text-[11px] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
+                  <span class="font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
                   <ExternalLink class="size-3.5 text-ink-faint" />
                 </a>
               {/each}
@@ -289,9 +295,9 @@
 
         <!-- Timeline -->
         <aside class="border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline">
-          <h3 class="mb-3 font-mono text-[11px] uppercase tracking-widest text-ink-faint">Timeline</h3>
+          <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
-          <dl class="mt-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[11px] text-ink-faint">
+          <dl class="mt-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
             <dt>created</dt><dd class="selectable text-ink-muted">{fullTime(note.created_at)}</dd>
             <dt>updated</dt><dd class="selectable text-ink-muted">{fullTime(note.updated_at)}</dd>
             <dt>id</dt>

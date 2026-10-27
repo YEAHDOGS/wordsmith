@@ -110,7 +110,7 @@
       onclick={() => picker?.click()}>
       <Paperclip class="size-3.5" />Attach image or video
     </button>
-    <span class="hidden font-mono text-[11px] text-ink-faint sm:inline">or drop / paste onto the note</span>
+    <span class="hidden font-mono text-[0.6875rem] text-ink-faint sm:inline">or drop / paste onto the note</span>
     <input bind:this={picker} type="file" accept={ACCEPT} multiple class="hidden" onchange={(event) => { add([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
   </div>
 
@@ -132,9 +132,9 @@
       {/each}
       {#each uploads as upload (upload.id)}
         <div class="relative flex aspect-square flex-col justify-end border border-line bg-surface p-2 sm:size-28 tv:size-40" animate:flip={{ duration: 200 }} in:scale={{ start: 0.9, duration: 150 }} out:fade={{ duration: 150 }}>
-          <p class="truncate text-[11px] text-ink-muted">{upload.name}</p>
+          <p class="truncate text-[0.6875rem] text-ink-muted">{upload.name}</p>
           {#if upload.error}
-            <p class="text-[11px] text-accent" in:fade={{ duration: 150 }}>{upload.error}</p>
+            <p class="text-[0.6875rem] text-accent" in:fade={{ duration: 150 }}>{upload.error}</p>
             <button class="spring press absolute top-1 right-1 p-1 text-ink-faint hover:text-ink" aria-label="Dismiss" onclick={() => store.dismissUpload(upload.id)}><X class="size-3.5" /></button>
           {:else}
             <div class="mt-1 h-1 w-full overflow-hidden bg-line">
@@ -153,7 +153,7 @@
   <div data-lightbox class="fixed inset-0 z-50 flex flex-col bg-scrim" transition:fade={{ duration: 150 }} role="dialog" aria-modal="true" aria-label={viewing.name}>
     <div class="flex items-center gap-3 bg-app px-4 py-2">
       <p class="min-w-0 flex-1 truncate text-sm">{viewing.name}</p>
-      <span class="font-mono text-[11px] text-ink-faint">{viewing.size < MB ? `${Math.ceil(viewing.size / KB)} KB` : `${(viewing.size / MB).toFixed(1)} MB`}</span>
+      <span class="font-mono text-[0.6875rem] text-ink-faint">{viewing.size < MB ? `${Math.ceil(viewing.size / KB)} KB` : `${(viewing.size / MB).toFixed(1)} MB`}</span>
       <button class="spring press p-1 text-ink-muted hover:text-ink" aria-label="Close" onclick={() => (viewing = null)}><X class="size-5" /></button>
     </div>
     <div class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4">

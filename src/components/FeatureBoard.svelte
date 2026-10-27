@@ -129,7 +129,7 @@
           {#each shown as note, index (note.id)}
             <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
               {#if column.state === REQUESTED && index === 0}
-                <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[10px] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
+                <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[0.625rem] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
               {/if}
               <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
             </div>

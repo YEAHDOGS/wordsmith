@@ -80,10 +80,6 @@ class Ui {
   selectAll(ids) {
     for (const id of ids) this.selected.add(id);
   }
-
-  cycleTheme() {
-    this.setTheme(THEMES[(THEMES.indexOf(this.theme) + 1) % THEMES.length]);
-  }
 }
 
 export const ui = new Ui();

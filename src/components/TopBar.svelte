@@ -57,7 +57,7 @@
     <!-- Always takes its line (even empty), so pages with and without a subtitle keep the title in place -->
     <div class="short:hidden grid h-4 min-w-0">
       {#key subtitle}
-        <p class="col-start-1 row-start-1 min-w-0 truncate font-mono text-[11px] leading-4 text-ink-faint" in:fade={{ duration: 200, delay: 60 }} out:fade={{ duration: 100 }}>{subtitle}</p>
+        <p class="col-start-1 row-start-1 min-w-0 truncate font-mono text-[0.6875rem] leading-4 text-ink-faint" in:fade={{ duration: 200, delay: 60 }} out:fade={{ duration: 100 }}>{subtitle}</p>
       {/key}
     </div>
   </div>

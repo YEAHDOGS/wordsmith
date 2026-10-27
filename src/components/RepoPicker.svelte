@@ -155,7 +155,7 @@
     <p class="px-3 py-2 text-xs text-ink-muted" transition:slide={{ duration: FLIP_MS }}>Sign in with GitHub (Settings → Link GitHub) to search your repos and your organizations' repos, and see private ones. Public repos work by typing owner/name.</p>
   {/if}
   <!-- Status line keeps its height, so loading, counts and "no matches" crossfade without moving the list -->
-  <p class="relative h-7 overflow-hidden border-b border-line font-mono text-[11px] text-ink-faint" aria-live="polite">
+  <p class="relative h-7 overflow-hidden border-b border-line font-mono text-[0.6875rem] text-ink-faint" aria-live="polite">
     {#key status}
       <span class="absolute inset-0 truncate px-3 leading-7" in:fade={{ duration: STATUS_FADE_MS }} out:fade={{ duration: STATUS_FADE_MS }}>{status}</span>
     {/key}
@@ -163,7 +163,7 @@
   <ul class="relative max-h-64 overflow-x-hidden overflow-y-auto">
     {#each groups as group (group.owner)}
       <li animate:flip={{ duration: FLIP_MS }} in:fade={{ duration: ROW_IN_MS }} out:fade={{ duration: ROW_OUT_MS }}>
-        <p class="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-surface-raised px-3 py-1 font-mono text-[11px] text-ink-muted">
+        <p class="sticky top-0 z-10 flex items-center gap-1.5 border-b border-line bg-surface-raised px-3 py-1 font-mono text-[0.6875rem] text-ink-muted">
           {#if group.org}<Building class="size-3 shrink-0" />{:else}<User class="size-3 shrink-0" />{/if}
           <span class="min-w-0 flex-1 truncate">{group.owner}</span>
           {#if group.org}<span class="shrink-0 text-ink-faint">organization</span>{/if}
@@ -179,7 +179,7 @@
                   </span>
                   {#if repo.description}<span class="block truncate text-xs text-ink-muted">{repo.description}</span>{/if}
                 </span>
-                <span class="shrink-0 font-mono text-[11px] text-ink-faint">pushed {ago(repo.pushed_at)}</span>
+                <span class="shrink-0 font-mono text-[0.6875rem] text-ink-faint">pushed {ago(repo.pushed_at)}</span>
               </button>
             </li>
           {/each}

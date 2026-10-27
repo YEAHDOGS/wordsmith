@@ -36,7 +36,7 @@
   const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent spring';
   // Section headers: the + sits in the count column (same right edge as the project counts), centered on the label.
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
-  const SECTION_LABEL = 'font-mono text-[11px] tv:text-sm uppercase tracking-widest text-ink-faint';
+  const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
   const DOGS_URL = 'https://dogs.red';
   const MADE_BY = 'This product was made by DOGS';
@@ -198,7 +198,7 @@
       </a>
     {/if}
     <div class="flex items-center {compact ? 'justify-center py-1' : 'justify-between py-1 pr-1.5 pl-4'}">
-      {#if !compact}<span class="font-mono text-[11px] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
+      {#if !compact}<span class="font-mono text-[0.6875rem] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
       <button class="spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
         onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>
         <span class="flex spring {active('settings') ? 'rotate-90' : ''}"><Settings class="size-4 tv:size-6" /></span>

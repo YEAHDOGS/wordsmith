@@ -12,7 +12,7 @@
   /** @type {{ onnew: () => void }} */
   let { onnew } = $props();
 
-  const ITEM = 'spring press relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] text-ink-muted';
+  const ITEM = 'spring press relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[0.6875rem] text-ink-muted';
   // Top-edge bar on the active tab; always rendered and scaled, so switching tabs slides rather than pops.
   const INDICATOR = 'pointer-events-none absolute inset-x-4 top-0 h-0.5 bg-accent spring';
   const active = (/** @type {string} */ view) => router.route.view === view;

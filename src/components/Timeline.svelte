@@ -67,12 +67,12 @@
   <ol class="grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4" aria-label="Lifecycle" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
     {#each milestones as step, index (step.label)}
       <li class="bg-app px-3 py-2 transition-opacity duration-300 {step.at ? '' : 'opacity-50'}">
-        <p class="flex items-center gap-1.5 text-[11px] font-semibold {step.at ? step.tone.text : 'text-ink-faint'}">
+        <p class="flex items-center gap-1.5 text-[0.6875rem] font-semibold {step.at ? step.tone.text : 'text-ink-faint'}">
           <span class="size-1.5 rounded-full {step.at ? step.tone.dot : 'bg-line-strong'}"></span>{step.label}
         </p>
-        <p class="selectable mt-0.5 font-mono text-[11px] text-ink-muted" title={fullTime(step.at)}>{step.at ? fullTime(step.at) : '—'}</p>
+        <p class="selectable mt-0.5 font-mono text-[0.6875rem] text-ink-muted" title={fullTime(step.at)}>{step.at ? fullTime(step.at) : '—'}</p>
         {#if index > 0 && step.at && milestones[index - 1].at}
-          <p class="font-mono text-[10px] text-ink-faint" in:fade={{ duration: 200 }}>+{duration(milestones[index - 1].at, step.at)}</p>
+          <p class="font-mono text-[0.625rem] text-ink-faint" in:fade={{ duration: 200 }}>+{duration(milestones[index - 1].at, step.at)}</p>
         {/if}
       </li>
     {/each}
@@ -85,17 +85,17 @@
     <p class="py-2 text-xs text-ink-faint" in:fade={{ duration: 200 }} out:fade={{ duration: 100 }}>History appears here after the first sync.</p>
   {/if}
   {#each days as group (group.day)}
-    <h4 class="relative -ml-6 mb-1 mt-3 first:mt-0 pl-6 font-mono text-[11px] uppercase tracking-widest text-ink-faint">{group.day}</h4>
+    <h4 class="relative -ml-6 mb-1 mt-3 first:mt-0 pl-6 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">{group.day}</h4>
     <ol>
       {#each group.events as event, index (event.id)}
         {@const Icon = ACTOR_ICONS[/** @type {keyof typeof ACTOR_ICONS} */ (event.actor_type)] ?? User}
         <li class="relative py-1.5" in:fly={{ x: -8, duration: 200, delay: Math.min(index * ROW_STAGGER_MS, MAX_STAGGER_MS) }}>
           <span class="absolute top-2.5 -left-5 size-2 rounded-full ring-4 ring-app {event.type === 'pr_merged' || event.data?.to === 'complete' ? 'bg-complete' : event.actor_type === 'agent' ? 'bg-progress' : 'bg-accent'}"></span>
-          <p class="text-[13px] leading-snug text-ink">
+          <p class="text-[0.8125rem] leading-snug text-ink">
             <span class="inline-flex items-center gap-1 font-semibold"><Icon class="size-3.5 text-ink-muted" />{event.actor_name || event.actor_type}</span>
             <span class="text-ink-muted">{describe(event)}</span>
           </p>
-          <time class="selectable font-mono text-[11px] text-ink-faint" datetime={new Date(event.created_at).toISOString()} title={fullTime(event.created_at)}>{clockTime(event.created_at)}</time>
+          <time class="selectable font-mono text-[0.6875rem] text-ink-faint" datetime={new Date(event.created_at).toISOString()} title={fullTime(event.created_at)}>{clockTime(event.created_at)}</time>
         </li>
       {/each}
     </ol>

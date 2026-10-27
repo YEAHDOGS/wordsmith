@@ -198,7 +198,7 @@
   </div>
 
   {#if note.body}
-    <p class="line-clamp-10 whitespace-pre-wrap wrap-break-word text-[13px] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
+    <p class="line-clamp-10 whitespace-pre-wrap wrap-break-word text-[0.8125rem] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
   {/if}
 
   {#if isFeature && note.status}
@@ -208,27 +208,27 @@
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
     {#if files.length}
-      <span class="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted" title="{files.length} attachment{files.length === 1 ? '' : 's'}"><Paperclip class="size-3" />{files.length}</span>
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{files.length} attachment{files.length === 1 ? '' : 's'}"><Paperclip class="size-3" />{files.length}</span>
     {/if}
     {#if note.assignee}
-      <span class="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
     {/if}
     {#each note.pull_requests as pr (pr.url)}
-      <span class="inline-flex items-center gap-1 font-mono text-[11px] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
         {#if pr.state === 'merged'}<GitMerge class="size-3" />{:else}<GitPullRequest class="size-3" />{/if}#{pr.number}
       </span>
     {/each}
     {#if project}
-      <span class="inline-flex max-w-32 items-center gap-1 truncate text-[11px] text-ink-muted"><Folder class="size-3 shrink-0" />{project.name}</span>
+      <span class="inline-flex max-w-32 items-center gap-1 truncate text-[0.6875rem] text-ink-muted"><Folder class="size-3 shrink-0" />{project.name}</span>
     {/if}
     {#each labels as label (label.id)}
-      <span class="inline-flex items-center gap-1 border border-line px-1.5 text-[11px] text-ink-muted">
+      <span class="inline-flex items-center gap-1 border border-line px-1.5 text-[0.6875rem] text-ink-muted">
         <span class="size-1.5 rounded-full {DOT_BG[/** @type {keyof typeof DOT_BG} */ (label.color)] || DOT_BG.default}"></span>{label.name}
       </span>
     {/each}
   </div>
 
-  <p class="font-mono text-[10px] tv:text-sm text-ink-faint" title={fullTime(stamp.at)}>
+  <p class="font-mono text-[0.625rem] tv:text-sm text-ink-faint" title={fullTime(stamp.at)}>
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
 

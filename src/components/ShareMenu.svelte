@@ -1,8 +1,8 @@
 <script>
   // Share button for the note editor. Every note starts private; flipping the switch to public makes it readable by
   // anyone with its link (/n/<id>), served with link-preview tags for the note and its author.
-  // The panel floats in a fixed layer (the toolbar it lives in scrolls sideways and would clip it); phones get a
-  // bottom sheet in thumb reach.
+  // The panel floats in a fixed layer so the editor's scrolling column can't clip it; phones get a bottom sheet in
+  // thumb reach. The editor renders it twice (toolbar from sm up, Details row on phones); each keeps its own state.
   import Share2 from '@lucide/svelte/icons/share-2';
   import Globe from '@lucide/svelte/icons/globe';
   import Lock from '@lucide/svelte/icons/lock';
@@ -80,7 +80,7 @@
     style={anchor ? `top: ${anchor.top}px; left: ${anchor.left}px` : ''}
     in:fly={{ y: anchor ? -6 : 24, duration: 180 }} out:fade={{ duration: 100 }}>
     <div class="flex items-center justify-between">
-      <h2 class="font-mono text-[11px] uppercase tracking-widest text-ink-faint">Share</h2>
+      <h2 class="font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Share</h2>
       <button class="spring press -m-1 p-1 text-ink-muted hover:text-ink" aria-label="Close share" onclick={() => (open = false)}><X class="size-4" /></button>
     </div>
 
@@ -115,7 +115,7 @@
           <a class="spring press flex flex-1 items-center justify-center gap-1.5 border border-line px-3 py-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink"
             href={link} target="_blank" rel="noopener noreferrer"><ExternalLink class="size-4" />Open</a>
         </div>
-        <p class="text-[11px] leading-snug text-ink-faint">
+        <p class="text-[0.6875rem] leading-snug text-ink-faint">
           {syncing ? 'Publishing… the link works once this note syncs.' : 'Link previews show the title, the first lines and your name and avatar. Attachments stay private.'}
         </p>
       </div>

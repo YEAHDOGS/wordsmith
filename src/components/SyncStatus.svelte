@@ -72,7 +72,7 @@
       <RefreshCw class="size-4 tv:size-6" />
     </span>
     {#if problem}
-      <span class="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-requested font-mono text-[9px] leading-none font-bold text-app"
+      <span class="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-requested font-mono text-[0.5625rem] leading-none font-bold text-app"
         aria-hidden="true" transition:scale={BADGE}>?</span>
     {/if}
   </button>
@@ -95,7 +95,7 @@
           onclick={() => store.sync()} disabled={store.syncing}>
           <RefreshCw class="size-4 {store.syncing ? 'spinning' : ''}" />{store.syncing ? 'Retrying' : 'Retry'}
         </button>
-        <span class="min-w-0 truncate font-mono text-[11px] text-ink-faint">{store.lastSync ? `Last synced ${ago(store.lastSync)}` : 'Not synced yet'}</span>
+        <span class="min-w-0 truncate font-mono text-[0.6875rem] text-ink-faint">{store.lastSync ? `Last synced ${ago(store.lastSync)}` : 'Not synced yet'}</span>
       </div>
     </div>
   {/if}
