@@ -1,3 +1,10 @@
+<script module>
+  // The token list is kept for a few minutes across visits to Settings, so opening the page isn't a request every time.
+  const TOKENS_FRESH_MS = 300_000;
+  /** @type {{ at: number, tokens: any[] | null }} */
+  const tokenCache = { at: 0, tokens: null };
+</script>
+
 <script>
   // Account, linked providers, agent API tokens, appearance, the app version and installers, the step-by-step guide to
   // connecting an agent (T3 Code or any other), its two copy-paste prompts, and webhook help. One stacked column on phones, a 1px grid of cards from lg up.
@@ -48,14 +55,21 @@
   ]);
 
   async function loadTokens() {
+    if (tokenCache.tokens && Date.now() - tokenCache.at < TOKENS_FRESH_MS) {
+      tokens = tokenCache.tokens;
+      return;
+    }
     try {
       tokens = (await api('/api/tokens')).tokens;
+      Object.assign(tokenCache, { at: Date.now(), tokens: $state.snapshot(tokens) });
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
     }
   }
   $effect(() => {
     loadTokens();
+    // Linked accounts come with the session, which start-up may have skipped.
+    if (!auth.sessionFetched) auth.load();
   });
 
   $effect(() => {
@@ -74,6 +88,7 @@
       secret = result.secret;
       tokenName = '';
       tokens = [result.token, ...tokens];
+      tokenCache.tokens = $state.snapshot(tokens);
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
     }
@@ -83,6 +98,7 @@
   async function revoke(id) {
     await api(`/api/tokens/${id}`, { method: 'DELETE' }).catch((failure) => (error = failure.message));
     tokens = tokens.filter((token) => token.id !== id);
+    tokenCache.tokens = $state.snapshot(tokens);
   }
 
   /** @param {string} key @param {string} text */

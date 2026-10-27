@@ -56,6 +56,8 @@ export async function refreshPullRequests(env, userId, noteIds) {
 
   const token = await githubToken(env, userId);
   const changes = [];
+  /** @type {string[]} */
+  const unchanged = [];
   for (const row of results) {
     const before = toApi(row);
     const prs = await Promise.all(before.pull_requests.map(async (/** @type {any} */ pr) => {
@@ -63,9 +65,16 @@ export async function refreshPullRequests(env, userId, noteIds) {
       const latest = await fetchPullRequest(token, pr);
       return latest ? { ...pr, ...latest } : pr;
     }));
-    changes.push({ before, patch: { pull_requests: prs, prs_checked_at: now } });
+    if (JSON.stringify(prs) === JSON.stringify(before.pull_requests)) unchanged.push(before.id);
+    else changes.push({ before, patch: { pull_requests: prs, prs_checked_at: now } });
   }
-  return saveNotes(env, userId, GITHUB_ACTOR, changes);
+  // Nothing new on GitHub (the usual case): only stamp the check time. updated_at stays, so devices don't re-download
+  // the note and no edit is recorded; a full save is kept for PRs that really moved.
+  if (unchanged.length) {
+    await env.DB.prepare(`UPDATE notes SET prs_checked_at = ? WHERE user_id = ? AND id IN (${unchanged.map(() => '?').join(', ')})`)
+      .bind(now, userId, ...unchanged).run();
+  }
+  return changes.length ? saveNotes(env, userId, GITHUB_ACTOR, changes) : [];
 }
 
 /**

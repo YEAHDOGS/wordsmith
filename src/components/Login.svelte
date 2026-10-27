@@ -20,6 +20,10 @@
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
 
   let busy = $state('');
+  // Start-up may have trusted a cached user and skipped the session request; the sign-in buttons need its provider list.
+  $effect(() => {
+    if (!auth.sessionFetched) auth.load();
+  });
   const available = $derived(PROVIDERS.filter((provider) => auth.providers.includes(provider)));
   const confirmHref = $derived(
     notice?.kind === 'device_confirm' ? `/api/auth/${notice.provider}/start?device=${encodeURIComponent(notice.device || '')}&confirm=1` : '',

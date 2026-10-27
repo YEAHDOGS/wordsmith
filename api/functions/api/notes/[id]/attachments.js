@@ -3,7 +3,7 @@
 import { requireAuth } from '../../../../lib/auth.js';
 import { assertRoomOnNote, bucket, checkUpload, presentAttachment, release, reserve } from '../../../../lib/attachments.js';
 import { HttpError, json } from '../../../../lib/http.js';
-import { actorForRequest } from '../../../../lib/notes.js';
+import { actorFor } from '../../../../lib/notes.js';
 import { rateLimit } from '../../../../lib/rate-limit.js';
 import { isId } from '../../../../../src/lib/models.js';
 
@@ -39,7 +39,7 @@ export async function onRequestPost(context) {
 
   const now = Date.now();
   const row = { id, user_id: auth.user.id, note_id: params.id, r2_key: key, name, type, size, created_at: now, updated_at: now, deleted_at: null };
-  const actor = await actorForRequest(env, auth);
+  const actor = actorFor(auth);
   await env.DB.batch([
     env.DB.prepare('INSERT INTO attachments (id, user_id, note_id, r2_key, name, type, size, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, auth.user.id, params.id, key, name, type, size, now, now),

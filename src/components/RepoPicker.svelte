@@ -1,3 +1,10 @@
+<script module>
+  // Search answers are kept for a few minutes, so retyping a query or reopening the picker isn't another request.
+  const SEARCH_FRESH_MS = 300_000;
+  /** @type {Map<string, { at: number, result: any }>} */
+  const searchCache = new Map();
+</script>
+
 <script>
   // Link a project to a GitHub repo. Searches your repos, collaborations and organization repos (grouped by owner) when
   // wordsmith has a GitHub token (GitHub sign-in or GITHUB_TOKEN); otherwise, or for any repo, type owner/name and it is
@@ -19,7 +26,7 @@
   /** @type {{ project: any, onclose: () => void }} */
   let { project, onclose } = $props();
 
-  const SEARCH_DEBOUNCE_MS = 250;
+  const SEARCH_DEBOUNCE_MS = 400;
   const MAX_SHOWN = 40;
   const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
   // Result motion: rows spring up in a short stagger, fade out, and the rest glide into place.
@@ -88,7 +95,10 @@
     const ticket = ++latestSearch;
     loading = true;
     try {
-      const result = await api(`/api/github/repos?q=${encodeURIComponent(typedIsRepo ? '' : query.trim())}`);
+      const url = `/api/github/repos?q=${encodeURIComponent(typedIsRepo ? '' : query.trim())}`;
+      const kept = searchCache.get(url);
+      const result = kept && Date.now() - kept.at < SEARCH_FRESH_MS ? kept.result : await api(url);
+      if (result !== kept?.result) searchCache.set(url, { at: Date.now(), result });
       if (ticket !== latestSearch) return;
       repos = result.repos.slice(0, MAX_SHOWN);
       needsGithub = result.needs_github;

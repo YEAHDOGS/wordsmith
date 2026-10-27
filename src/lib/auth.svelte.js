@@ -24,21 +24,34 @@ class Auth {
   /** @type {string[]} */ providers = $state([]);
   /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
   devLogin = $state(false);
+  /** True once providers and linked accounts came from the server; screens that show them load the session if not. */
+  sessionFetched = $state(false);
   /** Native login in progress: the code to match in the browser. @type {{ code: string, provider: string, url: string } | null} */
   device = $state(null);
   error = $state('');
   #deviceRun = 0;
 
-  /** Restores the session; falls back to the cached user when offline so notes stay usable. */
-  async load() {
+  /**
+   * Restores the session; falls back to the cached user when offline so notes stay usable.
+   * With useCache, a cached user is trusted without asking the server (one request saved per app start): the first
+   * sync answers 401 if the session is gone, and names the real user if it changed. Sign-in redirects never use it.
+   * @param {boolean} [useCache]
+   */
+  async load(useCache = false) {
+    const cached = localStorage.getItem(USER_CACHE_KEY);
+    if (useCache && cached) {
+      this.user = JSON.parse(cached);
+      this.status = 'signed_in';
+      return;
+    }
     try {
       const session = await api('/api/auth/session');
       this.providers = session.providers;
       this.devLogin = session.dev_login;
       this.linked = session.linked || [];
+      this.sessionFetched = true;
       this.#setUser(session.user);
     } catch (error) {
-      const cached = localStorage.getItem(USER_CACHE_KEY);
       if (error instanceof ApiError || !cached) {
         this.status = 'signed_out';
         this.error = error instanceof ApiError ? error.message : '';
