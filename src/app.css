@@ -93,7 +93,8 @@ textarea,
 
 /* 150ms spring used by every interactive trigger */
 @utility spring {
-  transition-property: transform, opacity, background-color, border-color, color;
+  /* translate/scale/rotate: Tailwind v4 utilities like rotate-45 and scale-105 set these, not transform */
+  transition-property: transform, translate, scale, rotate, opacity, background-color, border-color, color;
   transition-duration: 150ms;
   transition-timing-function: var(--ease-spring);
 }

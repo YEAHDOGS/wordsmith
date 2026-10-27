@@ -58,6 +58,38 @@
   animation: spin-once 900ms linear infinite;
 }
 
+/* Icon swap: when one icon replaces another in the same button (pencil -> check, search -> close), the new one
+   springs in with a quarter turn instead of popping. Wrap the icon in {#key} and give it .icon-swap. */
+@keyframes icon-in {
+  from {
+    transform: scale(0.4) rotate(-90deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.icon-swap {
+  animation: icon-in 220ms var(--ease-spring) both;
+}
+
+/* Attention badge (sync problem dot on the phone menu button): springs in once, then breathes gently */
+@keyframes badge-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.8);
+  }
+}
+
+.badge-breathe {
+  animation: badge-breathe 2.4s ease-in-out infinite;
+}
+
 /* Text sweep for the wordmark on the sign-in screen */
 @keyframes sweep {
   from {
