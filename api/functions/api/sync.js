@@ -141,17 +141,22 @@ async function saveProjects(env, userId, incoming, existing, now) {
   const names = new Map(holdersLast.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)]));
   // Deletions in this push free their slots up front, so a push that deletes one project and adds another at the cap
   // is not refused just because the new row comes first.
+  // One row per id (the last one sent), so a repeated row can neither apply twice nor free a slot twice.
+  const rows = [...new Map(incoming.map((row) => [String(row.id), row])).values()];
   const liveIds = new Set(live.map((/** @type {any} */ project) => String(project.id)));
-  let count = live.length - incoming.filter((row) => row.deleted_at && liveIds.has(String(row.id))).length;
-  /** @type {{ statement: any, row: Record<string, any>, before: Record<string, any> | null }[]} */
+  const freed = new Set(rows.filter((row) => row.deleted_at && liveIds.has(String(row.id))).map((row) => String(row.id)));
+  let count = live.length - freed.size;
+  /** @type {{ statement: any, next: Record<string, any>, row: Record<string, any>, before: Record<string, any> | null }[]} */
   const writes = [];
-  for (const row of incoming) {
+  for (const row of rows) {
     const before = existing.get(row.id) ?? null;
     let next;
     try {
       const base = before ?? newRow('projects', { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
       next = { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
     } catch (error) {
+      // A refused deletion keeps its project, so it gives its slot back.
+      if (freed.delete(String(row.id))) count++;
       rejected.push({ id: row.id, table: 'projects', error: /** @type {Error} */ (error).message, current: before });
       continue;
     }
@@ -179,7 +184,7 @@ async function saveProjects(env, userId, incoming, existing, now) {
     if (!next.deleted_at && next.name_key !== null) names.set(next.name_key, next.id);
     const statement = upsertStatement(env, 'projects', next, before);
     const { user_id: _owner, ...apiRow } = next;
-    if (statement) writes.push({ statement, row: apiRow, before });
+    if (statement) writes.push({ statement, next, row: apiRow, before });
     saved.push(apiRow);
     if (refusedName) rejected.push({ id: row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${refusedName}" already exists, so the name wasn't changed`, current: apiRow });
   }
@@ -193,10 +198,37 @@ async function saveProjects(env, userId, incoming, existing, now) {
         await write.statement.run();
       } catch (rowError) {
         if (!/UNIQUE/i.test(/** @type {Error} */ (rowError).message)) throw rowError;
-        saved.splice(saved.findIndex((project) => project.id === write.row.id), 1);
-        rejected.push({ id: write.row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${write.row.name}" already exists`, current: write.before });
+        const place = saved.findIndex((project) => project.id === write.row.id);
+        const message = `A project named "${write.row.name}" already exists`;
+        // Another device took the name since the check. A rename still saves its other edits under the stored name,
+        // the same as a rename refused up front; a new project is refused.
+        const kept = write.before && await keepStoredName(env, write);
+        if (kept) {
+          saved[place] = kept;
+          rejected.push({ id: write.row.id, table: 'projects', code: NAME_TAKEN, error: `${message}, so the name wasn't changed`, current: kept });
+        } else {
+          saved.splice(place, 1);
+          rejected.push({ id: write.row.id, table: 'projects', code: NAME_TAKEN, error: message, current: write.before });
+        }
       }
     }
   }
   return { saved, rejected };
+}
+
+/**
+ * Saves a refused rename's other edits under the stored name and key. Returns the saved row, or null if that clashes too.
+ * @param {Record<string, any>} env @param {{ next: Record<string, any>, before: Record<string, any> | null }} write
+ */
+async function keepStoredName(env, write) {
+  const next = { ...write.next, name: write.before?.name, name_key: write.before?.name_key ?? null };
+  const statement = upsertStatement(env, 'projects', next, write.before);
+  try {
+    if (statement) await statement.run();
+  } catch (error) {
+    if (!/UNIQUE/i.test(/** @type {Error} */ (error).message)) throw error;
+    return null;
+  }
+  const { user_id: _owner, ...apiRow } = next;
+  return apiRow;
 }
