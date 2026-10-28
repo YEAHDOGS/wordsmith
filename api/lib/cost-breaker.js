@@ -15,8 +15,11 @@
 const GRAPHQL_URL = 'https://api.cloudflare.com/client/v4/graphql';
 const API_URL = 'https://api.cloudflare.com/client/v4';
 const GB = 1024 ** 3;
-// Free tier: 10 GB-month, 1M Class A, 10M Class B. Trip at 80% storage and 60% of each operation class.
-const MAX_STORAGE_BYTES = 8 * GB;
+// Free tier: 10 GB-month, 1M Class A, 10M Class B. Trip at 95% storage and 60% of each operation class.
+// Storage sits close to the limit on purpose: the per-environment caps in wrangler.jsonc plus dogs-data already add up
+// to 9.25 GB, storage grows slowly, and the 30-day peak used here can only overstate the billed monthly average.
+// Operations can spike within one 10-minute check, so they keep a wide margin.
+const MAX_STORAGE_BYTES = 9.5 * GB;
 const MAX_CLASS_A = 600_000;
 const MAX_CLASS_B = 6_000_000;
 // 6 checks = an hour of not knowing what R2 is costing.
@@ -120,6 +123,8 @@ async function closeBucket(env, url, headers, closed) {
 
 /**
  * Switches off every public way into every bucket. One bucket failing doesn't stop the rest.
+ * Each check makes 2 API calls per bucket plus one per domain it switches off. Workers Free allows 50 subrequests per
+ * invocation, so roughly 20 buckets is the most one check can cover; buckets past that fail and are retried next check.
  * @param {Record<string, any>} env
  * @returns {Promise<{ closed: string[], failures: string[] }>} domains switched off, and what went wrong
  */
@@ -150,9 +155,11 @@ async function closePublicBuckets(env) {
  * @param {number | null} checkedAt set after a successful check (which also resets failures), null after a failed one
  */
 async function trip(env, now, why, checkedAt) {
-  // SET expressions all read the row as it was, so reason is only replaced on the closed -> open transition.
+  // SET expressions all read the row as it was, so reason is only replaced on the closed -> open transition, and then
+  // keeps the old text after it: domains an earlier trip switched off may still be off and must not drop off the list.
   await env.DB.prepare(
-    `UPDATE cost_breaker SET tripped_at = COALESCE(tripped_at, ?1), reason = CASE WHEN tripped_at IS NULL THEN ?2 ELSE reason END,
+    `UPDATE cost_breaker SET tripped_at = COALESCE(tripped_at, ?1),
+       reason = CASE WHEN tripped_at IS NOT NULL THEN reason WHEN reason = '' THEN ?2 ELSE ?2 || ' | before: ' || reason END,
        failures = CASE WHEN ?3 IS NULL THEN failures ELSE 0 END, checked_at = COALESCE(?3, checked_at) WHERE id = 1`,
   ).bind(now, why, checkedAt).run();
   console.error(`cost breaker: OPEN, ${why}`);
@@ -161,7 +168,10 @@ async function trip(env, now, why, checkedAt) {
     return;
   }
   const { closed, failures } = await closePublicBuckets(env);
-  if (closed.length) await env.DB.prepare('UPDATE cost_breaker SET reason = reason || ? WHERE id = 1').bind(`; switched off ${closed.join(', ')}`).run();
+  if (closed.length) {
+    await env.DB.prepare('UPDATE cost_breaker SET reason = reason || ? WHERE id = 1').bind(`; switched off ${closed.join(', ')}`).run();
+    console.error(`cost breaker: switched off ${closed.join(', ')} (turn back on by hand)`);
+  }
   if (failures.length) console.error(`cost breaker: could not switch off ${failures.join('; ')}`);
 }
 
