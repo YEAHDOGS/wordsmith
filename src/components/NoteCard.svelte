@@ -27,7 +27,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { DOT_BG, PR_STYLE, TINT_BG } from '../lib/colors.js';
+  import { DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
   import { LOUD_PRIORITY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
   import { press } from '../lib/press.js';
@@ -241,7 +241,8 @@
       </span>
     {/each}
     {#if project}
-      <span class="inline-flex max-w-32 items-center gap-1 truncate text-[0.6875rem] text-ink-muted"><Folder class="size-3 shrink-0" />{project.name}</span>
+      <!-- In the project's own color, so it pops out of the meta row -->
+      <span class="inline-flex max-w-32 items-center gap-1 truncate text-[0.6875rem] font-semibold {DOT_TEXT[/** @type {keyof typeof DOT_TEXT} */ (project.color)] || DOT_TEXT.default}"><Folder class="size-3 shrink-0" />{project.name}</span>
     {/if}
     {#each labels as label (label.id)}
       <span class="inline-flex items-center gap-1 border border-line px-1.5 text-[0.6875rem] text-ink-muted">
