@@ -30,7 +30,8 @@
   ];
 </script>
 
-<div class="flex min-w-0 items-center gap-0.5 overflow-x-auto scrollbar-none {className}" role="toolbar" aria-label="Formatting">
+<!-- Wraps onto a second line in narrow boxes instead of scrolling sideways out of view, so every button stays on screen -->
+<div class="flex min-w-0 flex-wrap items-center justify-end gap-0.5 {className}" role="toolbar" aria-label="Formatting">
   {#each ACTIONS as action (action.label)}
     <button type="button" class={BUTTON} title={action.label} aria-label={action.label} disabled={preview || !textarea}
       onmousedown={(event) => event.preventDefault()} onclick={() => textarea && action.run(textarea)}>
@@ -39,9 +40,9 @@
   {/each}
   {#if showPreview}
     <span class="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
-    <button type="button" class="{BUTTON} w-auto gap-1 px-1.5 text-xs sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} onclick={() => (preview = !preview)}
+    <button type="button" class="{BUTTON} w-auto shrink-0 gap-1 px-1.5 text-xs sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => (preview = !preview)}
       title={preview ? 'Back to editing' : 'Preview formatting'}>
-      {#if preview}<Pencil class="size-4" />Edit{:else}<Eye class="size-4" />Preview{/if}
+      {#if preview}<Pencil class="size-4 shrink-0" /><span class="hidden sm:inline">Edit</span>{:else}<Eye class="size-4 shrink-0" /><span class="hidden sm:inline">Preview</span>{/if}
     </button>
   {/if}
 </div>

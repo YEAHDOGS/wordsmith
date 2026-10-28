@@ -28,9 +28,14 @@ export function splitByGroup(notes, groups) {
  * @param {any[]} notes @param {string | null} groupId
  */
 export function assignGroup(notes, groupId) {
-  const left = new Set(notes.map((note) => note.group_id).filter((id) => id && id !== groupId));
+  const left = notes.map((note) => note.group_id).filter((id) => id && id !== groupId);
   for (const note of notes) if ((note.group_id ?? null) !== groupId) store.update('notes', note.id, { group_id: groupId });
-  for (const id of left) if (!store.notes.some((note) => note.group_id === id && !note.deleted_at)) store.remove('note_groups', id);
+  pruneGroups(left);
+}
+
+/** Deletes each of these groups that no live note is in any more (after a drag out of it, say). @param {(string | null | undefined)[]} ids */
+export function pruneGroups(ids) {
+  for (const id of new Set(ids)) if (id && !store.notes.some((note) => note.group_id === id && !note.deleted_at)) store.remove('note_groups', id);
 }
 
 /**

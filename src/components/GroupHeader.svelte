@@ -15,6 +15,10 @@
   /** @type {{ group: any, notes: any[], total: number, class?: string }} */
   let { group, notes, total, class: className = '' } = $props();
 
+  // Arrow line weight folded and open (Lucide's default is 2).
+  const STROKE = 2;
+  const STROKE_OPEN = 3;
+
   let editing = $state(false);
   const picked = $derived(notes.filter((note) => ui.selected.has(note.id)).length);
   // "3" when every note in the group is shown here; "2 of 5" when a column or filter shows only some of them.
@@ -31,11 +35,13 @@
     aria-checked={picked && picked === notes.length ? 'true' : picked ? 'mixed' : 'false'} aria-label="Select all in {group.name}" title="Select all in {group.name}" onclick={toggleSelection}>
     {#if picked && picked === notes.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}
   </button>
-  <button class="spring press group/fold flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1 text-left" aria-expanded={!group.collapsed}
+  <!-- No press squash here: the arrow only turns in place. Open groups read bold and bright, folded ones muted -->
+  <button class="spring group/fold flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1 text-left" aria-expanded={!group.collapsed}
     title={group.collapsed ? `Show ${group.name}` : `Fold ${group.name} away`} onclick={() => store.update('note_groups', group.id, { collapsed: !group.collapsed })}>
-    <ChevronRight class="spring size-3.5 shrink-0 text-ink-faint group-hover/fold:text-ink tv:size-5 {group.collapsed ? '' : 'rotate-90'}" />
+    <ChevronRight strokeWidth={group.collapsed ? STROKE : STROKE_OPEN}
+      class="size-3.5 shrink-0 transition-[rotate,color] duration-200 ease-out-soft tv:size-5 {group.collapsed ? 'text-ink-faint group-hover/fold:text-ink-muted' : 'rotate-90 text-ink'}" />
     <span class="size-2 shrink-0 rounded-full {DOT_BG[/** @type {keyof typeof DOT_BG} */ (group.color)] || DOT_BG.default}" aria-hidden="true"></span>
-    <span class="min-w-0 truncate font-semibold text-ink">{group.name}</span>
+    <span class="min-w-0 truncate transition-colors duration-200 {group.collapsed ? 'font-medium text-ink-muted group-hover/fold:text-ink' : 'font-bold text-ink'}">{group.name}</span>
     <span class="shrink-0 font-mono text-ink-faint" aria-label="{count} notes">{count}</span>
   </button>
   <button class="spring press -m-1 shrink-0 p-1 text-ink-faint hover:text-ink" aria-label="Edit {group.name}" title="Rename, recolor or ungroup" onclick={() => (editing = true)}>

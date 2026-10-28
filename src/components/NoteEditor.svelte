@@ -103,7 +103,7 @@
     router.closeNote();
   }
 
-  // However the editor closes (button, Escape, back-swipe, another note opening), a note left completely empty is
+  // However the editor closes (button, Escape, back-swipe, another note opening), it syncs right away, and a note left completely empty is
   // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
   $effect(() => () => {
     flush();
@@ -112,6 +112,8 @@
     const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
     const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
     if (!hasContent && !hasFiles) store.remove('notes', id);
+    // Sync as soon as a note closes (push and pull), instead of waiting for the typing pause or the next poll.
+    store.sync(true);
   });
 
   function addPr() {

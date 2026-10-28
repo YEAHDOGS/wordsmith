@@ -56,6 +56,8 @@ class Store {
   #again = false;
   #lastPrRefresh = 0;
   #lastPull = 0;
+  /** A full sync (push and pull) was asked for and hasn't run yet. */
+  #fullPending = false;
   #userId = '';
   /** The server has confirmed it is signed in as #userId; nothing is pushed before that. */
   #verified = false;
@@ -176,9 +178,13 @@ class Store {
     this.#db?.setMeta('outbox', [...this.#outbox.keys()]);
   }
 
-  /** Push the outbox, then pull changes. Safe to call often; overlapping calls coalesce. */
-  async sync() {
+  /**
+   * Push the outbox, then pull changes. Safe to call often; overlapping calls coalesce.
+   * @param {boolean} [full] always pull after the push (closing a note), even if a pull ran moments ago
+   */
+  async sync(full = false) {
     if (!this.#db) return;
+    if (full) this.#fullPending = true;
     if (this.syncing) {
       this.#again = true;
       return;
@@ -194,7 +200,9 @@ class Store {
       if (!this.#verified) return;
       const pushed = await this.#push();
       // The push already returned the saved rows; other devices' changes can wait for the next poll.
-      if (!pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
+      const full = this.#fullPending;
+      this.#fullPending = false;
+      if (full || !pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
       this.online = true;
       this.lastSync = Date.now();
       this.error = '';

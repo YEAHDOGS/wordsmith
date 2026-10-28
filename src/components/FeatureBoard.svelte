@@ -6,7 +6,8 @@
   // taking the priority of where it lands; into another column it moves there (and changes state if the role differs).
   // Alt+Up/Down reorders, Alt+Left/Right changes column. Each column header has a check box that selects (or clears)
   // every card in it, like the bands on the notes page. In a project, cards in a note group (src/lib/groups.js) sit at the
-  // top of their column under the group's header, which folds them away; the claim order underneath is unchanged.
+  // top of their column, indented under the group's header, which folds them away. Each group is its own drop zone:
+  // drag a card onto a group (its header too, folded or not) to put it in, or onto the rest of the column to take it out.
   import { tick } from 'svelte';
   import { fade, scale, slide } from 'svelte/transition';
   import Square from '@lucide/svelte/icons/square';
@@ -15,10 +16,10 @@
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
-  import { groupsIn, splitByGroup } from '../lib/groups.js';
+  import { groupsIn, pruneGroups, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { STATE_STYLE } from '../lib/colors.js';
+  import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { columnOf } from '../lib/models.js';
   import { columnsFor } from '../lib/board.js';
   import { measure, play } from '../lib/flip.js';
@@ -33,6 +34,8 @@
   const BOARD_GROUP = 'board';
   const FADE_MS = 150;
   const FOLD_MS = 200;
+  // Drop zone key of a note group inside a column: column id, this, group id.
+  const GROUP_KEY = '|group:';
   // Requested runs in claim order: priority first, then manual order (oldest first until moved), the same order the
   // agent API uses for /features/next. The other two roles follow what agents did, newest first.
   const SORTS = {
@@ -54,10 +57,9 @@
     const all = features.filter((note) => columnOf(note, boardColumns).id === column.id).sort(SORTS[/** @type {keyof typeof SORTS} */ (column.state)]);
     return { ...column, all, shown: column.state === COMPLETE ? all.slice(0, completeLimit) : all };
   }));
-  // The feature an agent would claim next: claim order across every Requested-role column.
-  const nextUp = $derived(features.filter((note) => note.state === REQUESTED).sort(SORTS.requested)[0]?.id);
   // Groups belong to a project; the all-projects Features page (scope FEATURES_SCOPE) has none.
   const noteGroups = $derived(groupsIn(scope));
+  const groupIds = $derived(new Set(noteGroups.map((group) => group.id)));
   const groupTotals = $derived(new Map(noteGroups.map((group) => [group.id, features.filter((note) => note.group_id === group.id).length])));
   const currentTab = $derived(columns.some((column) => column.id === activeTab) ? activeTab : columns[0]?.id);
 
@@ -75,36 +77,72 @@
     tick().then(() => play(root, before));
   });
 
-  /** Where a note lands in a column when no slot is picked: its sorted spot in a Requested column, else the top (newest). @param {{ id: string, state: string, all: any[] }} column @param {any} note */
-  function naturalIndex(column, note) {
-    const rest = column.all.filter((other) => other.id !== note.id);
-    if (column.state !== REQUESTED) return column.all.some((other) => other.id === note.id) ? column.all.findIndex((other) => other.id === note.id) : 0;
+  /** A column's notes in one note group, or (null) in none of them. @param {{ all: any[] }} column @param {string | null} groupId */
+  function membersOf(column, groupId) {
+    return column.all.filter((note) => (groupIds.has(note.group_id) ? note.group_id : null) === groupId);
+  }
+
+  /** Where a note lands in a list when no slot is picked: its sorted spot in a Requested column, else the top (newest). @param {any[]} list @param {string} state @param {any} note */
+  function naturalIndex(list, state, note) {
+    const rest = list.filter((other) => other.id !== note.id);
+    if (state !== REQUESTED) return Math.max(0, list.findIndex((other) => other.id === note.id));
     const at = rest.findIndex((other) => SORTS.requested(note, other) < 0);
     return at === -1 ? rest.length : at;
   }
 
-  /** Saves a drop into a column: its id, its state if the role differs, and the claim order in Requested columns. @param {{ id: string, state: string, all: any[] }} column @param {any} note @param {number} index */
-  function drop(column, note, index) {
-    const move = { column_id: column.id, ...(note.state === column.state ? {} : { state: column.state }) };
+  /**
+   * Saves a drop into a column, inside one of its note groups or (null) outside them: its column, its state if the role
+   * differs, its group if that changes (a group left empty goes), and the claim order in Requested columns.
+   * @param {{ id: string, state: string, all: any[] }} column @param {any} note @param {number} index @param {string | null} groupId
+   */
+  function drop(column, note, index, groupId) {
+    const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
+    const move = {
+      column_id: column.id,
+      ...(note.state === column.state ? {} : { state: column.state }),
+      ...(leftGroup === groupId ? {} : { group_id: groupId }),
+    };
     if (column.state !== REQUESTED) {
-      if (columnOf(note, boardColumns).id !== column.id) store.update('notes', note.id, move);
-      return;
+      if (columnOf(note, boardColumns).id !== column.id || leftGroup !== groupId) store.update('notes', note.id, move);
+    } else {
+      const list = membersOf(column, groupId).filter((other) => other.id !== note.id);
+      for (const { id, patch } of placeNote(list, note, index, true)) store.update('notes', id, id === note.id ? { ...patch, ...move } : patch);
     }
-    const list = column.all.filter((other) => other.id !== note.id);
-    for (const { id, patch } of placeNote(list, note, index, true)) store.update('notes', id, id === note.id ? { ...patch, ...move } : patch);
+    if (leftGroup !== groupId) pruneGroups([leftGroup]);
   }
 
-  /** The drop zone for one column. @param {{ id: string, name: string, state: string, all: any[] }} column */
-  function zoneFor(column) {
+  /**
+   * The drop zone for a column's ungrouped cards (the whole column, groups aside), or with a group, for that group's
+   * cards in the column. Group zones sit inside the column's, so the card under the pointer decides which one takes it.
+   * @param {{ id: string, name: string, state: string, all: any[] }} column @param {any} [group]
+   */
+  function zoneFor(column, group = null) {
+    const groupId = group?.id ?? null;
     return {
-      key: column.id,
-      group: BOARD_GROUP,
-      label: column.name,
-      list: () => column.all,
+      key: group ? column.id + GROUP_KEY + group.id : column.id,
+      // Only the column zones are side by side; Alt+Left/Right from a group's card hops columns through its column.
+      group: group ? undefined : BOARD_GROUP,
+      label: group ? `${group.name} in ${column.name}` : column.name,
+      list: () => membersOf(column, groupId),
       sortable: column.state === REQUESTED,
-      naturalIndex: (/** @type {any} */ note) => naturalIndex(column, note),
-      ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(column, note, index),
+      naturalIndex: (/** @type {any} */ note) => naturalIndex(membersOf(column, groupId), column.state, note),
+      ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(column, note, index, groupId),
     };
+  }
+
+  /**
+   * One column as it looks right now, drag preview included: each note group with cards here (or the card being dragged
+   * over it), then the ungrouped rest. A group keeps its header while its last card is dragged out, so it can come back.
+   * @param {{ id: string, shown: any[] }} column
+   */
+  function laneOf(column) {
+    const split = splitByGroup(column.shown, noteGroups);
+    const groups = noteGroups.map((group) => {
+      const own = split.members.get(group.id) ?? [];
+      return { group, own, members: drag.arrange(own, column.id + GROUP_KEY + group.id) };
+    }).filter((entry) => entry.own.length || entry.members.length);
+    const rest = drag.arrange(split.rest, column.id);
+    return { groups, rest, count: rest.length + groups.reduce((sum, entry) => sum + entry.members.length, 0) };
   }
 
   /** A column's check box: picks every card in it, or clears them when all are picked already. @param {any[]} list */
@@ -129,9 +167,6 @@
 
 {#snippet card(/** @type {any} */ note)}
   <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
-    {#if note.id === nextUp}
-      <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[0.625rem] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
-    {/if}
     <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
   </div>
 {/snippet}
@@ -154,10 +189,9 @@
     class="grid min-h-0 flex-1 snap-x snap-mandatory auto-cols-[100%] grid-flow-col grid-rows-[minmax(0,1fr)] gap-px overflow-x-auto overflow-y-hidden border-y border-line bg-line scrollbar-none sm:border md:snap-none md:auto-cols-auto md:grid-flow-row md:grid-cols-[repeat(var(--lanes),minmax(0,1fr))] md:overflow-x-hidden tallscreen:grid-cols-1 tallscreen:grid-flow-row tallscreen:grid-rows-[repeat(var(--lanes),minmax(0,1fr))]">
     {#each columns as column (column.id)}
       {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (column.state)]}
-      {@const shown = drag.arrange(column.shown, column.id)}
+      {@const lane = laneOf(column)}
       {@const picked = column.all.filter((note) => ui.selected.has(note.id)).length}
-      {@const split = splitByGroup(shown, noteGroups)}
-      <section class="flex min-h-0 min-w-0 snap-start flex-col bg-app spring {drag.id && drag.zone === column.id ? 'bg-surface-raised' : ''}" aria-label={column.name}
+      <section class="flex min-h-0 min-w-0 snap-start flex-col bg-app spring {drag.id && (drag.zone === column.id || drag.zone.startsWith(column.id + GROUP_KEY)) ? 'bg-surface-raised' : ''}" aria-label={column.name}
         use:dropzone={zoneFor(column)}>
         <header class="hidden min-w-0 items-center gap-2 border-b border-line px-4 py-2.5 md:flex">
           <button class="spring press -m-1 p-1 disabled:opacity-40 {picked ? 'text-accent' : 'text-ink-faint hover:text-ink'}" role="checkbox" disabled={!column.all.length}
@@ -169,21 +203,24 @@
           <span class="ml-auto font-mono text-xs text-ink-faint">{column.all.length}</span>
         </header>
         <div class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto bg-line">
-          {#each noteGroups as group (group.id)}
-            {@const members = split.members.get(group.id) ?? []}
-            {#if members.length}
-              <GroupHeader {group} notes={members} total={groupTotals.get(group.id) ?? members.length} class="bg-app px-3 py-1.5 text-xs tv:px-4 tv:text-base" />
+          {#each lane.groups as { group, own, members } (group.id)}
+            {@const over = drag.id && drag.zone === column.id + GROUP_KEY + group.id}
+            <!-- One drop zone per group, header included; its cards sit indented behind a rail in the group's color -->
+            <div class="flex flex-col gap-px" use:dropzone={zoneFor(column, group)}>
+              <GroupHeader {group} notes={own} total={groupTotals.get(group.id) ?? own.length} class="spring px-3 py-1.5 text-xs tv:px-4 tv:text-base {over ? 'bg-surface-raised' : 'bg-app'}" />
               {#if !group.collapsed}
-                <div class="flex flex-col gap-px" transition:slide={{ duration: FOLD_MS }}>
-                  {#each members as note (note.id)}{@render card(note)}{/each}
+                <div class="bg-app pl-3 tv:pl-5" transition:slide={{ duration: FOLD_MS }}>
+                  <div class="flex flex-col gap-px border-l-2 bg-line {RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (group.color)] || RAIL_BORDER.default}">
+                    {#each members as note (note.id)}{@render card(note)}{/each}
+                  </div>
                 </div>
               {/if}
-            {/if}
+            </div>
           {/each}
-          {#each split.rest as note (note.id)}{@render card(note)}{/each}
+          {#each lane.rest as note (note.id)}{@render card(note)}{/each}
           <!-- Fills the rest of the lane; the empty message floats in it, so it fades in and out without moving anything -->
           <div class="relative flex-1 bg-app">
-            {#if !shown.length}
+            {#if !lane.count}
               <p class="absolute inset-x-0 top-0 px-4 py-10 text-center text-xs text-ink-faint" transition:fade={{ duration: FADE_MS }}>{EMPTY[/** @type {keyof typeof EMPTY} */ (column.state)]}</p>
             {/if}
           </div>
