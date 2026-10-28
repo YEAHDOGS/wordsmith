@@ -227,7 +227,8 @@
       });
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
-    const writes = placeNotes(list, notes, slot, ui.order === 'priority');
+    // Priority order moves only features between levels: plain notes have no priority control to undo it.
+    const writes = placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
     for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
     for (const { id, patch } of writes) {
       const change = { ...patch, ...own.get(id) };
@@ -236,6 +237,7 @@
     if (leftGroups.length) pruneGroups(leftGroups);
     if (timeOrder) ui.setOrder('manual');
   }
+
   /** The drop zone for one band. @param {{ key: string, title: string, notes: any[] }} section */
   function zoneFor(section) {
     return {

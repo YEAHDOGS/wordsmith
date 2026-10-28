@@ -116,8 +116,10 @@ export async function onRequestPost(context) {
       }
     }
     if (statements.length) await env.DB.batch(statements);
-  }  return json({ saved, rejected, server_time: now });
+  }
+  return json({ saved, rejected, server_time: now });
 }
+
 /**
  * Saves pushed project rows under one rule: one live project per name (projectKey on the stored name, not name_key,
  * which an old Worker may have left empty or stale and the migration's SQL backfill folded A-Z only), at most
@@ -133,8 +135,10 @@ export async function onRequestPost(context) {
 async function saveProjects(env, userId, incoming, existing, now) {
   /** @type {any[]} */ const saved = [];
   /** @type {any[]} */ const rejected = [];
-  const { results: live } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
-  const names = new Map(live.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)]));
+  const { results: live } = await env.DB.prepare('SELECT id, name, name_key FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  // A legacy duplicate pair shares a name: the row holding the stored key wins, whatever order the rows came back in.
+  const holdersLast = [...live].sort((a, b) => Number(a.name_key !== null) - Number(b.name_key !== null));
+  const names = new Map(holdersLast.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)]));
   let count = live.length;
   /** @type {{ statement: any, row: Record<string, any>, before: Record<string, any> | null }[]} */
   const writes = [];

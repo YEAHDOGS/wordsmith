@@ -95,6 +95,7 @@ export async function createProject(env, userId, input) {
   if (now.length >= MAX_PROJECTS) throw new HttpError(FORBIDDEN, `You can have at most ${MAX_PROJECTS} projects`);
   throw new HttpError(CONFLICT, `A project named "${name}" could not be created; try again`);
 }
+
 /** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */
 async function lookups(env, userId) {
   const [projects, labels, boards] = await env.DB.batch([

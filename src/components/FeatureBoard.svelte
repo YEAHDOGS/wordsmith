@@ -122,6 +122,7 @@
     }
     if (leftGroups.length) pruneGroups(leftGroups);
   }
+
   /**
    * The drop zone for a column's ungrouped cards (the whole column, groups aside), or with a group, for that group's
    * cards in the column. Group zones sit inside the column's, so the card under the pointer decides which one takes it.

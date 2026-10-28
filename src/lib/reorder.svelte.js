@@ -92,27 +92,45 @@ export function placeNote(list, note, index, byPriority = false) {
 }
 
 /**
- * The writes for dropping several notes as one block at `index` of `list` (the zone's order without any of them),
- * in the order given: each is placed right after the one before, against the list as the earlier writes leave it.
+ * The writes for dropping several notes as one block at `index` of `list` (the zone's order without any of them), in
+ * the order given. Without priority sorting the block is spaced evenly between its two neighbours in one pass (halving
+ * the gap note by note would run out of room and respace the zone over and over), with one respace of the zone as the
+ * fallback. With priority sorting (byPriority true, or true for a given note) each note is placed after the one before,
+ * since each may take a different priority level.
  * @param {any[]} list
  * @param {any[]} notes
  * @param {number} index
- * @param {boolean} [byPriority]
+ * @param {boolean | ((note: any) => boolean)} [byPriority]
  * @returns {{ id: string, patch: Record<string, any> }[]}
  */
 export function placeNotes(list, notes, index, byPriority = false) {
+  const sortsByPriority = (/** @type {any} */ note) => (typeof byPriority === 'function' ? byPriority(note) : byPriority);
+  if (notes.length === 1) return placeNote(list, notes[0], index, sortsByPriority(notes[0]));
+  if (!notes.some(sortsByPriority)) {
+    const before = list[index - 1] ?? null;
+    const after = list[index] ?? null;
+    const low = before ? orderKey(before) : null;
+    const high = after ? orderKey(after) : null;
+    const count = notes.length;
+    const positions = notes.map((_, slot) => (low !== null && high !== null ? low + ((high - low) * (slot + 1)) / (count + 1)
+      : low !== null ? low + POSITION_STEP * (slot + 1)
+        : high !== null ? high - POSITION_STEP * (count - slot) : null));
+    const fits = positions.every((position, slot) => position !== null && (low === null || position > low) && (high === null || position < high)
+      && (slot === 0 || position > /** @type {number} */ (positions[slot - 1])));
+    if (fits) return notes.map((note, slot) => ({ id: note.id, patch: { position: /** @type {number} */ (positions[slot]) } }));
+    return respace([...list.slice(0, index), ...notes, ...list.slice(index)]);
+  }
   let placed = [...list];
   /** @type {Map<string, Record<string, any>>} */
   const writes = new Map();
   notes.forEach((note, offset) => {
     const at = index + offset;
-    for (const { id, patch } of placeNote(placed, note, at, byPriority)) writes.set(id, { ...writes.get(id), ...patch });
+    for (const { id, patch } of placeNote(placed, note, at, sortsByPriority(note))) writes.set(id, { ...writes.get(id), ...patch });
     placed = placed.map((entry) => (writes.has(entry.id) ? { ...entry, ...writes.get(entry.id) } : entry));
     placed.splice(at, 0, { ...note, ...writes.get(note.id) });
   });
   return [...writes].map(([id, patch]) => ({ id, patch }));
 }
-
 /**
  * Writes that make `order` sort exactly as given. It reuses the keys its notes already have, sorted, nudging repeats
  * apart by MIN_GAP, so the zone stays in the same number space as every note outside it (hidden by a filter,
@@ -195,6 +213,8 @@ class Drag {
   note = $state(null);
   /** Every note being carried, in the order shown: just `note`, or the whole selection when it was part of one. @type {any[]} */
   group = $state([]);
+  /** How many of them the zone under the pointer would take (the ghost's badge). */
+  taking = $state(0);
   /** Zone showing the preview; '' = not placed yet, the card still holds its own slot. */
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
@@ -277,8 +297,13 @@ class Drag {
     // Part of a multi-selection: carry every selected note, in the order this zone shows them, then any others.
     const selected = ui.selected.has(note.id) && ui.selected.size > 1;
     const shown = zone.list().filter((entry) => selected && ui.selected.has(entry.id));
-    const elsewhere = selected ? [...ui.selected].filter((id) => !shown.some((entry) => entry.id === id)).map((id) => store.find('notes', id)).filter((entry) => entry && !entry.deleted_at) : [];
+    // Selected notes outside this zone follow in the order they appear on screen; any not on screen come last.
+    const onScreen = [...document.querySelectorAll(CARD_SELECTOR)].map((card) => /** @type {HTMLElement} */ (card).dataset.flipId ?? '');
+    const rank = (/** @type {string} */ id) => (onScreen.includes(id) ? onScreen.indexOf(id) : onScreen.length);
+    const elsewhere = selected ? [...ui.selected].filter((id) => !shown.some((entry) => entry.id === id)).sort((a, b) => rank(a) - rank(b))
+      .map((id) => store.find('notes', id)).filter((entry) => entry && !entry.deleted_at) : [];
     this.group = selected ? [...shown, ...elsewhere] : [note];
+    this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
     this.landing = false;
@@ -403,6 +428,7 @@ class Drag {
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
     const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
+    this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
   }
@@ -424,8 +450,11 @@ class Drag {
     this.#stop();
     const list = zone?.list() ?? [];
     const notes = this.#takenBy(zone);
-    // A single card dropped back on its own slot: nothing to save. A block always saves (it gathers the selection).
-    if (zone && (notes.length > 1 || list.findIndex((entry) => entry.id === note.id) !== index)) zone.ondrop(notes, index);
+    // Let go where it started (the block already sits together, in order, at this slot of this zone): nothing to save,
+    // so the chosen sort isn't switched to manual either.
+    const start = list.findIndex((entry) => entry.id === notes[0]?.id);
+    const inPlace = start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id);
+    if (zone && !inPlace) zone.ondrop(notes, index);
     this.#land();
   };
 
