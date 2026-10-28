@@ -7,7 +7,7 @@ import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
-import { MAX_SYNC_BATCH, cleanRow, isId, newRow } from '../../../src/lib/models.js';
+import { MAX_SYNC_BATCH, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
@@ -96,10 +96,15 @@ export async function onRequestPost(context) {
     }
 
     const statements = [];
+    // Projects: one live project per name (projectKey). Each live project's key -> id, kept current through this batch.
+    /** @type {Map<string, string> | null} */
+    const projectNames = table === 'projects' ? new Map((await env.DB.prepare('SELECT id, name_key, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).all())
+      .results.map((/** @type {any} */ project) => [project.name_key ?? projectKey(project.name), String(project.id)])) : null;
     for (const row of incoming) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
         const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+        if (projectNames) claimProjectName(projectNames, next);
         const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
@@ -111,4 +116,18 @@ export async function onRequestPost(context) {
     if (statements.length) await env.DB.batch(statements);
   }
   return json({ saved, rejected, server_time: now });
+}
+
+/**
+ * Stamps a project's name_key and holds its name for this batch, or throws when another live project already has it
+ * (the database's unique index would otherwise fail the whole batch). A project keeps its own name across renames.
+ * @param {Map<string, string>} names live project key -> id
+ * @param {Record<string, any>} project the row about to be saved
+ */
+function claimProjectName(names, project) {
+  project.name_key = projectKey(project.name);
+  const holder = names.get(project.name_key);
+  if (!project.deleted_at && holder && holder !== project.id) throw new Error(`A project named "${project.name}" already exists`);
+  for (const [key, id] of names) if (id === project.id) names.delete(key);
+  if (!project.deleted_at) names.set(project.name_key, project.id);
 }

@@ -123,7 +123,7 @@ export const MODELS = {
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
+export const SERVER_FIELDS = { projects: ['name_key'], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
@@ -157,6 +157,16 @@ export function columnOf(note, columns) {
   const own = columns.find((column) => column.id === note.column_id);
   if (own?.state === note.state) return own;
   return columns.find((column) => column.state === note.state) ?? columns[0];
+}
+
+/**
+ * A project name folded for comparison: Unicode NFC, trimmed, lowercased, so "Café", "café" and " CAFÉ " match.
+ * The server stores it as projects.name_key (unique per user among live projects); the app checks it before creating
+ * or renaming. One rule everywhere, since SQLite's lower() only folds A-Z.
+ * @param {unknown} name
+ */
+export function projectKey(name) {
+  return String(name ?? '').normalize('NFC').trim().toLowerCase();
 }
 
 /** @param {unknown} value */

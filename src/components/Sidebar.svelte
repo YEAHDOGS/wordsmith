@@ -20,7 +20,7 @@
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG } from '../lib/colors.js';
-  import { MAX_NAME } from '../lib/models.js';
+  import { MAX_NAME, projectKey } from '../lib/models.js';
   import { APP_VERSION } from '../lib/version.js';
 
   /** @type {{ compact?: boolean }} */
@@ -45,6 +45,7 @@
   let newProject = $state('');
   let newLabel = $state('');
   let addingProject = $state(false);
+  let projectError = $state('');
   let addingLabel = $state(false);
   let editingLabels = $state(false);
 
@@ -73,6 +74,11 @@
     event.preventDefault();
     const name = newProject.trim();
     if (!name) return;
+    // One project per name (projectKey: case and accents folded the same way the server does).
+    if (projects.some((other) => projectKey(other.name) === projectKey(name))) {
+      projectError = `You already have a project called "${name}".`;
+      return;
+    }
     const project = store.create('projects', { name });
     ui.newProjectId = project.id;
     newProject = '';
@@ -126,7 +132,9 @@
       <form class="px-4 py-1" onsubmit={addProject} transition:slide={{ duration: 150 }}>
         <input {@attach (node) => node.focus()} bind:value={newProject} maxlength={MAX_NAME} placeholder="Project name" aria-label="New project name"
           class="w-full border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+          aria-describedby={projectError ? 'project-name-error' : undefined} oninput={() => (projectError = '')}
           onkeydown={(event) => event.key === 'Escape' && (addingProject = false)} />
+        {#if projectError}<p id="project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
       </form>
     {/if}
     {#each projects as project (project.id)}

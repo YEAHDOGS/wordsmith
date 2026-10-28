@@ -18,7 +18,7 @@
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { reveal } from '../lib/reveal.js';
-  import { FEATURES_SCOPE, MAX_MISSION, MAX_NAME } from '../lib/models.js';
+  import { FEATURES_SCOPE, MAX_MISSION, MAX_NAME, projectKey } from '../lib/models.js';
   import { renderMarkdown } from '../lib/markdown.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
@@ -37,6 +37,7 @@
   const MISSION_SAVE_MS = 600;
 
   let copied = $state(false);
+  let nameError = $state('');
   // Mission statement: savedMission is the text last loaded or saved here. Only typing (mission differs from it) is ever
   // saved, so a newer version synced from another device is shown, never written over; and a sync landing mid-typing
   // doesn't replace what you're writing.
@@ -84,7 +85,15 @@
       event.currentTarget.value = project.name;
       return;
     }
-    if (name !== project.name) store.update('projects', project.id, { name });
+    if (name === project.name) return;
+    // One project per name (projectKey, the same rule as the server): a taken name puts the old one back and says why.
+    if (store.projects.some((other) => !other.deleted_at && other.id !== project.id && projectKey(other.name) === projectKey(name))) {
+      event.currentTarget.value = project.name;
+      nameError = `You already have a project called "${name}".`;
+      return;
+    }
+    nameError = '';
+    store.update('projects', project.id, { name });
   }
 
   async function copyPrompt() {
@@ -112,7 +121,9 @@
         <h2 class={HEADING}>{TEXT.project}</h2>
         <label class="mt-4 block">
           <span class={LABEL}>{TEXT.name}</span>
-          <input value={project.name} maxlength={MAX_NAME} onchange={rename} class="{FIELD} font-semibold" />
+          <input value={project.name} maxlength={MAX_NAME} onchange={rename} oninput={() => (nameError = '')} aria-describedby={nameError ? 'project-name-error' : undefined}
+            class="{FIELD} font-semibold" />
+          {#if nameError}<span id="project-name-error" class="mt-1 block text-xs text-accent" role="alert" transition:slide={SWAP}>{nameError}</span>{/if}
         </label>
         <div class="mt-4">
           <span class={LABEL}>{TEXT.color}</span>

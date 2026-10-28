@@ -1,5 +1,5 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, MAX_PROJECTS, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, MAX_PROJECTS, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl, projectKey } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
@@ -27,15 +27,17 @@ const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, cr
  */
 export async function resolveProject(env, userId, ref) {
   if (ref === undefined || ref === null || ref === '') return null;
-  const row = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR lower(name) = lower(?)) LIMIT 1')
-    .bind(userId, String(ref), String(ref)).first();
+  // By id, or by name folded like projectKey (unique per user). A row an old Worker wrote without a key falls back to lower().
+  const row = await env.DB.prepare(`SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL
+    AND (id = ? OR name_key = ? OR (name_key IS NULL AND lower(name) = lower(?))) LIMIT 1`)
+    .bind(userId, String(ref), projectKey(ref), String(ref)).first();
   if (!row) throw new HttpError(404, `No project "${ref}"`);
   return toApi(row);
 }
 
 /**
  * Creates a project for an agent: { name, description?, color?, repo? (owner/name) }. Names are unique per user
- * (case-insensitive for A-Z, like resolveProject), so an agent asking for a project it already has gets
+ * (projectKey: Unicode, case-insensitive, trimmed), so an agent asking for a project it already has gets
  * { existing } back and can use that one. The duplicate check, the MAX_PROJECTS cap and the insert are one statement,
  * so two agents creating the same name at once can't both succeed.
  * @param {Record<string, any>} env
@@ -59,18 +61,21 @@ export async function createProject(env, userId, input) {
   } catch (error) {
     throw new HttpError(400, /** @type {Error} */ (error).message);
   }
-  const row = { ...newRow('projects', fields), user_id: userId };
+  const key = projectKey(name);
+  const row = { ...newRow('projects', fields), user_id: userId, name_key: key };
   const columns = Object.keys(row);
   const result = await env.DB.prepare(
     `INSERT INTO projects (${columns.join(', ')}) SELECT ${columns.map(() => '?').join(', ')}
-     WHERE NOT EXISTS (SELECT 1 FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?))
+     WHERE NOT EXISTS (SELECT 1 FROM projects WHERE user_id = ? AND deleted_at IS NULL AND name_key = ?)
        AND (SELECT COUNT(*) FROM projects WHERE user_id = ? AND deleted_at IS NULL) < ?`,
-  ).bind(...columns.map((column) => row[column]), userId, name, userId, MAX_PROJECTS).run();
+  ).bind(...columns.map((column) => row[column]), userId, key, userId, MAX_PROJECTS).run()
+    // The unique index (user_id, name_key) caught a write that slipped in between: same answer as a taken name.
+    .catch((/** @type {Error} */ error) => { if (/UNIQUE/i.test(error.message)) return { meta: { changes: 0 } }; throw error; });
   if (result.meta.changes) {
     const { user_id: _owner, ...project } = row;
     return { project };
   }
-  const existing = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?) LIMIT 1').bind(userId, name).first();
+  const existing = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL AND name_key = ? LIMIT 1').bind(userId, key).first();
   if (!existing) throw new HttpError(409, `You can have at most ${MAX_PROJECTS} projects`);
   return { existing: { id: String(existing.id), name: String(existing.name) } };
 }
