@@ -5,11 +5,19 @@ import { requireAuth } from '../../../lib/auth.js';
 import { bucket, release, reserve } from '../../../lib/attachments.js';
 import { HttpError, json } from '../../../lib/http.js';
 import { actorFor } from '../../../lib/notes.js';
-import { isId } from '../../../../src/lib/models.js';
+import { attachmentKind, isId } from '../../../../src/lib/models.js';
 
 const CACHE_FOREVER = 'private, max-age=31536000, immutable';
 const PARTIAL_CONTENT = 206;
 const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
+// Served from the app's origin, so never let a file act like a page. Browsers won't show a PDF in a sandboxed
+// document, and Chrome's viewer embeds the file itself, so PDFs drop the sandbox and allow only that embed; the
+// viewer runs apart from the app and can't reach it.
+const SANDBOXED = "default-src 'none'; sandbox";
+const PDF_POLICY = "default-src 'none'; object-src 'self'";
+const PDF = 'application/pdf';
+// Text is sent as UTF-8 so notes in any language read right.
+const TEXT_CHARSET = '; charset=utf-8';
 
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
 async function load(context) {
@@ -42,15 +50,17 @@ export async function onRequestGet(context) {
   const object = await files.get(row.r2_key, range ? { range } : undefined);
   if (!object) throw new HttpError(404, 'File is missing from storage');
 
+  const type = String(row.type);
+  // Images, videos and PDFs show in the browser; other documents always download.
+  const disposition = attachmentKind(type) !== 'document' || type === PDF ? 'inline' : 'attachment';
   const headers = new Headers({
-    'Content-Type': String(row.type),
+    'Content-Type': type.startsWith('text/') ? type + TEXT_CHARSET : type,
     'Cache-Control': CACHE_FOREVER,
     ETag: `"${row.id}"`,
     'Accept-Ranges': 'bytes',
     'X-Content-Type-Options': 'nosniff',
-    // Served from the app's origin, so never let a file act like a page.
-    'Content-Security-Policy': "default-src 'none'; sandbox",
-    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(String(row.name))}`,
+    'Content-Security-Policy': type === PDF ? PDF_POLICY : SANDBOXED,
+    'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(String(row.name))}`,
   });
   if (!range) {
     headers.set('Content-Length', String(row.size));

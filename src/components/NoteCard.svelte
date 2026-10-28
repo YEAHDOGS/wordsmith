@@ -62,8 +62,8 @@
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.deleted_at));
   const isFeature = $derived(note.kind === 'feature');
   const files = $derived(store.attachmentsFor(note.id));
-  // Keep-style cover: the first image, else the first video frame.
-  const cover = $derived(files.find((file) => file.type.startsWith('image/')) ?? files[0] ?? null);
+  // Keep-style cover: the first image, else the first video frame. Documents are never a cover.
+  const cover = $derived(files.find((file) => file.type.startsWith('image/')) ?? files.find((file) => file.type.startsWith('video/')) ?? null);
   // The latest timestamp in the chain is the one worth showing on a card.
   const stamp = $derived(
     note.completed_at ? { label: 'completed', at: note.completed_at }
