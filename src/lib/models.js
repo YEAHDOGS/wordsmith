@@ -65,6 +65,11 @@ export const DIFFICULTY_LABELS = ['Unrated', 'Trivial', 'Easy', 'Medium', 'Hard'
 export const MAX_DIFFICULTY = DIFFICULTY_LABELS.length - 1;
 export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
 export const MAX_ANALYSIS = 20_000;
+// Trash: deleted rows of these tables stay recoverable for TRASH_DAYS, then the server purges them (api/lib/trash.js).
+export const TRASH_DAYS = 30;
+export const DAY_MS = 86_400_000;
+export const TRASH_MS = TRASH_DAYS * DAY_MS;
+export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
 
 /** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number }} FieldRule */
 
@@ -125,8 +130,9 @@ export const MODELS = {
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
+// purged_at: when a deleted row left the trash for good (migration 20261028100000); restoring it clears it.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: ['name_key'], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
+export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at'], boards: [], note_groups: ['purged_at'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];

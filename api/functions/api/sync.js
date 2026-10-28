@@ -7,18 +7,21 @@ import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
+import { schedulePurge, settleTrash } from '../../lib/trash.js';
 import { MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
 const CURSOR_OVERLAP_MS = 5_000;
 
-/** @param {{ request: Request, env: Record<string, any> }} context */
+/** @param {{ request: Request, env: Record<string, any>, waitUntil?: (promise: Promise<any>) => void }} context */
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { env, request } = context;
   const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
   const now = Date.now();
+  // Rows past their days in the trash are purged in the background; the purge stamps updated_at, so the next pull has them.
+  schedulePurge(context, user.id);
 
   // Most polls find nothing new: answer those with one small query instead of one per table.
   if (since) {
@@ -106,7 +109,7 @@ export async function onRequestPost(context) {
     for (const row of incoming) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-        const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null });
         const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
@@ -153,7 +156,7 @@ async function saveProjects(env, userId, incoming, existing, now) {
     let next;
     try {
       const base = before ?? newRow('projects', { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-      next = { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+      next = settleTrash('projects', { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null });
     } catch (error) {
       // A refused deletion keeps its project, so it gives its slot back.
       if (freed.delete(String(row.id))) count++;

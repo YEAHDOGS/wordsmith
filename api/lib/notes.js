@@ -3,6 +3,7 @@
 import { LEGACY_PRIORITY, cleanRow, newRow } from '../../src/lib/models.js';
 import { HttpError } from './http.js';
 import { upsertStatement } from './rows.js';
+import { settleTrash } from './trash.js';
 
 // Autosave sends many small edits; only one "edited" event is logged per note per window.
 const EDIT_EVENT_WINDOW_MS = 600_000;
@@ -97,8 +98,8 @@ export async function saveNotes(env, userId, actor, changes) {
     // Every note is a feature (migration 20261027070000): older app builds and the agent API may still send "note".
     const after = { ...base, ...cleaned, kind: FEATURE_KIND, user_id: userId, updated_at: now };
     if (patch.deleted_at !== undefined) after.deleted_at = patch.deleted_at ? Math.min(Number(patch.deleted_at), now) : null;
-    // Deleted notes keep only their tombstone on the server.
-    if (after.deleted_at) Object.assign(after, { title: '', body: '', analysis: '', public: false });
+    // A deleted note keeps its content in the trash until it's purged (api/lib/trash.js); restoring clears purged_at.
+    settleTrash('notes', after);
     if (patch.prs_checked_at !== undefined) after.prs_checked_at = patch.prs_checked_at;
     // Two priority columns while old builds are around (migration 20261027040000): a patch without priority_level
     // comes from an old build, or a row cached before the upgrade, so a changed old-scale value is converted up.

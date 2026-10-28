@@ -2,11 +2,12 @@
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
   // Projects and Labels scroll inside their own capped boxes; LOWER_NAV holds future tabs right above the footer.
   // Top: logo, wordmark and the sync icon, the same height as the top bar so their bottom lines meet. Bottom: the app
-  // version, the archive (no count badge; the count is in its tooltip) and a settings cog; the rail stacks the two buttons. The Made by DOGS
+  // version, the archive and the trash (no count badges; the counts are in their tooltips) and a settings cog; the rail stacks the buttons. The Made by DOGS
   // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
   import Archive from '@lucide/svelte/icons/archive';
+  import Trash2 from '@lucide/svelte/icons/trash-2';
   import Settings from '@lucide/svelte/icons/settings';
   import Plus from '@lucide/svelte/icons/plus';
   import Pencil from '@lucide/svelte/icons/pencil';
@@ -23,6 +24,7 @@
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG } from '../lib/colors.js';
   import { MAX_NAME, projectKey } from '../lib/models.js';
+  import { trashItems } from './trash.js';
   import { APP_VERSION } from '../lib/version.js';
 
   /** @type {{ compact?: boolean }} */
@@ -61,6 +63,8 @@
   const projects = $derived(store.projects.filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
   const labels = $derived(store.labels.filter((l) => !l.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
   const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
+  // Read on each change to the store; the page itself keeps the countdown fresh.
+  const trashCount = $derived(trashItems(Date.now()).length);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
     /** @type {Record<string, number>} */
@@ -248,6 +252,10 @@
       <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}
         title={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-label={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-current={active('archive') ? 'page' : undefined}>
         <span class="flex spring {active('archive') ? '-translate-y-px scale-110' : ''}"><Archive class="size-4 tv:size-6" /></span>
+      </button>
+      <button class="{FOOTER_BUTTON} {active('trash') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('trash')}
+        title={trashCount ? `Trash, ${trashCount} deleted` : 'Trash'} aria-label={trashCount ? `Trash, ${trashCount} deleted` : 'Trash'} aria-current={active('trash') ? 'page' : undefined}>
+        <span class="flex spring {active('trash') ? '-translate-y-px scale-110' : ''}"><Trash2 class="size-4 tv:size-6" /></span>
       </button>
       <button class="{FOOTER_BUTTON} {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
         onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>

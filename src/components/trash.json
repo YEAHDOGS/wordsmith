@@ -1,0 +1,22 @@
+{
+  "title": "Trash",
+  "subtitle": "Deleted things wait here for {days} days",
+  "intro": "Anything you delete stays here for {days} days, then it's gone for good, attachments and all.",
+  "empty": "The trash is empty.",
+  "noMatches": "Nothing in the trash matches.",
+  "emptyTrash": "Empty trash",
+  "confirmEmpty": "Delete all {count} forever",
+  "keep": "Keep",
+  "restore": "Restore",
+  "deleteForever": "Delete forever",
+  "confirmDelete": "Delete forever?",
+  "yes": "Delete",
+  "untitled": "Untitled",
+  "deletedToday": "Deleted today",
+  "deletedDaysAgo": "Deleted {n}d ago",
+  "purgesIn": "gone in {n}d",
+  "kinds": { "notes": "Note", "projects": "Project", "labels": "Label" },
+  "nameTaken": "A project named \"{name}\" already exists. Rename it first, then restore this one.",
+  "offline": "Deleting forever needs a connection. Try again once you're online.",
+  "itemCount": "{count} in the trash"
+}

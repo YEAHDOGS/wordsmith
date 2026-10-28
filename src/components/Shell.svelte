@@ -17,10 +17,12 @@
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
   import SelectionBar from './SelectionBar.svelte';
+  import Trash from './Trash.svelte';
+  import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { FEATURES_SCOPE } from '../lib/models.js';
+  import { FEATURES_SCOPE, TRASH_DAYS } from '../lib/models.js';
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
@@ -59,6 +61,7 @@
       }
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
+      case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
       case 'project-settings': return { title: project?.name || 'Project', subtitle: 'Project settings' };
@@ -133,6 +136,8 @@
         <div class="absolute inset-0 flex flex-col" in:fly={PAGE_IN} out:fade={PAGE_OUT}>
           {#if route.view === 'settings'}
             <Settings />
+          {:else if route.view === 'trash'}
+            <Trash />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}

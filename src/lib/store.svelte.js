@@ -179,6 +179,28 @@ class Store {
     return this.update(table, id, { deleted_at: Date.now() });
   }
 
+  /**
+   * Deletes trashed rows for good on the server ("Delete forever"), or the whole trash with 'all' ("Empty trash").
+   * Needs a connection: purging removes attachment files, which only the server can do. Deletes still waiting in the
+   * outbox are pushed first, since the server only purges rows it knows are deleted.
+   * @param {Partial<Record<Table, string[]>> | 'all'} rows
+   */
+  async purge(rows) {
+    const keys = rows === 'all' ? [...this.#outbox.keys()] : Object.entries(rows).flatMap(([table, ids]) => (ids || []).map((id) => `${table}:${id}`));
+    if (keys.some((key) => this.#outbox.has(key))) await this.sync();
+    let more = true;
+    while (more) {
+      const result = await api('/api/trash', { method: 'POST', body: rows === 'all' ? { all: true } : rows });
+      for (const table of SYNCED) {
+        const saved = result.saved[table] || [];
+        for (const row of saved) this.#upsertLocal(table, row);
+        await this.#db?.put(table, saved);
+      }
+      more = result.more;
+    }
+    this.sync();
+  }
+
   #persistOutbox() {
     this.pending = this.#outbox.size;
     this.#db?.setMeta('outbox', [...this.#outbox.keys()]);
