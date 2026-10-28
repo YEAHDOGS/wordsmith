@@ -37,9 +37,11 @@ function lifecycle(before, after, now, actor) {
     if (pr.state === 'closed' && previous && previous.state !== 'closed') events.push({ type: 'pr_closed', data: { url: pr.url } });
   }
 
-  // Every linked PR merged -> the feature files itself away as complete.
+  // Every linked PR merged -> the feature files itself away as complete. A PR closed without merging (combined into
+  // another, or abandoned) doesn't block that, as long as at least one linked PR merged.
   const prs = after.pull_requests;
-  const allMerged = after.kind === 'feature' && prs.length > 0 && prs.every((/** @type {any} */ pr) => pr.state === 'merged');
+  const live = prs.filter((/** @type {any} */ pr) => pr.state !== 'closed');
+  const allMerged = after.kind === 'feature' && live.length > 0 && live.every((/** @type {any} */ pr) => pr.state === 'merged');
   const newlyMerged = prs.some((/** @type {any} */ pr) => pr.state === 'merged' && beforePrs.get(pr.url)?.state !== 'merged');
   if (allMerged && newlyMerged && after.state !== STATE_COMPLETE) {
     after.state = STATE_COMPLETE;
