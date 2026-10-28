@@ -11,6 +11,8 @@ const MAX_LIMIT = 200;
 const CLAIM_CANDIDATES = 5;
 const MAX_EVENTS = 200;
 const MAX_BATCH_NOTES = 500;
+const FORBIDDEN = 403;
+const CONFLICT = 409;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
@@ -31,7 +33,8 @@ export async function resolveProject(env, userId, ref) {
   // By id, or by name_key (indexed; the usual case).
   const direct = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR name_key = ?) LIMIT 1')
     .bind(userId, String(ref), key).first();
-  if (direct) return toApi(direct);
+  // The key must still match the name: an old Worker mid-deploy can rename a project without updating its key.
+  if (direct && (direct.id === String(ref) || projectKey(direct.name) === key)) return toApi(direct);
   // Miss: compare live names with projectKey (at most MAX_PROJECTS rows). Catches keys an old Worker left empty and legacy
   // non-ASCII names the migration's SQL backfill folded A-Z only.
   const { results } = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
@@ -85,9 +88,12 @@ export async function createProject(env, userId, input) {
     const { user_id: _owner, ...project } = row;
     return { project };
   }
-  const existing = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL AND name_key = ? LIMIT 1').bind(userId, key).first();
-  if (!existing) throw new HttpError(409, `You can have at most ${MAX_PROJECTS} projects`);
-  return { existing: { id: String(existing.id), name: String(existing.name) } };
+  // Nothing inserted: either the cap, or a project with this name appeared since the check. Re-read and match by name.
+  const { results: now } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const clash = now.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (clash) return { existing: { id: String(clash.id), name: String(clash.name) } };
+  if (now.length >= MAX_PROJECTS) throw new HttpError(FORBIDDEN, `You can have at most ${MAX_PROJECTS} projects`);
+  throw new HttpError(CONFLICT, `A project named "${name}" could not be created; try again`);
 }
 /** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */
 async function lookups(env, userId) {

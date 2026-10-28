@@ -135,8 +135,9 @@
   </div>
 
   <!-- Top nav, then Projects and Labels: each list scrolls inside its own capped box, so neither crowds the other or
-       the tabs below. When the sidebar is short, both lists shrink and scroll rather than pushing anything off screen. -->
-  <div class="flex min-h-0 flex-1 flex-col overflow-hidden py-2" bind:this={lists}>
+       the tabs below. When the sidebar is short, both lists shrink and scroll; if even that isn't enough (a 320px-tall
+       window with both add forms open), the whole column scrolls, so nothing is ever cut off. -->
+  <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2" bind:this={lists}>
     {#each NAV as item (item.view)}
       <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
         <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
@@ -151,7 +152,7 @@
     {:else}
       <div class={SECTION}>
         <span class={SECTION_LABEL}>Projects</span>
-        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => (addingProject = !addingProject)}>
+        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; }}>
           <span class="flex spring {addingProject ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
         </button>
       </div>
@@ -160,9 +161,9 @@
       <form class="px-4 py-1" onsubmit={addProject} transition:slide={{ duration: 150 }}>
         <input {@attach (node) => node.focus()} bind:value={newProject} maxlength={MAX_NAME} placeholder="Project name" aria-label="New project name"
           class="w-full border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
-          aria-describedby={projectError ? 'project-name-error' : undefined} oninput={() => (projectError = '')}
-          onkeydown={(event) => event.key === 'Escape' && (addingProject = false)} />
-        {#if projectError}<p id="project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
+          aria-describedby={projectError ? 'new-project-name-error' : undefined} oninput={() => (projectError = '')}
+          onkeydown={(event) => { if (event.key === 'Escape') { addingProject = false; projectError = ''; } }} />
+        {#if projectError}<p id="new-project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
       </form>
     {/if}
     <div class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects">

@@ -1,7 +1,6 @@
 <script>
   // Settings for a board page. A project gets its name, color, linked GitHub repo, mission statement (Markdown), agent prompt
-  // and delete, plus its
-  // board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
+  // and delete, plus its board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
   // (#/project-settings/<id>, #/features-settings). One stacked column on phones, a 1px grid of cards from lg up,
   // matching the main Settings page.
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';

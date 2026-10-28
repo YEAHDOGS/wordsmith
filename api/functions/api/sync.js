@@ -7,7 +7,7 @@ import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
-import { MAX_SYNC_BATCH, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
+import { MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
@@ -95,56 +95,96 @@ export async function onRequestPost(context) {
       continue;
     }
 
-    // Projects: one live project per name. Names are compared with projectKey on the stored name, not name_key (an old
-    // Worker may have left it empty, and the migration's SQL backfill only folds A-Z); the map stays current through
-    // this batch.
-    /** @type {Map<string, string> | null} */
-    const projectNames = table === 'projects' ? new Map((await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).all())
-      .results.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)])) : null;
-    /** @type {{ statement: any, row: Record<string, any> }[]} */
-    const writes = [];
+    if (table === 'projects') {
+      const result = await saveProjects(env, auth.user.id, incoming, existing, now);
+      saved.projects = result.saved;
+      rejected.push(...result.rejected);
+      continue;
+    }
+
+    const statements = [];
     for (const row of incoming) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
         const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
-        if (projectNames) claimProjectName(projectNames, next);
         const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
+        if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
-        if (upsert) writes.push({ statement: upsert, row: apiRow });
         saved[table].push(apiRow);
       } catch (error) {
-        // A refused project comes back with the server's copy (or null), so the device can put itself right.
-        rejected.push({ id: row.id, table, error: /** @type {Error} */ (error).message, ...(projectNames ? { current: existing.get(row.id) ?? null } : {}) });
+        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
       }
     }
-    if (!projectNames) {
-      if (writes.length) await env.DB.batch(writes.map((write) => write.statement));
+    if (statements.length) await env.DB.batch(statements);
+  }  return json({ saved, rejected, server_time: now });
+}
+/**
+ * Saves pushed project rows under one rule: one live project per name (projectKey on the stored name, not name_key,
+ * which an old Worker may have left empty or stale and the migration's SQL backfill folded A-Z only), at most
+ * MAX_PROJECTS live projects. A refusal carries a code and the server's copy, so the device can put itself right:
+ * - a new project under a taken name, or past the cap, is refused (current: null);
+ * - a rename onto a taken name keeps the stored name but saves every other field (current: the saved row);
+ * - a project keeping its own name is always saved, even if an old Worker let a duplicate in.
+ * The writes go out as one batch (D1 counts it as one query); only if another device took a name since the check,
+ * and the unique index refuses the batch, are they retried one at a time.
+ * @param {Record<string, any>} env @param {string} userId @param {any[]} incoming
+ * @param {Map<string, Record<string, any>>} existing stored rows by id @param {number} now
+ */
+async function saveProjects(env, userId, incoming, existing, now) {
+  /** @type {any[]} */ const saved = [];
+  /** @type {any[]} */ const rejected = [];
+  const { results: live } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const names = new Map(live.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)]));
+  let count = live.length;
+  /** @type {{ statement: any, row: Record<string, any>, before: Record<string, any> | null }[]} */
+  const writes = [];
+  for (const row of incoming) {
+    const before = existing.get(row.id) ?? null;
+    let next;
+    try {
+      const base = before ?? newRow('projects', { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
+      next = { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+    } catch (error) {
+      rejected.push({ id: row.id, table: 'projects', error: /** @type {Error} */ (error).message, current: before });
       continue;
     }
-    // Projects one at a time: another device may have taken a name since the check above, and then the unique index
-    // refuses just that row instead of failing the whole sync (which the device would retry forever).
-    for (const { statement, row } of writes) {
+    next.name_key = projectKey(next.name);
+    const holder = names.get(next.name_key);
+    const keepsOwnName = before !== null && projectKey(before.name) === next.name_key;
+    const taken = !next.deleted_at && holder !== undefined && holder !== next.id && !keepsOwnName;
+    if (taken && !before) {
+      rejected.push({ id: row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${next.name}" already exists`, current: null });
+      continue;
+    }
+    if (!before && !next.deleted_at && count >= MAX_PROJECTS) {
+      rejected.push({ id: row.id, table: 'projects', code: PROJECT_LIMIT, error: `You can have at most ${MAX_PROJECTS} projects`, current: null });
+      continue;
+    }
+    const refusedName = taken ? next.name : '';
+    if (taken && before) Object.assign(next, { name: before.name, name_key: projectKey(before.name) });
+    if (!before && !next.deleted_at) count++;
+    for (const [key, id] of names) if (id === next.id) names.delete(key);
+    if (!next.deleted_at) names.set(next.name_key, next.id);
+    const statement = upsertStatement(env, 'projects', next, before);
+    const { user_id: _owner, ...apiRow } = next;
+    if (statement) writes.push({ statement, row: apiRow, before });
+    saved.push(apiRow);
+    if (refusedName) rejected.push({ id: row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${refusedName}" already exists, so the name wasn't changed`, current: apiRow });
+  }
+  try {
+    if (writes.length) await env.DB.batch(writes.map((write) => write.statement));
+  } catch (error) {
+    if (!/UNIQUE/i.test(/** @type {Error} */ (error).message)) throw error;
+    // The batch was all-or-nothing; redo it row by row so only the clashing rows are refused.
+    for (const write of writes) {
       try {
-        await statement.run();
-      } catch (error) {
-        if (!/UNIQUE/i.test(/** @type {Error} */ (error).message)) throw error;
-        saved.projects = saved.projects.filter((project) => project.id !== row.id);
-        rejected.push({ id: row.id, table, error: `A project named "${row.name}" already exists`, current: existing.get(row.id) ?? null });
+        await write.statement.run();
+      } catch (rowError) {
+        if (!/UNIQUE/i.test(/** @type {Error} */ (rowError).message)) throw rowError;
+        saved.splice(saved.findIndex((project) => project.id === write.row.id), 1);
+        rejected.push({ id: write.row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${write.row.name}" already exists`, current: write.before });
       }
-    }  }
-  return json({ saved, rejected, server_time: now });
-}
-
-/**
- * Stamps a project's name_key and holds its name for this batch, or throws when another live project already has it
- * (the database's unique index would otherwise fail the whole batch). A project keeps its own name across renames.
- * @param {Map<string, string>} names live project key -> id
- * @param {Record<string, any>} project the row about to be saved
- */
-function claimProjectName(names, project) {
-  project.name_key = projectKey(project.name);
-  const holder = names.get(project.name_key);
-  if (!project.deleted_at && holder && holder !== project.id) throw new Error(`A project named "${project.name}" already exists`);
-  for (const [key, id] of names) if (id === project.id) names.delete(key);
-  if (!project.deleted_at) names.set(project.name_key, project.id);
+    }
+  }
+  return { saved, rejected };
 }
