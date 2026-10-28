@@ -251,10 +251,11 @@ class Drag {
    */
   arrange(list, key) {
     if (!this.note || !this.zone) return list;
-    const rest = list.filter((note) => !this.carries(note.id));
+    // Only the notes the target zone takes leave their lists; the rest of a selection stays where it is.
+    const block = this.#takenBy([...this.#zones.values()].find((entry) => entry.key === this.zone));
+    const rest = list.filter((note) => !block.some((moving) => moving.id === note.id));
     if (key !== this.zone) return rest;
-    const zone = [...this.#zones.values()].find((entry) => entry.key === key);
-    const block = this.#takenBy(zone).map((note) => list.find((entry) => entry.id === note.id) ?? note);
+    block.splice(0, block.length, ...block.map((note) => list.find((entry) => entry.id === note.id) ?? note));
     rest.splice(Math.min(this.index, rest.length), 0, ...block);
     return rest;
   }
@@ -398,7 +399,8 @@ class Drag {
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) return;
     this.#last = { x, y };
-    const ids = zone.list().map((note) => note.id).filter((id) => !this.carries(id));
+    const taken = this.#takenBy(zone);
+    const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
     const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.zone = zone.key;

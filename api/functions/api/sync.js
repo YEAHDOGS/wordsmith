@@ -162,9 +162,12 @@ async function saveProjects(env, userId, incoming, existing, now) {
     }
     const refusedName = taken ? next.name : '';
     if (taken && before) Object.assign(next, { name: before.name, name_key: projectKey(before.name) });
+    // A duplicate left by an old Worker or the migration keeps its name but stays keyless while another project holds
+    // the key, so the unique index never refuses its other edits; it gets its key back once the name is free.
+    if (!taken && keepsOwnName && holder !== undefined && holder !== next.id) next.name_key = null;
     if (!before && !next.deleted_at) count++;
     for (const [key, id] of names) if (id === next.id) names.delete(key);
-    if (!next.deleted_at) names.set(next.name_key, next.id);
+    if (!next.deleted_at && next.name_key !== null) names.set(next.name_key, next.id);
     const statement = upsertStatement(env, 'projects', next, before);
     const { user_id: _owner, ...apiRow } = next;
     if (statement) writes.push({ statement, row: apiRow, before });
