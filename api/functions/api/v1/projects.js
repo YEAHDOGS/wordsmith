@@ -1,6 +1,10 @@
-// GET /api/v1/projects - projects with feature counts per state.
-import { json } from '../../../lib/http.js';
+// GET /api/v1/projects - projects with feature counts per state. POST - create one: { name, description?, color?, repo? }.
+import { createProject } from '../../../lib/agent.js';
+import { json, readJson } from '../../../lib/http.js';
 import { toApi } from '../../../lib/rows.js';
+
+const CREATED = 201;
+const CONFLICT = 409;
 
 /** @param {{ env: Record<string, any>, data: Record<string, any> }} context */
 export async function onRequestGet({ env, data }) {
@@ -16,4 +20,12 @@ export async function onRequestGet({ env, data }) {
       return { ...toApi(row), features };
     }),
   });
+}
+
+/** @param {{ request: Request, env: Record<string, any>, data: Record<string, any> }} context */
+export async function onRequestPost({ request, env, data }) {
+  const result = await createProject(env, data.auth.user.id, await readJson(request));
+  // The name is taken: answer with the existing project, so the agent can use it instead.
+  if ('existing' in result) return json({ error: `A project named "${result.existing.name}" already exists`, project: result.existing }, CONFLICT);
+  return json({ project: result.project }, CREATED);
 }

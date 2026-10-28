@@ -8,7 +8,7 @@
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
-import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
+import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, newRow, projectKey } from './models.js';
 
 const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
 const SYNC_DEBOUNCE_MS = 2_500;
@@ -23,6 +23,10 @@ const FOCUS_STALE_MS = 15_000;
 const PR_REFRESH_MS = 600_000;
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
 const UNAUTHORIZED = 401;
+// A project created offline under a name that's taken is renamed "<name> (2)", (3)... from this number.
+const FIRST_COPY = 2;
+// An earlier " (n)" is replaced rather than stacked: "Café (2)" becomes "Café (3)", not "Café (2) (2)".
+const COPY_SUFFIX = / \(\d+\)$/;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
 /** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups'} Table */
@@ -59,6 +63,8 @@ class Store {
   /** A full sync (push and pull) was asked for and hasn't run yet. */
   #fullPending = false;
   #userId = '';
+  /** Projects renamed after a name clash during the current push (each at most once). */
+  #renamed = new Set();
   /** The server has confirmed it is signed in as #userId; nothing is pushed before that. */
   #verified = false;
   #lastActivity = Date.now();
@@ -224,6 +230,7 @@ class Store {
   /** Sends the outbox in batches. @returns {Promise<boolean>} whether anything was sent */
   async #push() {
     let sent = false;
+    this.#renamed.clear();
     while (this.#outbox.size) {
       sent = true;
       const batch = [...this.#outbox].slice(0, MAX_SYNC_BATCH);
@@ -247,9 +254,10 @@ class Store {
           saved.push([table, row]);
         }
       }
-      for (const { id, error } of result.rejected) {
+      for (const { id, table: refusedTable, error, current, code } of result.rejected) {
         for (const table of SYNCED) this.#outbox.delete(`${table}:${id}`);
         this.error = `A change was rejected: ${error}`;
+        if (refusedTable === 'projects') await this.#settleProject(id, current, code);
       }
       // Anything left from this batch that the server didn't mention would loop forever; drop it.
       for (const [key, version] of batch) if (this.#outbox.get(key) === version) this.#outbox.delete(key);
@@ -259,6 +267,31 @@ class Store {
     return sent;
   }
 
+  /**
+   * The server refused a project. With its copy (a refused rename, or another field it couldn't take), show that: a
+   * refused rename keeps every other edit, which the server saved. Without one, and only because the name was taken
+   * (a project created here, never saved), keep it and its notes under a free name, "Café (2)", which syncs on the
+   * next pass of this push. Each project is renamed at most once per push, so a clash can never loop.
+   * @param {string} id @param {any} current @param {string} [code]
+   */
+  async #settleProject(id, current, code) {
+    if (current) {
+      this.#upsertLocal('projects', current);
+      await this.#db?.put('projects', [current]);
+      return;
+    }
+    const project = this.find('projects', id);
+    if (code !== NAME_TAKEN || !project || this.#renamed.has(id)) return;
+    this.#renamed.add(id);
+    const taken = new Set(this.projects.filter((other) => other.id !== id && !other.deleted_at).map((other) => projectKey(other.name)));
+    const base = project.name.replace(COPY_SUFFIX, '');
+    let copy = FIRST_COPY;
+    while (taken.has(projectKey(`${base} (${copy})`))) copy++;
+    const suffix = ` (${copy})`;
+    const name = base.slice(0, MAX_NAME - suffix.length).trimEnd() + suffix;
+    this.update('projects', id, { name });
+    this.error = `"${project.name}" already existed, so this device's copy is now "${name}".`;
+  }
   async #pull() {
     let more = true;
     while (more) {

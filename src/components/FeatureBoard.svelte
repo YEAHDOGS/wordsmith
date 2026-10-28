@@ -23,7 +23,7 @@
   import { columnOf } from '../lib/models.js';
   import { columnsFor } from '../lib/board.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, orderKey, placeNotes } from '../lib/reorder.svelte.js';
 
   /** @type {{ features: any[], scope: string, showProject?: boolean }} */
   let { features, scope, showProject = true } = $props();
@@ -93,22 +93,34 @@
   /**
    * Saves a drop into a column, inside one of its note groups or (null) outside them: its column, its state if the role
    * differs, its group if that changes (a group left empty goes), and the claim order in Requested columns.
-   * @param {{ id: string, state: string, all: any[] }} column @param {any} note @param {number} index @param {string | null} groupId
+   * Several selected cards dropped together move as one block, in the order they were shown.
+   * @param {{ id: string, state: string, all: any[] }} column @param {any[]} notes @param {number} index @param {string | null} groupId
    */
-  function drop(column, note, index, groupId) {
-    const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
-    const move = {
-      column_id: column.id,
-      ...(note.state === column.state ? {} : { state: column.state }),
-      ...(leftGroup === groupId ? {} : { group_id: groupId }),
-    };
-    if (column.state !== REQUESTED) {
-      if (columnOf(note, boardColumns).id !== column.id || leftGroup !== groupId) store.update('notes', note.id, move);
-    } else {
-      const list = membersOf(column, groupId).filter((other) => other.id !== note.id);
-      for (const { id, patch } of placeNote(list, note, index, true)) store.update('notes', id, id === note.id ? { ...patch, ...move } : patch);
+  function drop(column, notes, index, groupId) {
+    /** @type {Map<string, Record<string, any>>} */
+    const moves = new Map();
+    /** @type {(string | null)[]} */
+    const leftGroups = [];
+    for (const note of notes) {
+      const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
+      const changed = columnOf(note, boardColumns).id !== column.id || note.state !== column.state || leftGroup !== groupId;
+      moves.set(note.id, changed ? {
+        column_id: column.id,
+        ...(note.state === column.state ? {} : { state: column.state }),
+        ...(leftGroup === groupId ? {} : { group_id: groupId }),
+      } : {});
+      if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
-    if (leftGroup !== groupId) pruneGroups([leftGroup]);
+    // Requested columns keep the claim order, so the block is placed there; other columns sort by time.
+    const writes = column.state === REQUESTED
+      ? placeNotes(membersOf(column, groupId).filter((other) => !moves.has(other.id)), notes, index, true)
+      : [];
+    for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
+    for (const { id, patch } of writes) {
+      const change = { ...patch, ...moves.get(id) };
+      if (Object.keys(change).length) store.update('notes', id, change);
+    }
+    if (leftGroups.length) pruneGroups(leftGroups);
   }
 
   /**
@@ -126,7 +138,7 @@
       list: () => membersOf(column, groupId),
       sortable: column.state === REQUESTED,
       naturalIndex: (/** @type {any} */ note) => naturalIndex(membersOf(column, groupId), column.state, note),
-      ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(column, note, index, groupId),
+      ondrop: (/** @type {any[]} */ notes, /** @type {number} */ index) => drop(column, notes, index, groupId),
     };
   }
 
@@ -166,8 +178,8 @@
 </script>
 
 {#snippet card(/** @type {any} */ note)}
-  <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
-    <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
+  <div class="relative bg-app {drag.carries(note.id) ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
+    <div class="spring h-full {drag.carries(note.id) ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
   </div>
 {/snippet}
 

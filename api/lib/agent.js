@@ -1,5 +1,5 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, columnOf, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, MAX_PROJECTS, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl, projectKey } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
@@ -11,8 +11,13 @@ const MAX_LIMIT = 200;
 const CLAIM_CANDIDATES = 5;
 const MAX_EVENTS = 200;
 const MAX_BATCH_NOTES = 500;
+const FORBIDDEN = 403;
+const CONFLICT = 409;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
+// A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
+// name not '.' or '..'.
+const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
 // Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
 const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
 
@@ -24,10 +29,71 @@ const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, cr
  */
 export async function resolveProject(env, userId, ref) {
   if (ref === undefined || ref === null || ref === '') return null;
-  const row = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR lower(name) = lower(?)) LIMIT 1')
-    .bind(userId, String(ref), String(ref)).first();
-  if (!row) throw new HttpError(404, `No project "${ref}"`);
-  return toApi(row);
+  const key = projectKey(ref);
+  // By id, or by name_key (indexed; the usual case).
+  const direct = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR name_key = ?) LIMIT 1')
+    .bind(userId, String(ref), key).first();
+  // The key must still match the name: an old Worker mid-deploy can rename a project without updating its key.
+  if (direct && (direct.id === String(ref) || projectKey(direct.name) === key)) return toApi(direct);
+  // Miss: compare live names with projectKey (at most MAX_PROJECTS rows). Catches keys an old Worker left empty and legacy
+  // non-ASCII names the migration's SQL backfill folded A-Z only.
+  const { results } = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const named = results.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (!named) throw new HttpError(404, `No project "${ref}"`);
+  return toApi(named);
+}
+
+/**
+ * Creates a project for an agent: { name, description?, color?, repo? (owner/name) }. Names are unique per user
+ * (projectKey: Unicode, case-insensitive, trimmed), so an agent asking for a project it already has gets
+ * { existing } back and can use that one. The duplicate check, the MAX_PROJECTS cap and the insert are one statement,
+ * so two agents creating the same name at once can't both succeed.
+ * @param {Record<string, any>} env
+ * @param {string} userId
+ * @param {unknown} input
+ * @returns {Promise<{ project: Record<string, any> } | { existing: { id: string, name: string } }>}
+ */
+export async function createProject(env, userId, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'Send a JSON object: { name, description?, color?, repo? }');
+  const body = /** @type {Record<string, unknown>} */ (input);
+  for (const field of ['name', 'description', 'color', 'repo']) {
+    if (body[field] !== undefined && typeof body[field] !== 'string') throw new HttpError(400, `${field} must be text`);
+  }
+  const name = String(body.name ?? '').trim();
+  if (!name) throw new HttpError(400, 'name is required');
+  const repo = String(body.repo ?? '').trim();
+  if (repo && !REPO_PATTERN.test(repo)) throw new HttpError(400, 'repo must look like owner/name');
+  let fields;
+  try {
+    fields = cleanRow('projects', { name, repo, description: body.description ?? '', color: body.color ?? 'default' });
+  } catch (error) {
+    throw new HttpError(400, /** @type {Error} */ (error).message);
+  }
+  const key = projectKey(name);
+  // Compare with every live name using projectKey first (at most MAX_PROJECTS rows): name_key can be missing (an old
+  // Worker mid-deploy) or folded A-Z only (the migration's backfill), and the atomic insert below only sees name_key.
+  const { results: live } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const same = live.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (same) return { existing: { id: String(same.id), name: String(same.name) } };
+  const row = { ...newRow('projects', fields), user_id: userId, name_key: key };
+  const columns = Object.keys(row);
+  const result = await env.DB.prepare(
+    `INSERT INTO projects (${columns.join(', ')}) SELECT ${columns.map(() => '?').join(', ')}
+     WHERE NOT EXISTS (SELECT 1 FROM projects WHERE user_id = ? AND deleted_at IS NULL AND name_key = ?)
+       AND (SELECT COUNT(*) FROM projects WHERE user_id = ? AND deleted_at IS NULL) < ?`,
+  ).bind(...columns.map((column) => row[column]), userId, key, userId, MAX_PROJECTS).run()
+    // The unique index (user_id, name_key) caught a write that slipped in between: same answer as a taken name.
+    .catch((/** @type {Error} */ error) => { if (/UNIQUE/i.test(error.message)) return { meta: { changes: 0 } }; throw error; });
+  if (result.meta.changes) {
+    const { user_id: _owner, ...project } = row;
+    return { project };
+  }
+  // Nothing inserted: either the cap, or a project with this name appeared since the check. Re-read and match by name.
+  const { results: now } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const clash = now.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (clash) return { existing: { id: String(clash.id), name: String(clash.name) } };
+  if (now.length >= MAX_PROJECTS) throw new HttpError(FORBIDDEN, `You can have at most ${MAX_PROJECTS} projects`);
+  throw new HttpError(CONFLICT, `A project named "${name}" could not be created; try again`);
 }
 
 /** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */

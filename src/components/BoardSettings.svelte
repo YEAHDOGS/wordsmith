@@ -1,12 +1,13 @@
 <script>
-  // Settings for a board page. A project gets its name, color, linked GitHub repo, agent prompt and delete, plus its
-  // board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
+  // Settings for a board page. A project gets its name, color, linked GitHub repo, mission statement (Markdown), agent prompt
+  // and delete, plus its board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
   // (#/project-settings/<id>, #/features-settings). One stacked column on phones, a 1px grid of cards from lg up,
   // matching the main Settings page.
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import Copy from '@lucide/svelte/icons/copy';
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
+  import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import BoardColumns from './BoardColumns.svelte';
   import ColorPicker from './ColorPicker.svelte';
@@ -16,7 +17,10 @@
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { reveal } from '../lib/reveal.js';
-  import { FEATURES_SCOPE, MAX_NAME } from '../lib/models.js';
+  import { FEATURES_SCOPE, MAX_MISSION, MAX_NAME, projectKey } from '../lib/models.js';
+  import { renderMarkdown } from '../lib/markdown.js';
+  import { markdownKeys } from '../lib/markdown-input.js';
+  import MarkdownToolbar from './MarkdownToolbar.svelte';
   import { projectPrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './board-settings.json';
@@ -29,7 +33,47 @@
   const FIELD = 'h-10 w-full border border-line bg-surface px-3 text-sm text-ink hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
   const LABEL = 'mb-1.5 block text-xs font-semibold tracking-wide text-ink-faint uppercase';
 
+  const MISSION_SAVE_MS = 600;
+
   let copied = $state(false);
+  let nameError = $state('');
+  // Mission statement: savedMission is the text last loaded or saved here. Only typing (mission differs from it) is ever
+  // saved, so a newer version synced from another device is shown, never written over; and a sync landing mid-typing
+  // doesn't replace what you're writing.
+  let mission = $state('');
+  let savedMission = '';
+  let missionPreview = $state(false);
+  let loadedMission = '';
+  /** @type {HTMLTextAreaElement | undefined} */
+  let missionField = $state();
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let missionTimer;
+  $effect.pre(() => {
+    if (!project || loadedMission === project.id) return;
+    loadedMission = project.id;
+    mission = savedMission = project.description;
+  });
+  // A newer mission synced in while nothing is being typed: show it.
+  $effect.pre(() => {
+    const incoming = project?.description;
+    if (incoming === undefined || incoming === savedMission || untrack(() => mission) !== savedMission) return;
+    mission = savedMission = incoming;
+  });
+
+  function saveMission() {
+    clearTimeout(missionTimer);
+    // Nothing typed, or the project was just deleted (leaving the page after Delete runs this too).
+    if (!project || project.deleted_at || mission === savedMission) return;
+    savedMission = mission;
+    store.update('projects', project.id, { description: mission });
+  }
+
+  function queueMissionSave() {
+    clearTimeout(missionTimer);
+    missionTimer = setTimeout(saveMission, MISSION_SAVE_MS);
+  }
+  // Leaving the page saves what's typed.
+  $effect(() => () => saveMission());
   let pickingRepo = $state(false);
   let confirming = $state(false);
 
@@ -40,7 +84,15 @@
       event.currentTarget.value = project.name;
       return;
     }
-    if (name !== project.name) store.update('projects', project.id, { name });
+    if (name === project.name) return;
+    // One project per name (projectKey, the same rule as the server): a taken name puts the old one back and says why.
+    if (store.projects.some((other) => !other.deleted_at && other.id !== project.id && projectKey(other.name) === projectKey(name))) {
+      event.currentTarget.value = project.name;
+      nameError = `You already have a project called "${name}".`;
+      return;
+    }
+    nameError = '';
+    store.update('projects', project.id, { name });
   }
 
   async function copyPrompt() {
@@ -62,13 +114,15 @@
       <ArrowLeft class="size-3.5" />{TEXT.back}
     </button>
   </div>
-  <div class="mx-auto grid max-w-7xl grid-cols-1 gap-px border-line bg-line sm:border-x lg:grid-cols-2 ultrawide:max-w-none">
+  <div class="mx-auto grid max-w-7xl grid-cols-1 gap-px border-line bg-line sm:border-x lg:grid-flow-row-dense lg:grid-cols-2 ultrawide:max-w-none">
     {#if project}
       <section class={CARD} use:reveal={0}>
         <h2 class={HEADING}>{TEXT.project}</h2>
         <label class="mt-4 block">
           <span class={LABEL}>{TEXT.name}</span>
-          <input value={project.name} maxlength={MAX_NAME} onchange={rename} class="{FIELD} font-semibold" />
+          <input value={project.name} maxlength={MAX_NAME} onchange={rename} oninput={() => (nameError = '')} aria-describedby={nameError ? 'project-name-error' : undefined}
+            class="{FIELD} font-semibold" />
+          {#if nameError}<span id="project-name-error" class="mt-1 block text-xs text-accent" role="alert" transition:slide={SWAP}>{nameError}</span>{/if}
         </label>
         <div class="mt-4">
           <span class={LABEL}>{TEXT.color}</span>
@@ -93,7 +147,26 @@
         </div>
       </section>
 
-      <section class={CARD} use:reveal={1}>
+      <section class="{CARD} lg:col-span-2" use:reveal={1}>
+        <h2 class={HEADING}>{TEXT.mission}</h2>
+        <p id="mission-hint" class={HINT}>{TEXT.missionHint}</p>
+        <div class="flex min-h-48 flex-col {BOX}">
+          {#if missionPreview}
+            <!-- Rendered by src/lib/markdown.js, which escapes all input -->
+            <div class="markdown selectable min-h-40 flex-1 px-3 py-2 text-fluid-sm text-ink">
+              {#if mission.trim()}{@html renderMarkdown(mission)}{:else}<p class="text-ink-faint">{TEXT.nothingToPreview}</p>{/if}
+            </div>
+          {:else}
+            <textarea bind:this={missionField} bind:value={mission} use:markdownKeys maxlength={MAX_MISSION} aria-label={TEXT.mission} placeholder={TEXT.missionPlaceholder}
+              aria-describedby="mission-hint" oninput={queueMissionSave} onblur={saveMission}
+              class="min-h-40 flex-1 resize-y bg-transparent px-3 py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+          {/if}
+          <div class="flex justify-end border-t border-line">
+            <MarkdownToolbar textarea={missionField} bind:preview={missionPreview} showPreview class="-mr-1 py-0.5" />
+          </div>
+        </div>
+      </section>
+      <section class={CARD} use:reveal={2}>
         <h2 class={HEADING}>{TEXT.agent}</h2>
         <p class={HINT}>{TEXT.agentHint}</p>
         <button class={BUTTON} onclick={copyPrompt}>
@@ -119,7 +192,7 @@
       </section>
     {/if}
 
-    <section class="{CARD} lg:col-span-2" use:reveal={project ? 2 : 0}>
+    <section class="{CARD} lg:col-span-2" use:reveal={project ? 3 : 0}>
       <h2 class={HEADING}>{TEXT.columns}</h2>
       <p class={HINT}>{TEXT.columnsHint}{project ? '' : ` ${TEXT.featuresColumnsHint}`}</p>
       <BoardColumns scope={project ? project.id : FEATURES_SCOPE} />

@@ -1,7 +1,8 @@
 <script>
   // The card under the finger while a note is being moved (see src/lib/reorder.svelte.js). Fixed to the viewport and
   // moved with transform only; it lifts in slightly tilted and glides into the card's slot on drop. Inert: it's a
-  // picture of the card, the real one stays in the list as the dimmed placeholder.
+  // picture of the card, the real one stays in the list as the dimmed placeholder. Carrying a selection, it wears a
+  // badge with the number of cards moving.
   import { fade, scale } from 'svelte/transition';
   import NoteCard from './NoteCard.svelte';
   import { drag } from '../lib/reorder.svelte.js';
@@ -17,5 +18,10 @@
       in:scale|global={{ start: 0.96, duration: 150 }} out:fade|global={{ duration: 120 }}>
       <NoteCard note={drag.note} {showProject} />
     </div>
+    <!-- Carrying a selection: a count badge on the corner says how many cards move together -->
+    {#if drag.taking > 1}
+      <span class="absolute -top-2 -right-2 flex min-w-6 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 font-mono text-xs font-bold text-accent-ink ring-2 ring-app tv:min-w-9 tv:text-base"
+        in:scale|global={{ start: 0.5, duration: 150 }}>{drag.taking}</span>
+    {/if}
   </div>
 {/if}

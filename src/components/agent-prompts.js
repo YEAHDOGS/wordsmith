@@ -20,6 +20,7 @@ Loop:
 5. Record what you did: POST ${url('/api/v1/notes/<id>/analysis')} with {"analysis_append":"Done: ..."}.
 6. Don't mark features complete yourself. Merging the PR completes them.
 7. Have a new idea? POST ${url('/api/v1/features')} with {"project":"...","title":"...","body":"..."}.
+8. Need a project that doesn't exist yet? POST ${url('/api/v1/projects')} with {"name":"...","repo":"owner/name"} (409 means it already exists; use that one).
 Every call is timestamped on the feature's timeline under your token's name.`;
 }
 
@@ -42,6 +43,7 @@ API: ${url('/api/v1')}
 /** Work one project's queue, for the copy button in project settings. @param {{ id: string, name: string, repo: string }} project @param {(path: string) => string} url */
 export function projectPrompt(project, url) {
   return `You have a wordsmith API token in $WORDSMITH_TOKEN. Work the "${project.name}" queue:
+0. Read the project's mission statement first (its description in GET ${url('/api/v1/projects')}): what it is, why, and how to build it.
 1. curl -s -X POST ${url('/api/v1/features/next')} -H "Authorization: Bearer $WORDSMITH_TOKEN" -H "Content-Type: application/json" -d '{"project":"${project.id}"}'
    (204 = nothing queued). This claims the feature for you.
 2. As you work, PATCH ${url('/api/v1/notes/<id>')} with {"status":"what you're doing"}.

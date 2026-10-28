@@ -32,6 +32,13 @@ export const MAX_BODY = 100_000;
 export const MAX_NAME = 80;
 const MAX_ID = 64;
 export const MAX_STATUS = 500;
+// A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
+export const MAX_MISSION = 20_000;
+// Projects per user: bounds every projects query and sync download (agents can create projects, see api/lib/agent.js).
+export const MAX_PROJECTS = 200;
+// Why sync refused a project row, so the app knows what to do: rename a clashing new project, or just say so.
+export const NAME_TAKEN = 'name_taken';
+export const PROJECT_LIMIT = 'project_limit';
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;
@@ -65,7 +72,8 @@ export const MAX_ANALYSIS = 20_000;
 export const MODELS = {
   projects: {
     name: { type: 'text', max: MAX_NAME, default: '' },
-    description: { type: 'text', max: MAX_STATUS, default: '' },
+    // Shown and edited as the mission statement in project settings; agents read it from GET /api/v1/projects.
+    description: { type: 'text', max: MAX_MISSION, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
     repo: { type: 'text', max: MAX_REPO, default: '' },
   },
@@ -118,7 +126,7 @@ export const MODELS = {
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: [], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
+export const SERVER_FIELDS = { projects: ['name_key'], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
@@ -152,6 +160,16 @@ export function columnOf(note, columns) {
   const own = columns.find((column) => column.id === note.column_id);
   if (own?.state === note.state) return own;
   return columns.find((column) => column.state === note.state) ?? columns[0];
+}
+
+/**
+ * A project name folded for comparison: Unicode NFC, trimmed, lowercased, so "Café", "café" and " CAFÉ " match.
+ * The server stores it as projects.name_key (unique per user among live projects); the app checks it before creating
+ * or renaming. One rule everywhere, since SQLite's lower() only folds A-Z.
+ * @param {unknown} name
+ */
+export function projectKey(name) {
+  return String(name ?? '').normalize('NFC').trim().toLowerCase();
 }
 
 /** @param {unknown} value */

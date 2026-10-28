@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BOOL_FIELDS, JSON_FIELDS, LEGACY_PRIORITY, newRow } from '../src/lib/models.js';
+import { BOOL_FIELDS, JSON_FIELDS, LEGACY_PRIORITY, newRow, projectKey } from '../src/lib/models.js';
 import { columnsOf } from '../api/lib/rows.js';
 
 const STAGING_DB = 'wordsmith-staging';
@@ -53,7 +53,7 @@ function statementsFor(userId, now) {
   const labelIds = Object.fromEntries(SEED.labels.map((/** @type {any} */ l) => [l.key, `${prefix}-l-${l.key}`]));
 
   const projects = SEED.projects.map((/** @type {any} */ { key, ...values }) =>
-    insert('projects', newRow('projects', { ...values, id: projectIds[key], user_id: userId, created_at: at(40), updated_at: now })));
+    insert('projects', newRow('projects', { ...values, id: projectIds[key], user_id: userId, name_key: projectKey(values.name), created_at: at(40), updated_at: now })));
   const labels = SEED.labels.map((/** @type {any} */ { key, ...values }) =>
     insert('labels', newRow('labels', { ...values, id: labelIds[key], user_id: userId, created_at: at(40), updated_at: now })));
   const notes = SEED.notes.map((/** @type {any} */ { project, labels: names = [], daysAgo, pr, ...values }, /** @type {number} */ index) => {
