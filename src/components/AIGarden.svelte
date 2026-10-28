@@ -1,37 +1,60 @@
 <script>
-  import Plus from '@lucide/svelte/icons/plus';
+  import Building2 from '@lucide/svelte/icons/building-2';
+  import Bot from '@lucide/svelte/icons/bot';
   import Pause from '@lucide/svelte/icons/pause';
   import Play from '@lucide/svelte/icons/play';
-  import Sparkles from '@lucide/svelte/icons/sparkles';
   import { router } from '../lib/router.svelte.js';
 
   let { gardenMode = $bindable(false) } = $props();
 
   const INITIAL_AGENTS = [
-    { id: 'claude', name: 'Claude', kind: 'fox', role: 'Careful builder', task: 'Tending the feature board', color: 'tangerine', x: 18, y: 38, active: true },
-    { id: 'codex', name: 'Codex', kind: 'rabbit', role: 'Fast fixer', task: 'Gathering loose ideas', color: 'sky', x: 48, y: 62, active: true },
-    { id: 'gpt', name: 'GPT', kind: 'bear', role: 'Thought partner', task: 'Taking a little break', color: 'rose', x: 77, y: 34, active: false },
+    { id: 'claude', name: 'Claude', x: 24, y: 63, active: true },
+    { id: 'codex', name: 'Codex', x: 49, y: 46, active: true },
+    { id: 'gpt', name: 'GPT', x: 75, y: 67, active: false },
   ];
-  const CRITTERS = ['fox', 'rabbit', 'bear', 'cat', 'frog'];
+  const INITIAL_BUILDINGS = [
+    { id: 'tower-one', name: 'Northstar', x: 20, y: 31, height: 27, style: 'one' },
+    { id: 'tower-two', name: 'Meridian', x: 40, y: 24, height: 35, style: 'two' },
+    { id: 'tower-three', name: 'Vertex', x: 60, y: 34, height: 24, style: 'three' },
+    { id: 'tower-four', name: 'Lumen', x: 81, y: 28, height: 31, style: 'four' },
+    { id: 'tower-five', name: 'Arcology', x: 31, y: 58, height: 18, style: 'five' },
+    { id: 'tower-six', name: 'Exchange', x: 68, y: 57, height: 20, style: 'six' },
+  ];
+  const BUILDING_STYLES = ['one', 'two', 'three', 'four', 'five', 'six'];
+  const NOTICE_DURATION = 1800;
   let agents = $state(INITIAL_AGENTS.map((agent) => ({ ...agent })));
+  let buildings = $state(INITIAL_BUILDINGS.map((building) => ({ ...building })));
   let selected = $state('claude');
+  let selectedBuilding = $state('');
   let notice = $state('');
   const current = $derived(agents.find((agent) => agent.id === selected) || agents[0]);
 
   function addAgent() {
     const index = agents.length + 1;
-    const critter = CRITTERS[(index - 1) % CRITTERS.length];
-    const agent = { id: `helper-${index}`, name: `Garden helper ${index - 1}`, kind: critter, role: 'Ready for a new connection', task: 'Waiting by the pond', color: 'mint', x: 15 + ((index * 23) % 70), y: 30 + ((index * 17) % 42), active: false };
+    const agent = { id: `resident-${index}`, name: `Agent ${index}`, x: 14 + ((index * 29) % 72), y: 41 + ((index * 19) % 36), active: false };
     agents.push(agent);
     selected = agent.id;
-    notice = `${agent.name} joined the garden. Connect a provider to give them work.`;
+  }
+
+  function addBuilding() {
+    const index = buildings.length + 1;
+    const building = {
+      id: `building-${index}`,
+      name: `Tower ${index}`,
+      x: 12 + ((index * 17) % 74),
+      y: 23 + ((index * 13) % 40),
+      height: 18 + ((index * 7) % 17),
+      style: BUILDING_STYLES[(index - 1) % BUILDING_STYLES.length],
+    };
+    buildings.push(building);
+    selectedBuilding = building.id;
+    notice = `${building.name} added`;
+    setTimeout(() => (notice = ''), NOTICE_DURATION);
   }
 
   function toggleAutonomy() {
     if (!current) return;
     current.active = !current.active;
-    current.task = current.active ? 'Ready to tend the board' : 'Taking a little break';
-    notice = `${current.name} is ${current.active ? 'ready for work' : 'paused'}.`;
   }
 
   function openView(view) {
@@ -40,124 +63,133 @@
   }
 </script>
 
-<section class="garden flex min-h-0 flex-1 flex-col overflow-auto" aria-label="AI Garden">
-  <header class="flex shrink-0 items-center justify-between gap-4 border-b border-line px-4 py-3 sm:px-7">
-    <div class="min-w-0">
-      <p class="font-mono text-xs uppercase tracking-[0.18em] text-complete">A little world for your agents</p>
-      <h1 class="mt-1 text-fluid-xl font-black tracking-tight">AI Garden <span aria-hidden="true">✿</span></h1>
+<section class="city-mode flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="AI Garden city">
+  <div class="city-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-2 sm:px-5">
+    <span class="district-light" aria-hidden="true"></span>
+    <div class="flex items-center gap-2">
+      <button class="city-action spring press" onclick={addBuilding} title="Add building" aria-label="Add building"><Building2 class="size-4" /><span>Add building</span></button>
+      <button class="city-action city-action-icon spring press" onclick={addAgent} title="Add agent" aria-label="Add agent"><Bot class="size-4" /></button>
     </div>
-    <button class="spring press flex shrink-0 items-center gap-2 border border-line-strong bg-surface px-3 py-2 text-sm font-semibold hover:border-complete hover:text-complete" onclick={addAgent}>
-      <Plus class="size-4" /> <span class="hidden sm:inline">Invite a friend</span><span class="sm:hidden">Invite</span>
-    </button>
-  </header>
-
-  <div class="garden-layout grid min-h-0 flex-1 gap-4 p-3 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-    <div class="flex min-h-[25rem] flex-col">
-      <div class="mb-3 flex items-center justify-between gap-3 text-sm">
-        <p class="text-ink-muted">Preview friends for now. Connect a provider to give them real work.</p>
-        <span class="shrink-0 font-mono text-xs text-ink-faint">{agents.length} preview friends</span>
-      </div>
-      <div class="meadow relative min-h-[24rem] flex-1 overflow-hidden border border-line sm:min-h-[30rem]" aria-label="Garden meadow">
-        <div class="sun"></div>
-        <div class="hill hill-back"></div><div class="hill hill-front"></div>
-        <div class="pond"><span>✧</span></div>
-        <div class="garden-path"></div>
-        <div class="flower flower-a">✿</div><div class="flower flower-b">✿</div><div class="flower flower-c">✿</div>
-        <div class="tree tree-a"><i></i><b></b></div><div class="tree tree-b"><i></i><b></b></div>
-        {#each agents as agent (agent.id)}
-          <button class="critter-wrap {selected === agent.id ? 'chosen' : ''}" style="--x:{agent.x}%;--y:{agent.y}%;--wander:{((agents.indexOf(agent) % 3) + 1) * 2}s" onclick={() => (selected = agent.id)} aria-label="Select {agent.name}, {agent.active ? 'ready' : 'paused'}" aria-pressed={selected === agent.id}>
-            <span class="critter {agent.kind} {agent.color}"><i class="ear ear-left"></i><i class="ear ear-right"></i><i class="eye eye-left"></i><i class="eye eye-right"></i><i class="snout"></i><i class="cheek cheek-left"></i><i class="cheek cheek-right"></i><i class="belly"></i><i class="tail"></i></span>
-            <span class="critter-name">{agent.name}</span>
-            {#if agent.active}<span class="ready-dot" title="Ready"></span>{/if}
-          </button>
-        {/each}
-        <div class="meadow-caption"><Sparkles class="size-4" /> A shared space for the work in progress</div>
-      </div>
-    </div>
-
-    <aside class="flex min-h-0 flex-col gap-5 border-t border-line pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-      <div>
-        <h2 class="mb-2 font-mono text-xs uppercase tracking-widest text-ink-faint">Preview friends</h2>
-        <div class="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
-          {#each agents as agent (agent.id)}
-            <button class="spring flex min-w-36 shrink-0 items-center gap-3 border px-3 py-2 text-left lg:w-full {selected === agent.id ? 'border-complete bg-complete-soft' : 'border-line bg-surface hover:border-line-strong'}" onclick={() => (selected = agent.id)}>
-              <span class="mini-critter {agent.kind} {agent.color}"><i></i><b></b></span>
-              <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{agent.name}</span><span class="block text-xs text-ink-faint">{agent.active ? 'Wandering' : 'Resting'}</span></span>
-              <span class="size-2 rounded-full {agent.active ? 'bg-complete' : 'bg-line-strong'}"></span>
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      {#if current}
-        <div class="border-t border-line pt-4">
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-faint">Today in the garden</p>
-          <h2 class="mt-2 text-lg font-bold">{current.name}</h2>
-          <p class="text-sm text-ink-muted">{current.role}</p>
-          <p class="mt-4 border-l-2 border-complete pl-3 text-sm text-ink-muted">{current.task}</p>
-          <button class="spring press mt-5 flex w-full items-center justify-center gap-2 bg-ink px-3 py-2.5 text-sm font-semibold text-app hover:bg-complete" onclick={toggleAutonomy}>
-            {#if current.active}<Pause class="size-4" /> Pause friend{:else}<Play class="size-4" /> Let them wander{/if}
-          </button>
-          <p class="mt-2 text-xs leading-relaxed text-ink-faint">Local preview only. No provider is connected yet; connect an agent to let it work on notes and the scrumboard.</p>
-        </div>
-      {/if}
-
-      <div class="mt-auto border-t border-line pt-4">
-        <h2 class="font-mono text-xs uppercase tracking-widest text-ink-faint">Keep your work close</h2>
-        <div class="mt-3 flex gap-2">
-          <button class="spring flex-1 border border-line px-3 py-2 text-center text-sm hover:border-accent" onclick={() => openView('notes')}>Notes</button>
-          <button class="spring flex-1 border border-line px-3 py-2 text-center text-sm hover:border-accent" onclick={() => openView('features')}>Scrumboard</button>
-        </div>
-      </div>
-    </aside>
   </div>
-  {#if notice}<div class="fixed bottom-5 left-1/2 z-20 -translate-x-1/2 border border-complete bg-surface px-4 py-3 text-sm shadow-lg" role="status">{notice}</div>{/if}
+
+  <div class="city-viewport relative min-h-0 flex-1 overflow-hidden" aria-label="Futuristic city district">
+    <div class="city-haze"></div>
+    <div class="distant-skyline" aria-hidden="true">
+      <i style="--left:2%;--width:5%;--height:24%"></i><i style="--left:8%;--width:4%;--height:34%"></i>
+      <i style="--left:14%;--width:6%;--height:28%"></i><i style="--left:22%;--width:4%;--height:41%"></i>
+      <i style="--left:28%;--width:7%;--height:32%"></i><i style="--left:37%;--width:5%;--height:44%"></i>
+      <i style="--left:44%;--width:4%;--height:30%"></i><i style="--left:51%;--width:7%;--height:38%"></i>
+      <i style="--left:61%;--width:4%;--height:29%"></i><i style="--left:68%;--width:6%;--height:42%"></i>
+      <i style="--left:77%;--width:5%;--height:33%"></i><i style="--left:84%;--width:7%;--height:40%"></i>
+      <i style="--left:94%;--width:5%;--height:26%"></i>
+    </div>
+    <div class="city-floor" aria-hidden="true">
+      <div class="street street-one"></div><div class="street street-two"></div><div class="street street-three"></div>
+      <div class="street-markings"></div>
+    </div>
+    <div class="city-rails" aria-hidden="true"><span></span><span></span><span></span></div>
+
+    {#each buildings as building (building.id)}
+      <button class="building {building.style} {selectedBuilding === building.id ? 'building-selected' : ''}"
+        style="--x:{building.x}%;--y:{building.y}%;--height:{building.height}%"
+        onclick={() => (selectedBuilding = building.id)} title={building.name} aria-label="Select {building.name}" aria-pressed={selectedBuilding === building.id}>
+        <span class="building-roof"></span><span class="building-face"></span><span class="building-side"></span><span class="building-base"></span>
+      </button>
+    {/each}
+
+    {#each agents as agent (agent.id)}
+      <button class="resident {selected === agent.id ? 'resident-selected' : ''} {agent.active ? 'resident-active' : ''}"
+        style="--x:{agent.x}%;--y:{agent.y}%" onclick={() => (selected = agent.id)} title={agent.name} aria-label="Select {agent.name}, {agent.active ? 'active' : 'paused'}" aria-pressed={selected === agent.id}>
+        <span class="resident-shadow"></span><span class="resident-body"><i class="resident-head"></i><i class="resident-visor"></i><i class="resident-pack"></i></span>
+        <span class="resident-label">{agent.name}</span>
+      </button>
+    {/each}
+
+    {#if current}
+      <div class="agent-console" aria-label="Selected agent controls">
+        <span class="console-indicator {current.active ? 'online' : ''}"></span>
+        <span class="console-name">{current.name}</span>
+        <span class="console-state">{current.active ? 'Active' : 'Paused'}</span>
+        <button class="console-toggle spring press" onclick={toggleAutonomy} title={current.active ? 'Pause agent' : 'Resume agent'} aria-label={current.active ? 'Pause agent' : 'Resume agent'}>
+          {#if current.active}<Pause class="size-4" />{:else}<Play class="size-4" />{/if}
+        </button>
+      </div>
+    {/if}
+    {#if notice}<div class="city-notice" role="status">{notice}</div>{/if}
+  </div>
+
+  <footer class="city-footer flex shrink-0 items-center justify-between gap-3 border-t border-line px-3 py-2 sm:px-5">
+    <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+      {#each agents as agent (agent.id)}
+        <button class="agent-tab spring {selected === agent.id ? 'agent-tab-selected' : ''}" onclick={() => (selected = agent.id)} title={agent.name} aria-label="Select {agent.name}" aria-pressed={selected === agent.id}>
+          <span class="agent-pip {agent.active ? 'online' : ''}"></span>{agent.name}
+        </button>
+      {/each}
+    </div>
+    <div class="flex shrink-0 gap-2">
+      <button class="city-footer-link spring" onclick={() => openView('notes')}>Notes</button>
+      <button class="city-footer-link spring" onclick={() => openView('features')}>Board</button>
+    </div>
+  </footer>
 </section>
 
 <style>
-  .garden { background: var(--ws-app); }
-  .meadow { isolation: isolate; background: linear-gradient(180deg, var(--ws-garden-sky) 0%, var(--ws-garden-sky) 35%, var(--ws-garden-meadow) 35%, var(--ws-garden-meadow) 100%); }
-  .sun { position:absolute; width:clamp(3rem,8vw,6rem); aspect-ratio:1; border-radius:50%; background:var(--ws-garden-sun); top:8%; right:15%; box-shadow:0 0 3rem var(--ws-garden-sun-glow); }
-  .hill { position:absolute; border-radius:50% 50% 0 0; }
-  .hill-back { width:70%; height:37%; left:-10%; bottom:21%; background:var(--ws-garden-hill); transform:rotate(-5deg); }
-  .hill-front { width:88%; height:34%; right:-13%; bottom:18%; background:var(--ws-garden-grass); transform:rotate(4deg); }
-  .pond { position:absolute; z-index:1; width:24%; height:12%; right:13%; bottom:23%; border:3px solid var(--ws-garden-water-edge); border-radius:50%; background:var(--ws-garden-water); color:var(--ws-garden-water-light); text-align:center; padding-top:1.4%; }
-  .pond span { display:inline-block; animation:glimmer 2.4s ease-in-out infinite; }
-  .garden-path { position:absolute; z-index:2; width:38%; height:17%; left:24%; bottom:0; background:var(--ws-garden-path); clip-path:polygon(38% 0,62% 0,100% 100%,0 100%); }
-  .tree { position:absolute; z-index:2; bottom:40%; width:3rem; height:5rem; }
-  .tree-a { left:8%; }.tree-b { right:7%; transform:scale(.78); bottom:43%; }
-  .tree i { position:absolute; bottom:0; left:42%; width:16%; height:52%; background:var(--ws-garden-wood); }
-  .tree b { position:absolute; top:0; left:4%; width:92%; aspect-ratio:1; border-radius:48%; background:var(--ws-garden-leaves); box-shadow:inset -8px -4px 0 var(--ws-garden-leaves-shade); }
-  .flower { position:absolute; z-index:3; color:var(--ws-garden-flower); font-size:1.5rem; animation:nod 2.8s ease-in-out infinite alternate; }
-  .flower-a { left:23%; bottom:29%; }.flower-b { left:64%; bottom:34%; color:var(--ws-garden-flower-alt); }.flower-c { right:27%; bottom:25%; font-size:1rem; }
-  .critter-wrap { position:absolute; z-index:4; left:var(--x); top:var(--y); display:flex; flex-direction:column; align-items:center; transform:translate(-50%,-50%); animation:amble var(--wander) ease-in-out infinite alternate; }
-  .critter-wrap:hover,.critter-wrap.chosen { z-index:6; }
-  .critter { position:relative; display:block; width:4.5rem; height:4rem; border:2px solid var(--ws-garden-outline); border-radius:46% 46% 40% 40%; background:var(--critter-color); box-shadow:inset -5px -5px 0 var(--critter-shade), 0 5px 0 var(--ws-garden-shadow); transition:transform .15s var(--ease-spring); }
-  .critter-wrap:hover .critter,.critter-wrap.chosen .critter { transform:translateY(-4px) scale(1.06); }
-  .critter.tangerine,.mini-critter.tangerine { --critter-color:var(--ws-garden-orange);--critter-shade:var(--ws-garden-orange-shade); }
-  .critter.sky,.mini-critter.sky { --critter-color:var(--ws-garden-blue);--critter-shade:var(--ws-garden-blue-shade); }
-  .critter.rose,.mini-critter.rose { --critter-color:var(--ws-garden-pink);--critter-shade:var(--ws-garden-pink-shade); }
-  .critter.mint,.mini-critter.mint { --critter-color:var(--ws-garden-mint);--critter-shade:var(--ws-garden-mint-shade); }
-  .ear { position:absolute; z-index:-1; top:-.75rem; width:1.1rem; height:1.5rem; border:2px solid var(--ws-garden-outline); border-radius:50% 50% 30% 30%; background:var(--critter-color); }
-  .ear-left { left:.55rem; transform:rotate(-16deg); }.ear-right { right:.55rem; transform:rotate(16deg); }
-  .fox .ear { border-radius:30% 70% 25% 25%; height:1.35rem; top:-.7rem; }.fox .ear-left { transform:rotate(-28deg); }.fox .ear-right { transform:rotate(28deg); }
-  .bear .ear { width:1.2rem; height:1.2rem; top:-.4rem; border-radius:50%; }.bear .ear-left { left:.1rem; }.bear .ear-right { right:.1rem; }
-  .cat .ear { border-radius:20% 80% 15% 15%; }.frog .ear { display:none; }
-  .eye { position:absolute; top:1.25rem; width:.22rem; height:.3rem; border-radius:50%; background:var(--ws-garden-face); }.eye-left { left:1.25rem; }.eye-right { right:1.25rem; }
-  .snout { position:absolute; top:1.55rem; left:50%; width:.55rem; height:.4rem; transform:translateX(-50%); border-radius:50%; background:var(--ws-garden-muzzle); }
-  .cheek { position:absolute; top:1.65rem; width:.5rem; height:.3rem; border-radius:50%; background:var(--ws-garden-blush); }.cheek-left { left:.55rem; }.cheek-right { right:.55rem; }
-  .belly { position:absolute; bottom:0; left:25%; width:50%; height:34%; border-radius:50% 50% 0 0; background:var(--ws-garden-belly); opacity:.9; }
-  .tail { position:absolute; right:-.65rem; bottom:.15rem; width:.95rem; height:.75rem; border:2px solid var(--ws-garden-outline); border-radius:50%; background:var(--critter-color); }
-  .rabbit .tail,.frog .tail { display:none; }
-  .critter-name { margin-top:.4rem; border:1px solid var(--ws-garden-label-line); background:var(--ws-garden-label); padding:.2rem .45rem; color:var(--ws-garden-label-ink); font-size:.68rem; font-weight:700; white-space:nowrap; }
-  .ready-dot { position:absolute; top:-.45rem; right:-.5rem; width:.7rem; height:.7rem; border:2px solid var(--ws-garden-outline); border-radius:50%; background:var(--ws-garden-ready); }
-  .mini-critter { position:relative; width:1.5rem; height:1.4rem; flex:none; border:1px solid var(--ws-garden-outline); border-radius:45%; background:var(--critter-color); }
-  .mini-critter i,.mini-critter b { position:absolute; top:-.3rem; width:.45rem; height:.5rem; border:1px solid var(--ws-garden-outline); border-radius:50%; background:var(--critter-color); }.mini-critter i { left:.1rem; }.mini-critter b { right:.1rem; }
-  .mini-critter.fox i,.mini-critter.fox b { border-radius:20% 80% 10% 10%; }
-  .meadow-caption { position:absolute; z-index:5; left:.75rem; bottom:.75rem; display:flex; align-items:center; gap:.4rem; color:var(--ws-garden-caption); font-size:.72rem; }
-  @keyframes amble { from { translate:-3px 0; } to { translate:4px -2px; } }
-  @keyframes nod { from { rotate:-8deg; } to { rotate:8deg; } }
-  @keyframes glimmer { 50% { opacity:.4; transform:translateX(8px); } }
-  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; } }
-  @media (max-width:639px) { .critter { width:3.8rem; height:3.5rem; }.garden-layout { grid-template-rows:minmax(25rem,1fr) auto; }.meadow-caption { max-width:80%; font-size:.65rem; } }
+  .city-mode { background: var(--ws-app); }
+  .city-toolbar,.city-footer { background: var(--ws-surface); }
+  .city-action { display:flex; align-items:center; gap:.45rem; min-height:2.1rem; border:1px solid var(--ws-line-strong); padding:.4rem .65rem; color:var(--ws-ink-muted); font-size:.75rem; }
+  .city-action:hover { border-color:var(--ws-city-cyan); color:var(--ws-city-cyan); }
+  .city-action-icon { width:2.1rem; justify-content:center; padding:0; }
+  .district-light { width:.42rem; height:.42rem; border-radius:50%; background:var(--ws-city-cyan); box-shadow:0 0 10px var(--ws-city-glow); }
+  .city-viewport { isolation:isolate; min-height:20rem; background:linear-gradient(180deg,var(--ws-city-sky) 0%,var(--ws-city-horizon) 57%,var(--ws-city-ground) 100%); }
+  .city-haze { position:absolute; inset:28% 0 0; background:radial-gradient(ellipse at 50% 24%,var(--ws-city-haze),transparent 58%); }
+  .distant-skyline { position:absolute; inset:8% 0 37%; opacity:.58; }
+  .distant-skyline i { position:absolute; bottom:0; left:var(--left); width:var(--width); height:var(--height); border-top:1px solid var(--ws-city-distant-line); background:linear-gradient(90deg,var(--ws-city-distant-a),var(--ws-city-distant-b)); clip-path:polygon(0 4%,100% 0,100% 100%,0 100%); }
+  .distant-skyline i:nth-child(3n)::after { content:""; position:absolute; inset:12% 12% 0; background:repeating-linear-gradient(90deg,transparent 0 8px,var(--ws-city-window-dim) 8px 10px),repeating-linear-gradient(0deg,transparent 0 10px,var(--ws-city-window-dim) 10px 12px); }
+  .city-floor { position:absolute; inset:45% -10% -38%; overflow:hidden; transform:perspective(850px) rotateX(56deg) scale(1.3); transform-origin:center top; background-color:var(--ws-city-floor); background-image:linear-gradient(45deg,var(--ws-city-grid) 1px,transparent 1px),linear-gradient(-45deg,var(--ws-city-grid) 1px,transparent 1px); background-size:4.5rem 4.5rem; }
+  .street { position:absolute; background:var(--ws-city-road); box-shadow:0 0 0 1px var(--ws-city-road-edge), inset 0 0 0 1px var(--ws-city-road-inner); }
+  .street-one { width:120%; height:2.7rem; left:-10%; top:42%; transform:rotate(-17deg); }
+  .street-two { width:120%; height:2rem; left:-10%; top:74%; transform:rotate(-17deg); }
+  .street-three { width:2rem; height:140%; left:50%; top:-20%; transform:rotate(27deg); }
+  .street-markings { position:absolute; left:-10%; top:44%; width:120%; height:1px; transform:rotate(-17deg); background:repeating-linear-gradient(90deg,var(--ws-city-marking) 0 1rem,transparent 1rem 1.8rem); }
+  .city-rails { position:absolute; inset:0; pointer-events:none; }
+  .city-rails span { position:absolute; height:1px; left:0; right:0; background:linear-gradient(90deg,transparent,var(--ws-city-rail),transparent); }
+  .city-rails span:nth-child(1) { top:27%; }.city-rails span:nth-child(2) { top:49%; opacity:.45; }.city-rails span:nth-child(3) { bottom:15%; opacity:.25; }
+  .building { position:absolute; z-index:2; left:var(--x); top:var(--y); width:clamp(2.25rem,7vw,5rem); height:var(--height); min-height:5.5rem; transform:translate(-50%,-100%); }
+  .building-face,.building-side,.building-roof,.building-base { position:absolute; display:block; }
+  .building-face { inset:0 16% 0 0; border:1px solid var(--ws-city-outline); border-bottom:0; background:linear-gradient(90deg,var(--building-face-a),var(--building-face-b)); }
+  .building-face::after { content:""; position:absolute; inset:7% 10%; background:repeating-linear-gradient(90deg,transparent 0 8px,var(--building-window) 8px 10px),repeating-linear-gradient(0deg,transparent 0 10px,var(--building-window) 10px 12px); opacity:.84; }
+  .building-side { top:0; right:0; width:16%; height:100%; transform:skewY(-30deg); transform-origin:left top; border:1px solid var(--ws-city-outline); background:var(--building-side); }
+  .building-roof { top:-.45rem; left:0; right:16%; height:.45rem; transform:skewX(-45deg); transform-origin:bottom left; background:var(--building-roof); border:1px solid var(--ws-city-outline); }
+  .building-base { bottom:-.35rem; left:-.25rem; right:-.4rem; height:.55rem; transform:skewX(-45deg); background:var(--ws-city-base); border:1px solid var(--ws-city-outline); }
+  .building::after { content:""; position:absolute; left:42%; top:-.4rem; width:1px; height:.4rem; background:var(--ws-city-cyan); box-shadow:0 0 8px var(--ws-city-glow); }
+  .building.one { --building-face-a:var(--ws-city-glass-a);--building-face-b:var(--ws-city-glass-b);--building-side:var(--ws-city-glass-side);--building-roof:var(--ws-city-roof-a);--building-window:var(--ws-city-window); }
+  .building.two { --building-face-a:var(--ws-city-silver-a);--building-face-b:var(--ws-city-silver-b);--building-side:var(--ws-city-silver-side);--building-roof:var(--ws-city-roof-b);--building-window:var(--ws-city-window-warm); }
+  .building.three { --building-face-a:var(--ws-city-teal-a);--building-face-b:var(--ws-city-teal-b);--building-side:var(--ws-city-teal-side);--building-roof:var(--ws-city-roof-c);--building-window:var(--ws-city-window); }
+  .building.four { --building-face-a:var(--ws-city-purple-a);--building-face-b:var(--ws-city-purple-b);--building-side:var(--ws-city-purple-side);--building-roof:var(--ws-city-roof-d);--building-window:var(--ws-city-window-warm); }
+  .building.five { --building-face-a:var(--ws-city-blue-a);--building-face-b:var(--ws-city-blue-b);--building-side:var(--ws-city-blue-side);--building-roof:var(--ws-city-roof-e);--building-window:var(--ws-city-window); }
+  .building.six { --building-face-a:var(--ws-city-bronze-a);--building-face-b:var(--ws-city-bronze-b);--building-side:var(--ws-city-bronze-side);--building-roof:var(--ws-city-roof-f);--building-window:var(--ws-city-window-warm); }
+  .building-selected .building-base { outline:1px solid var(--ws-city-cyan); }
+  .building-selected::after { height:.7rem; top:-.7rem; }
+  .resident { position:absolute; z-index:4; left:var(--x); top:var(--y); width:2.6rem; height:4rem; transform:translate(-50%,-50%); }
+  .resident-shadow { position:absolute; left:.35rem; right:.35rem; bottom:.12rem; height:.38rem; border-radius:50%; background:var(--ws-city-agent-shadow); filter:blur(2px); }
+  .resident-body { position:absolute; left:.65rem; bottom:.45rem; width:1.25rem; height:2rem; border:1px solid var(--ws-city-agent-outline); border-radius:.45rem .45rem .25rem .25rem; background:linear-gradient(90deg,var(--ws-city-agent-a),var(--ws-city-agent-b)); box-shadow:inset -.25rem 0 0 var(--ws-city-agent-shade); }
+  .resident-head { position:absolute; left:.2rem; top:-.76rem; width:.8rem; height:.8rem; border:1px solid var(--ws-city-agent-outline); border-radius:45% 45% 38% 38%; background:var(--ws-city-helmet); }
+  .resident-visor { position:absolute; left:.25rem; top:-.53rem; width:.7rem; height:.24rem; border-radius:50%; background:var(--ws-city-visor); box-shadow:0 0 5px var(--ws-city-glow); }
+  .resident-pack { position:absolute; left:-.24rem; top:.27rem; width:.32rem; height:.85rem; border-radius:.1rem; background:var(--ws-city-pack); }
+  .resident-active .resident-body { background:linear-gradient(90deg,var(--ws-city-agent-active-a),var(--ws-city-agent-active-b)); }
+  .resident-selected { z-index:6; }
+  .resident-selected::before { content:""; position:absolute; left:.15rem; right:.15rem; bottom:0; height:.5rem; border:1px solid var(--ws-city-cyan); border-radius:50%; box-shadow:0 0 10px var(--ws-city-glow); }
+  .resident-label { position:absolute; top:100%; left:50%; transform:translateX(-50%); margin-top:.25rem; color:var(--ws-city-label); font:600 .65rem/1.2 var(--font-sans); text-shadow:0 1px 4px var(--ws-city-shadow); white-space:nowrap; }
+  .agent-console { position:absolute; z-index:8; right:.75rem; bottom:.75rem; display:flex; align-items:center; gap:.55rem; border:1px solid var(--ws-city-console-line); background:var(--ws-city-console); padding:.45rem .5rem .45rem .7rem; color:var(--ws-city-label); box-shadow:0 7px 18px var(--ws-city-shadow); }
+  .console-indicator,.agent-pip { flex:none; width:.42rem; height:.42rem; border-radius:50%; background:var(--ws-city-muted); }
+  .console-indicator.online,.agent-pip.online { background:var(--ws-city-cyan); box-shadow:0 0 8px var(--ws-city-glow); }
+  .console-name { font-size:.74rem; font-weight:650; }.console-state { border-left:1px solid var(--ws-city-console-line); padding-left:.5rem; color:var(--ws-city-muted); font-size:.68rem; }
+  .console-toggle { display:grid; width:1.8rem; height:1.8rem; place-items:center; color:var(--ws-city-label); }
+  .city-notice { position:absolute; z-index:10; top:.75rem; left:50%; transform:translateX(-50%); border:1px solid var(--ws-city-console-line); background:var(--ws-city-console); padding:.4rem .7rem; color:var(--ws-city-label); font-size:.75rem; }
+  .agent-tab { display:flex; align-items:center; gap:.45rem; min-height:2rem; border:1px solid transparent; padding:.35rem .55rem; color:var(--ws-ink-faint); font-size:.72rem; white-space:nowrap; }
+  .agent-tab:hover,.agent-tab-selected { border-color:var(--ws-line-strong); color:var(--ws-ink); }
+  .city-footer-link { padding:.35rem .45rem; color:var(--ws-ink-muted); font-size:.72rem; }.city-footer-link:hover { color:var(--ws-city-cyan); }
+  @media (max-width:640px) { .city-viewport { min-height:17rem; }.city-floor { inset:53% -25% -44%; transform:perspective(700px) rotateX(59deg) scale(1.45); }.building { width:clamp(2rem,9vw,3.5rem); }.resident { transform:translate(-50%,-50%) scale(.82); }.resident-label { font-size:.58rem; }.city-toolbar { padding-inline:.65rem; }.agent-console { right:.4rem; bottom:.4rem; }.city-footer { padding-inline:.5rem; } }
+  @media (max-height:500px) { .city-viewport { min-height:9rem; }.building { min-height:4rem; }.resident { transform:translate(-50%,-50%) scale(.68); } }
+  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
 </style>

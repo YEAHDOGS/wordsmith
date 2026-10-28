@@ -55,41 +55,73 @@
   --ws-dot-blue: #5aa8ff;
   --ws-dot-purple: #b18cff;
   --ws-dot-pink: #ff7ac6;
-  /* AI Garden meadow, critters and scene details */
-  --ws-garden-sky: #203747;
-  --ws-garden-meadow: #365e3d;
-  --ws-garden-hill: #477247;
-  --ws-garden-grass: #57884b;
-  --ws-garden-sun: #f5d875;
-  --ws-garden-sun-glow: #f5d87555;
-  --ws-garden-water: #548fa0;
-  --ws-garden-water-edge: #b3d9c1;
-  --ws-garden-water-light: #d8f0d5;
-  --ws-garden-path: #c6a570;
-  --ws-garden-wood: #76563e;
-  --ws-garden-leaves: #739c53;
-  --ws-garden-leaves-shade: #56783f;
-  --ws-garden-flower: #f3d26b;
-  --ws-garden-flower-alt: #ed9ca7;
-  --ws-garden-outline: #354a36;
-  --ws-garden-shadow: #263d2e;
-  --ws-garden-orange: #ef9a56;
-  --ws-garden-orange-shade: #ce7541;
-  --ws-garden-blue: #86bac1;
-  --ws-garden-blue-shade: #6297a3;
-  --ws-garden-pink: #e6a3a3;
-  --ws-garden-pink-shade: #c97f86;
-  --ws-garden-mint: #91c38e;
-  --ws-garden-mint-shade: #6d9e72;
-  --ws-garden-face: #493a36;
-  --ws-garden-muzzle: #fff0d4;
-  --ws-garden-blush: #df8581;
-  --ws-garden-belly: #ffe7bf;
-  --ws-garden-label: #fff4d8;
-  --ws-garden-label-line: #a8855c;
-  --ws-garden-label-ink: #3f4030;
-  --ws-garden-ready: #54c777;
-  --ws-garden-caption: #f3f4d6;
+  /* AI Garden city sky and horizon */
+  --ws-city-sky: #08131f;
+  --ws-city-horizon: #11283a;
+  --ws-city-ground: #0a1119;
+  --ws-city-haze: #1b536544;
+  /* AI Garden distant skyline depth and windows */
+  --ws-city-distant-line: #385b70;
+  --ws-city-distant-a: #122b3c;
+  --ws-city-distant-b: #0b1c2a;
+  --ws-city-window-dim: #77aaba30;
+  /* AI Garden streets, map grid and elevated roads */
+  --ws-city-floor: #101e28;
+  --ws-city-grid: #4f758522;
+  --ws-city-road: #17232e;
+  --ws-city-road-edge: #456074;
+  --ws-city-road-inner: #253b4c;
+  --ws-city-marking: #9bb2b933;
+  --ws-city-rail: #6ca0b62b;
+  /* AI Garden tower glass: cool glass, brushed silver, teal, violet, blue and bronze */
+  --ws-city-glass-a: #17384b;
+  --ws-city-glass-b: #102737;
+  --ws-city-glass-side: #0c1b28;
+  --ws-city-silver-a: #526475;
+  --ws-city-silver-b: #293c4a;
+  --ws-city-silver-side: #1d2b39;
+  --ws-city-teal-a: #176064;
+  --ws-city-teal-b: #103d4b;
+  --ws-city-teal-side: #0d2c39;
+  --ws-city-purple-a: #463856;
+  --ws-city-purple-b: #29293e;
+  --ws-city-purple-side: #211f32;
+  --ws-city-blue-a: #315d79;
+  --ws-city-blue-b: #203e5a;
+  --ws-city-blue-side: #172b42;
+  --ws-city-bronze-a: #665442;
+  --ws-city-bronze-b: #3c3840;
+  --ws-city-bronze-side: #292a33;
+  /* AI Garden tower roofs, silhouettes and lit office windows */
+  --ws-city-roof-a: #32718a;
+  --ws-city-roof-b: #8094a2;
+  --ws-city-roof-c: #35a19a;
+  --ws-city-roof-d: #9a77a8;
+  --ws-city-roof-e: #5d94b3;
+  --ws-city-roof-f: #b58c62;
+  --ws-city-window: #8bd4dd;
+  --ws-city-window-warm: #f1c98b;
+  --ws-city-outline: #17212b;
+  --ws-city-base: #243b4a;
+  /* AI Garden resident suits, visors and status lights */
+  --ws-city-agent-shadow: #02070c99;
+  --ws-city-agent-outline: #182b39;
+  --ws-city-agent-a: #9caeb5;
+  --ws-city-agent-b: #526979;
+  --ws-city-agent-shade: #40505d;
+  --ws-city-helmet: #c4d3d5;
+  --ws-city-visor: #233e4d;
+  --ws-city-pack: #344854;
+  --ws-city-agent-active-a: #70b9b5;
+  --ws-city-agent-active-b: #345f69;
+  --ws-city-cyan: #70d8dc;
+  --ws-city-glow: #52bdcf66;
+  /* AI Garden labels and small agent console */
+  --ws-city-label: #dbe8e9;
+  --ws-city-console-line: #466071;
+  --ws-city-console: #0b1721ef;
+  --ws-city-muted: #91a7b2;
+  --ws-city-shadow: #02070ccc;
 }
 
 /* Light theme: same roles, paper background, darker accent for AA on white. */
@@ -130,41 +162,6 @@
   --ws-dot-blue: #1f5fbf;
   --ws-dot-purple: #6d3fd1;
   --ws-dot-pink: #b8237a;
-  /* AI Garden tokens are brightened for the sunlit paper palette */
-  --ws-garden-sky: #a9d9dc;
-  --ws-garden-meadow: #a7cf93;
-  --ws-garden-hill: #8ebc7f;
-  --ws-garden-grass: #78ad68;
-  --ws-garden-sun: #f4c94e;
-  --ws-garden-sun-glow: #f4c94e55;
-  --ws-garden-water: #68a9b6;
-  --ws-garden-water-edge: #f5f2d6;
-  --ws-garden-water-light: #ffffff;
-  --ws-garden-path: #d8b77f;
-  --ws-garden-wood: #76563e;
-  --ws-garden-leaves: #5c8d4b;
-  --ws-garden-leaves-shade: #47743e;
-  --ws-garden-flower: #e7b83f;
-  --ws-garden-flower-alt: #d87583;
-  --ws-garden-outline: #38533a;
-  --ws-garden-shadow: #52744f;
-  --ws-garden-orange: #e78a45;
-  --ws-garden-orange-shade: #c56e37;
-  --ws-garden-blue: #6da9b1;
-  --ws-garden-blue-shade: #4a838d;
-  --ws-garden-pink: #d78388;
-  --ws-garden-pink-shade: #b95f6b;
-  --ws-garden-mint: #70a86d;
-  --ws-garden-mint-shade: #4b8157;
-  --ws-garden-face: #342b28;
-  --ws-garden-muzzle: #fff3db;
-  --ws-garden-blush: #b94d59;
-  --ws-garden-belly: #fff0d0;
-  --ws-garden-label: #fff8e8;
-  --ws-garden-label-line: #95784f;
-  --ws-garden-label-ink: #353528;
-  --ws-garden-ready: #268748;
-  --ws-garden-caption: #263c2c;
 }
 
 /* Custom colors (Settings → Appearance) are not written here: src/lib/appearance.svelte.js reads the values above

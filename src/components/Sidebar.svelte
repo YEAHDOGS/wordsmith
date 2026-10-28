@@ -7,7 +7,7 @@
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
   import Archive from '@lucide/svelte/icons/archive';
-  import Sprout from '@lucide/svelte/icons/sprout';
+  import Building2 from '@lucide/svelte/icons/building-2';
   import Settings from '@lucide/svelte/icons/settings';
   import Plus from '@lucide/svelte/icons/plus';
   import Pencil from '@lucide/svelte/icons/pencil';
@@ -231,15 +231,9 @@
   </div>
 
   {#if gardenMode}
-    <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 {compact ? 'items-center px-1' : ''}" aria-label="Garden navigation">
-      {#if compact}
-        <Sprout class="size-5 text-complete" />
-      {:else}
-        <p class="font-mono text-[0.6875rem] uppercase tracking-widest text-complete">Garden paths</p>
-        <p class="text-sm font-semibold text-ink">Friends & activity</p>
-        <p class="text-xs leading-relaxed text-ink-faint">Choose a friend in the meadow to see what they’re up to.</p>
-        <div class="mt-2 border-t border-line pt-3 text-xs text-ink-faint">Agent connections<br /><span class="text-ink-muted">Local preview</span></div>
-      {/if}
+    <div class="flex min-h-0 flex-1 items-start gap-2 px-4 py-5 {compact ? 'justify-center px-1' : ''}" aria-label="City district">
+      <Building2 class="size-4 shrink-0 text-complete" />
+      {#if !compact}<span class="font-mono text-xs text-ink-faint">District 01</span>{/if}
     </div>
   {/if}
 

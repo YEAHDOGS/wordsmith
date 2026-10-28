@@ -126,7 +126,7 @@
 
   <div class="flex min-w-0 flex-1 flex-col">
     <div class="relative">
-      <TopBar title={gardenMode ? 'AI Garden' : view.title} subtitle={gardenMode ? 'Your agents, growing together' : view.subtitle} onsettings={gardenMode ? null : openSettings} />
+      <TopBar title={gardenMode ? 'AI Garden' : view.title} subtitle={gardenMode ? '' : view.subtitle} onsettings={gardenMode ? null : openSettings} />
       {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} projectId={route.view === 'project' ? (project?.id ?? null) : null} />{/if}
     </div>
 
