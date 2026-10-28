@@ -70,7 +70,7 @@ export function checkUpload(type, size, name) {
   const kind = attachmentKind(type);
   if (!kind) throw new HttpError(415, ERROR_TYPE);
   // A document's name has to carry its type's extension, so a file can't claim to be text and download as something else.
-  if (kind === 'document' && documentType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].join(' or ')} name`);
+  if (kind === 'document' && documentType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].join(' or ')}`);
   if (!Number.isFinite(size) || size <= 0) throw new HttpError(411, 'Content-Length is required');
   const max = MAX_BYTES[kind];
   if (size > max) throw new HttpError(413, `${PLURAL[kind]} can be at most ${Math.round(max / MB)} MB`);
