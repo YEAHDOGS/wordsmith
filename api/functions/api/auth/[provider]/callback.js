@@ -4,9 +4,9 @@
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, cookie, createSession, getAuth, readCookie } from '../../../../lib/auth.js';
 import { fetchProfile, redirectUri } from '../../../../lib/oauth.js';
 import { upsertUserForProfile } from '../../../../lib/users.js';
-import { SIGNUP_COOKIE, STATE_COOKIE, appRedirect, assertProvider, loadState, signupAllowed } from '../../../../lib/login.js';
+import { SIGNUP_COOKIE, STATE_COOKIE, appRedirect, assertProvider, loadState, signupAllowed, userCode } from '../../../../lib/login.js';
 
-const SIGNUP_LOCKED_MESSAGE = 'wordsmith is in private beta. Enter the beta password, then sign in again to create your account.';
+const SIGNUP_LOCKED_MESSAGE = 'wordsmith is in private beta. Enter the beta password, then continue again to create your account.';
 
 /** @param {{ request: Request, env: Record<string, any>, params: { provider: string } }} context */
 async function finish({ request, env, params }) {
@@ -31,6 +31,8 @@ async function finish({ request, env, params }) {
   // Already signed in on the web? Then this links the new provider to the same account.
   const current = isDevice ? null : await getAuth(request, env).catch(() => null);
   const userId = await upsertUserForProfile(env, provider, profile, current?.via === 'cookie' ? current.user.id : null, await signupAllowed(request, env));
+  // A native login goes back to the browser's confirmation screen (its device login is still pending) to try again there.
+  if (!userId && isDevice) return appRedirect(request, { device: state, provider, code: userCode(state), auth_error: SIGNUP_LOCKED_MESSAGE }, [clearState]);
   if (!userId) return fail(SIGNUP_LOCKED_MESSAGE);
   const clearSignup = cookie(request, SIGNUP_COOKIE, '', { maxAge: 0, crossSite: true });
   const token = await createSession(env, userId, request);

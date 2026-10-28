@@ -1,7 +1,7 @@
 // Shared pieces of the OAuth login flow: state rows, the state cookie and redirects back into the app.
 // Pages shown outside a normal login (device confirmation, errors) are rendered by the SPA from query params.
 import { readCookie } from './auth.js';
-import { sameSecret, sha256 } from './crypto.js';
+import { hmacSha256, sameSecret } from './crypto.js';
 import { HttpError } from './http.js';
 import { configuredProviders } from './oauth.js';
 import { APP_HOST, SHORT_HOSTS } from '../../src/lib/models.js';
@@ -13,8 +13,9 @@ export const LOGIN_RATE_LIMIT = 30;
 export const LOGIN_RATE_WINDOW_MS = 600_000;
 // Holds proof of the beta password (SIGNUP_PASSWORD) through the OAuth round trip, so the callback may create an account.
 export const SIGNUP_COOKIE = 'ws_signup';
-// Salts the cookie digest so it never equals a plain SHA-256 of the password.
-const SIGNUP_KEY_PREFIX = 'wordsmith-signup:';
+const SIGNUP_PROOF_PREFIX = 'wordsmith-signup:';
+// A proof is "<expires_at ms>.<hex HMAC>".
+const SIGNUP_PROOF_PATTERN = /^(\d+)\.[0-9a-f]+$/;
 // Characters of the device-login confirmation code shown in the app and in the browser.
 const USER_CODE_LENGTH = 6;
 const REDIRECT_STATUS = 303;
@@ -55,17 +56,25 @@ export function signupLocked(env) {
   return Boolean(env.SIGNUP_PASSWORD);
 }
 
-/** The value of SIGNUP_COOKIE once the beta password checked out. @param {Record<string, any>} env */
-export function signupKey(env) {
-  return sha256(SIGNUP_KEY_PREFIX + env.SIGNUP_PASSWORD);
+/**
+ * The SIGNUP_COOKIE value once the beta password checked out: its expiry, signed with a key only the server holds
+ * (TOKEN_ENCRYPTION_KEY plus the password), so a copied cookie stops working at expiresAt or when the password changes,
+ * and can't be brute-forced back into the password offline.
+ * @param {Record<string, any>} env
+ * @param {number} expiresAt epoch ms
+ */
+export async function signupProof(env, expiresAt) {
+  const signature = await hmacSha256(`${env.TOKEN_ENCRYPTION_KEY || ''}:${env.SIGNUP_PASSWORD}`, SIGNUP_PROOF_PREFIX + expiresAt);
+  return `${expiresAt}.${signature}`;
 }
 
 /** May this request create a new account? @param {Request} request @param {Record<string, any>} env */
 export async function signupAllowed(request, env) {
   if (!signupLocked(env)) return true;
-  const proof = readCookie(request, SIGNUP_COOKIE);
-  if (!proof) return false;
-  return sameSecret(proof, await signupKey(env));
+  const proof = readCookie(request, SIGNUP_COOKIE) || '';
+  const expiresAt = Number(SIGNUP_PROOF_PATTERN.exec(proof)?.[1]);
+  if (!(expiresAt > Date.now())) return false;
+  return sameSecret(proof, await signupProof(env, expiresAt));
 }
 
 /** Throws 404 unless the provider exists and has credentials. @param {Record<string, any>} env @param {string} provider */

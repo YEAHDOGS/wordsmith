@@ -27,6 +27,8 @@
   // Private beta: only needed to create an account. The app's WebView can't pass it to the system browser, so native
   // logins enter it on the browser's confirmation screen instead.
   let betaPassword = $state('');
+  // Set once the server accepted betaPassword, so a second provider click doesn't spend another guess.
+  let betaAccepted = $state(false);
   const showBeta = $derived(auth.signupLocked && !IS_NATIVE);
   // Start-up may have trusted a cached user and skipped the session request; the sign-in buttons need its provider list.
   $effect(() => {
@@ -47,10 +49,20 @@
     busy = '';
   }
 
-  /** Sends the beta password, if one was typed, before the OAuth redirect. */
+  /** Sends the beta password, if one was typed and not yet accepted, before the OAuth redirect. */
   async function unlockBeta() {
-    if (!betaPassword) return true;
-    return auth.unlockSignup(betaPassword);
+    if (!betaPassword || betaAccepted) return true;
+    betaAccepted = await auth.unlockSignup(betaPassword);
+    return betaAccepted;
+  }
+
+  /** Enter in the beta field on the sign-in screen: check it now, then the user picks a provider. @param {SubmitEvent} event */
+  async function submitBeta(event) {
+    event.preventDefault();
+    if (busy) return;
+    busy = 'beta';
+    await unlockBeta();
+    busy = '';
   }
 
   /** @param {string} provider */
@@ -60,10 +72,10 @@
     busy = '';
   }
 
-  /** @param {MouseEvent} event */
+  /** @param {SubmitEvent} event */
   async function confirmDevice(event) {
-    if (!betaPassword) return;
     event.preventDefault();
+    if (busy) return;
     busy = 'confirm';
     if (await unlockBeta()) location.href = confirmHref;
     else busy = '';
@@ -99,14 +111,16 @@
         <h2 class="text-fluid-lg font-bold">{TEXT.confirmTitle}</h2>
         <p class="selectable my-4 font-mono text-fluid-xl tracking-[0.4em] text-accent">{notice.code}</p>
         <p class="mb-5 text-fluid-sm text-ink-muted">{TEXT.confirmBody}</p>
-        {#if showBeta}
-          <input type="password" bind:value={betaPassword} autocomplete="off" maxlength="200" placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel}
-            class="{INPUT_CLASS} mb-px w-full border border-line" />
-        {/if}
-        <a href={confirmHref} onclick={confirmDevice} aria-disabled={busy === 'confirm'} class="{BUTTON_CLASS} border-accent">
-          <ProviderIcon provider={notice.provider || ''} />
-          {TEXT.confirmButton}
-        </a>
+        <form class="flex flex-col gap-px" onsubmit={confirmDevice}>
+          {#if showBeta}
+            <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength="200"
+              placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} border border-line" />
+          {/if}
+          <button type="submit" class="{BUTTON_CLASS} border-accent" disabled={Boolean(busy)}>
+            <ProviderIcon provider={notice.provider || ''} />
+            {TEXT.confirmButton}
+          </button>
+        </form>
       </div>
     {:else if notice?.kind === 'device_done'}
       <div class="border border-complete bg-complete-soft p-5 text-center" in:fly={{ y: 12, duration: 300 }}>
@@ -140,8 +154,13 @@
       {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
         {#if showBeta && available.length}
-          <input type="password" bind:value={betaPassword} autocomplete="off" maxlength="200" placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel}
-            class={INPUT_CLASS} in:fly={{ y: 8, delay: 150, duration: 300 }} />
+          <form class="flex" onsubmit={submitBeta} in:fly={{ y: 8, delay: 150, duration: 300 }}>
+            <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength="200"
+              placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} w-full" />
+          </form>
+          {#if betaAccepted}
+            <p role="status" class="bg-complete-soft px-5 py-2 text-center text-fluid-sm text-complete" in:fade>{TEXT.betaAccepted}</p>
+          {/if}
         {/if}
         {#each available as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>

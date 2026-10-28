@@ -36,6 +36,13 @@ export async function sameSecret(a, b) {
   return difference === 0;
 }
 
+/** Hex HMAC-SHA-256 of message under a text key. @param {string} keyText @param {string} message */
+export async function hmacSha256(keyText, message) {
+  const key = await crypto.subtle.importKey('raw', encoder.encode(keyText), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /** PKCE S256 challenge for a verifier. @param {string} verifier */
 export async function pkceChallenge(verifier) {
   return base64url(await crypto.subtle.digest('SHA-256', encoder.encode(verifier)));
