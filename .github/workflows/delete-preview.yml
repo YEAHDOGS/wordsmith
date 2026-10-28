@@ -18,6 +18,8 @@ concurrency:
 env:
   NODE_VERSION: "24"
   WORKER: wordsmith
+  # `wrangler preview` is an open beta; stay on the major version this was tested with.
+  WRANGLER_MAJOR: "4"
 
 jobs:
   delete:
@@ -36,10 +38,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           name="$(printf '%s' "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
-          if output="$(npx --yes wrangler preview delete --name "$name" --worker-name "$WORKER" --skip-confirmation 2>&1)"; then
+          if output="$(npx --yes "wrangler@$WRANGLER_MAJOR" preview delete --name "$name" --worker-name "$WORKER" --skip-confirmation 2>&1)"; then
             printf '%s\n' "$output"
             echo "Deleted Preview $name."
-          elif printf '%s' "$output" | grep -qi 'not found\|does not exist'; then
+          # Only Cloudflare's "Preview not found" (code 10025) means there is nothing to delete; any other error fails.
+          elif printf '%s' "$output" | grep -q 'code: 10025'; then
             echo "No Preview named $name (the branch never built one); nothing to delete."
           else
             printf '%s\n' "$output"
