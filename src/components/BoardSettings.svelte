@@ -62,7 +62,8 @@
 
   function saveMission() {
     clearTimeout(missionTimer);
-    if (!project || mission === savedMission) return;
+    // Nothing typed, or the project was just deleted (leaving the page after Delete runs this too).
+    if (!project || project.deleted_at || mission === savedMission) return;
     savedMission = mission;
     store.update('projects', project.id, { description: mission });
   }
