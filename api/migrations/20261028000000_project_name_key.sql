@@ -3,7 +3,8 @@
 -- " CAFÉ " are the same name. SQLite's lower() only folds A-Z, which is why the key is computed in JavaScript.
 -- The backfill below uses lower(trim(name)), exact for the ASCII names in production and staging when this shipped
 -- (checked with wrangler on 2026-10-28); the Worker rewrites the key on a project's next write.
--- Any live duplicates are renamed "<name> (<first 4 id chars>)" before the index, so this migration can't fail.
+-- Any live duplicates are renamed "<name> (<id>)" before the index, so this migration can't fail: ids are unique, so the
+-- new names are too (a short id prefix could collide).
 -- The key and index skip NULL keys: for the few seconds an old Worker runs against this schema it writes projects
 -- without a key, and those must not collide.
 -- Recovery: additive except the duplicate renames (none existed). To undo: DROP INDEX projects_user_name_key; the
@@ -12,8 +13,8 @@ ALTER TABLE projects ADD COLUMN name_key TEXT;
 UPDATE projects SET name_key = lower(trim(name));
 
 UPDATE projects
-SET name = trim(name) || ' (' || substr(id, 1, 4) || ')',
-    name_key = lower(trim(name)) || ' (' || substr(id, 1, 4) || ')',
+SET name = trim(name) || ' (' || id || ')',
+    name_key = lower(trim(name)) || ' (' || lower(id) || ')',
     updated_at = max(updated_at + 1, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
 WHERE id IN (
   SELECT id FROM (

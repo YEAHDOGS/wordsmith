@@ -27,12 +27,17 @@ const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, cr
  */
 export async function resolveProject(env, userId, ref) {
   if (ref === undefined || ref === null || ref === '') return null;
-  // By id, or by name folded like projectKey (unique per user). A row an old Worker wrote without a key falls back to lower().
-  const row = await env.DB.prepare(`SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL
-    AND (id = ? OR name_key = ? OR (name_key IS NULL AND lower(name) = lower(?))) LIMIT 1`)
-    .bind(userId, String(ref), projectKey(ref), String(ref)).first();
-  if (!row) throw new HttpError(404, `No project "${ref}"`);
-  return toApi(row);
+  const key = projectKey(ref);
+  // By id, or by name_key (indexed; the usual case).
+  const direct = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR name_key = ?) LIMIT 1')
+    .bind(userId, String(ref), key).first();
+  if (direct) return toApi(direct);
+  // Miss: compare live names with projectKey (at most MAX_PROJECTS rows). Catches keys an old Worker left empty and legacy
+  // non-ASCII names the migration's SQL backfill folded A-Z only.
+  const { results } = await env.DB.prepare('SELECT * FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const named = results.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (!named) throw new HttpError(404, `No project "${ref}"`);
+  return toApi(named);
 }
 
 /**
