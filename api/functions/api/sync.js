@@ -139,7 +139,10 @@ async function saveProjects(env, userId, incoming, existing, now) {
   // A legacy duplicate pair shares a name: the row holding the stored key wins, whatever order the rows came back in.
   const holdersLast = [...live].sort((a, b) => Number(a.name_key !== null) - Number(b.name_key !== null));
   const names = new Map(holdersLast.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)]));
-  let count = live.length;
+  // Deletions in this push free their slots up front, so a push that deletes one project and adds another at the cap
+  // is not refused just because the new row comes first.
+  const liveIds = new Set(live.map((/** @type {any} */ project) => String(project.id)));
+  let count = live.length - incoming.filter((row) => row.deleted_at && liveIds.has(String(row.id))).length;
   /** @type {{ statement: any, row: Record<string, any>, before: Record<string, any> | null }[]} */
   const writes = [];
   for (const row of incoming) {
@@ -160,8 +163,10 @@ async function saveProjects(env, userId, incoming, existing, now) {
       rejected.push({ id: row.id, table: 'projects', code: NAME_TAKEN, error: `A project named "${next.name}" already exists`, current: null });
       continue;
     }
-    if (!before && !next.deleted_at && count >= MAX_PROJECTS) {
-      rejected.push({ id: row.id, table: 'projects', code: PROJECT_LIMIT, error: `You can have at most ${MAX_PROJECTS} projects`, current: null });
+    // A new project and a restored one both take a slot.
+    const takesSlot = !next.deleted_at && (before === null || Boolean(before.deleted_at));
+    if (takesSlot && count >= MAX_PROJECTS) {
+      rejected.push({ id: row.id, table: 'projects', code: PROJECT_LIMIT, error: `You can have at most ${MAX_PROJECTS} projects`, current: before });
       continue;
     }
     const refusedName = taken ? next.name : '';
@@ -169,7 +174,7 @@ async function saveProjects(env, userId, incoming, existing, now) {
     // A duplicate left by an old Worker or the migration keeps its name but stays keyless while another project holds
     // the key, so the unique index never refuses its other edits; it gets its key back once the name is free.
     if (!taken && keepsOwnName && holder !== undefined && holder !== next.id) next.name_key = null;
-    if (!before && !next.deleted_at) count++;
+    if (takesSlot) count++;
     for (const [key, id] of names) if (id === next.id) names.delete(key);
     if (!next.deleted_at && next.name_key !== null) names.set(next.name_key, next.id);
     const statement = upsertStatement(env, 'projects', next, before);
