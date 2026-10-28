@@ -123,6 +123,7 @@ function scrollParent(start, axis) {
 
 /**
  * Preview slot inside a zone: the card nearest the pointer (preferring the column under it), before or after it.
+ * Cards of a zone nested inside this one (a note group in a board column) aren't in `ids` and don't count.
  * @param {Element} zoneEl
  * @param {string[]} ids the zone's order without the dragged note
  * @param {string} id the dragged note
@@ -133,7 +134,7 @@ function slotAt(zoneEl, ids, id, x, y) {
   let best = { id: '', below: false, score: Infinity };
   for (const node of zoneEl.querySelectorAll(CARD_SELECTOR)) {
     const cardId = /** @type {HTMLElement} */ (node).dataset.flipId ?? '';
-    if (cardId === id) continue;
+    if (cardId === id || !ids.includes(cardId)) continue;
     const rect = node.getBoundingClientRect();
     const dx = Math.max(rect.left - x, 0, x - rect.right);
     const dy = Math.max(rect.top - y, 0, y - rect.bottom);
@@ -258,7 +259,10 @@ class Drag {
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (this.note || !zoneEl || !zone) return;
     const step = NUDGE_KEYS[key];
-    if (zone.group && SIDEWAYS_KEYS.includes(key)) return this.#hop(note, zoneEl, zone, step);
+    // A zone nested in a side-by-side one (a note group in a board column) hops through the zone around it.
+    const laneEl = zone.group ? zoneEl : zoneEl.parentElement?.closest(`[${ZONE_ATTR}]`);
+    const lane = laneEl && this.#zones.get(laneEl);
+    if (laneEl && lane?.group && SIDEWAYS_KEYS.includes(key)) return this.#hop(note, laneEl, lane, step);
     if (zone.sortable === false) return announce(`${zone.label ?? 'This list'} keeps its own order`);
     const list = zone.list();
     const from = list.findIndex((entry) => entry.id === note.id);

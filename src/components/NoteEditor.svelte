@@ -105,13 +105,14 @@
 
   // However the editor closes (button, Escape, back-swipe, another note opening), a note left completely empty is
   // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
+  // Then it syncs straight away: the edits go up and whatever agents changed meanwhile comes down.
   $effect(() => () => {
     flush();
     const current = store.find('notes', id);
-    if (!current || current.deleted_at) return;
-    const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
+    const hasContent = current && ([current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length);
     const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
-    if (!hasContent && !hasFiles) store.remove('notes', id);
+    if (current && !current.deleted_at && !hasContent && !hasFiles) store.remove('notes', id);
+    store.sync({ fresh: true });
   });
 
   function addPr() {

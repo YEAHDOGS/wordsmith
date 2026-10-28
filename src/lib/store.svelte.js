@@ -1,6 +1,7 @@
 // Offline-first data store. Every edit lands in memory and IndexedDB first, joins an outbox, and syncs to
 // Cloudflare in the background: push the outbox, then pull everything changed since the last cursor.
-// Sync runs on edits (debounced), on focus, on reconnect, and on a slow poll so agent updates show up.
+// Sync runs on edits (debounced), whenever a note is closed (push and pull at once), on focus, on reconnect, and on a
+// slow poll so agent updates show up.
 // Every request counts against Cloudflare's free tier, so sync is frugal: edits wait for a pause in typing, a push
 // skips the pull right after it when one ran recently, the poll slows down once you stop using the app and stops
 // while it's hidden, and coming back only syncs if the last pull is a little stale. The server answers "nothing
@@ -54,6 +55,8 @@ class Store {
   #version = 0;
   #cursor = 0;
   #again = false;
+  /** The next sync pulls even right after a push (see sync). */
+  #fresh = false;
   #lastPrRefresh = 0;
   #lastPull = 0;
   #userId = '';
@@ -176,9 +179,15 @@ class Store {
     this.#db?.setMeta('outbox', [...this.#outbox.keys()]);
   }
 
-  /** Push the outbox, then pull changes. Safe to call often; overlapping calls coalesce. */
-  async sync() {
+  /**
+   * Push the outbox, then pull changes. Safe to call often; overlapping calls coalesce. A pending debounced sync is
+   * folded into this one. `fresh` always pulls after the push (closing a note), even when the last pull is recent.
+   * @param {{ fresh?: boolean }} [options]
+   */
+  async sync({ fresh = false } = {}) {
     if (!this.#db) return;
+    clearTimeout(this.#debounce);
+    if (fresh) this.#fresh = true;
     if (this.syncing) {
       this.#again = true;
       return;
@@ -193,8 +202,10 @@ class Store {
       if (!this.#verified) await this.#pull();
       if (!this.#verified) return;
       const pushed = await this.#push();
-      // The push already returned the saved rows; other devices' changes can wait for the next poll.
-      if (!pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
+      // The push already returned the saved rows; other devices' changes can wait for the next poll, unless asked fresh.
+      const fresh = this.#fresh;
+      this.#fresh = false;
+      if (!pushed || fresh || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
       this.online = true;
       this.lastSync = Date.now();
       this.error = '';

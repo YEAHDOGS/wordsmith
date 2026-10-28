@@ -15,7 +15,7 @@
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
-  import { groupsIn, splitByGroup } from '../lib/groups.js';
+  import { groupsIn, pruneGroups, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import Layers from '@lucide/svelte/icons/layers';
@@ -24,7 +24,7 @@
   import SquareMinus from '@lucide/svelte/icons/square-minus';
   import ListFilter from '@lucide/svelte/icons/list-filter';
   import { ui, GROUPS, ORDERS, STATE_FILTERS, TIME_ORDERS } from '../lib/ui.svelte.js';
-  import { STATE_STYLE } from '../lib/colors.js';
+  import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
   import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
@@ -71,6 +71,8 @@
   const FILTERED_EMPTY = 'No features in this state.';
   const GROUP_PREFIX = 'group:';
   const FOLD_MS = 200;
+  // How far a group's notes sit in from the ungrouped ones, with a rail in the group's color on the left.
+  const GROUP_INDENT = 'ml-1.5 border-l-2 pl-2.5 sm:pl-4 tv:pl-6';
 
   let width = $state(0);
   const columnCount = $derived.by(() => {
@@ -106,9 +108,8 @@
   // Every live note in each group, before the state filter: the header's total.
   const groupTotals = $derived(new Map(noteGroups.map((row) => [row.id, notes.filter((note) => note.group_id === row.id).length])));
 
-  /** Band a note belongs to when it isn't pinned (a grouped note is in its group, pinned or not). @param {any} note */
-  function bandOf(note) {
-    if (groupIds.has(note.group_id)) return GROUP_PREFIX + note.group_id;
+  /** Band an unpinned note sits in outside any note group: Others, its project, or its season. @param {any} note */
+  function looseBand(note) {
     if (group === 'all') return 'others';
     return `${group}:${group === 'project' ? projectName(note) : seasonOf(note[timeField])}`;
   }
@@ -159,7 +160,7 @@
       /** @type {Map<string, { key: string, title: string, notes: any[] }>} */
       const bands = new Map();
       for (const note of rest) {
-        const key = bandOf(note);
+        const key = looseBand(note);
         if (!bands.has(key)) bands.set(key, { key, title: key.slice(group.length + 1), notes: [] });
         bands.get(key)?.notes.push(note);
       }
@@ -193,7 +194,8 @@
   });
 
   /**
-   * Saves a drop. Into the pinned band pins the note; out of it unpins. In a time order the slot was picked among notes
+   * Saves a drop. Into the pinned band pins the note; out of it unpins. Into a note group's band puts it in that group
+   * (pinned or not); into any other band takes it out of its group, and a group left empty goes. In a time order the slot was picked among notes
    * sorted by time, so the note goes right after the one shown before it (or before the one shown after it, at the
    * top) in manual order, and only then does the grid switch to manual so the drop sticks. Picking a card up,
    * cancelling, or letting go on its own slot never reaches here, so none of those touch the chosen sort.
@@ -202,14 +204,21 @@
    */
   function drop(section, note, index) {
     const others = section.notes.filter((other) => other.id !== note.id);
-    const pinned = section.key === 'pinned';
+    const pinned = section.group ? Boolean(note.pinned) : section.key === 'pinned';
+    const groupId = section.group?.id ?? null;
+    const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
     const timeOrder = TIME_ORDERS.includes(/** @type {any} */ (ui.order));
     const list = timeOrder ? [...others].sort(COMPARE.manual) : others;
     const [before, after] = [others[index - 1], others[index]];
     const slot = !timeOrder ? index : before ? list.indexOf(before) + 1 : after ? list.indexOf(after) : list.length;
-    for (const { id, patch } of placeNote(list, note, slot, ui.order === 'priority' && note.kind === 'feature')) {
-      store.update('notes', id, id === note.id && Boolean(note.pinned) !== pinned ? { ...patch, pinned } : patch);
-    }
+    // The dropped note's own write also carries its pin and group, when those change.
+    const own = {
+      ...(Boolean(note.pinned) !== pinned ? { pinned } : {}),
+      // Compared with the group shown here, so a drop on a page without groups never ungroups a note.
+      ...(leftGroup !== groupId ? { group_id: groupId } : {}),
+    };
+    for (const { id, patch } of placeNote(list, note, slot, ui.order === 'priority' && note.kind === 'feature')) store.update('notes', id, id === note.id ? { ...patch, ...own } : patch);
+    if (leftGroup !== groupId) pruneGroups([leftGroup]);
     if (timeOrder) ui.setOrder('manual');
   }
 
@@ -219,8 +228,8 @@
       key: section.key,
       label: section.title || 'notes',
       list: () => section.notes,
-      // Pinned and the plain list trade ungrouped notes freely; a group, project or season band only takes its own.
-      accepts: (/** @type {any} */ note) => (section.key === 'pinned' ? !groupIds.has(note.group_id) : bandOf(note) === section.key),
+      // Notes move freely in and out of note groups and Pinned; a project or season band only takes its own.
+      accepts: (/** @type {any} */ note) => Boolean(section.group) || section.key === 'pinned' || looseBand(note) === section.key,
       ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(section, note, index),
     };
   }
@@ -306,34 +315,38 @@
     <p class="px-4 py-16 text-center text-fluid-sm text-ink-faint">{notes.length ? FILTERED_EMPTY : empty}</p>
   {:else if width}
     {#each sections as section (section.key)}
-      {#if section.group}
-        <GroupHeader group={section.group} notes={section.notes} total={groupTotals.get(section.group.id) ?? section.notes.length} class="pt-4 pb-2 text-fluid-sm" />
-      {:else if section.title}
-        {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
-        <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint">
-          <button class="spring press -m-1 p-1 {picked ? 'text-accent' : 'hover:text-ink'}" role="checkbox" aria-checked={picked === section.notes.length ? 'true' : picked ? 'mixed' : 'false'}
-            aria-label="Select all in {section.title}" title="Select all in {section.title}" onclick={() => toggleBand(section.notes)}>
-            {#if picked === section.notes.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}
-          </button>
-          {section.title} <span class="text-ink-faint">· {section.notes.length}</span>
-        </h2>
-      {/if}
-      {#if !section.group?.collapsed}
-        <div class="flex items-start gap-2" use:dropzone={zoneFor(section)} transition:slide={{ duration: FOLD_MS }}>
-          {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
-            <div class="flex min-w-0 flex-1 flex-col gap-2">
-              {#each column as note, index (note.id)}
-                <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-                <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
-                  data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
-                  <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
-                  <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
-                </div>
-              {/each}
-            </div>
-          {/each}
-        </div>
-      {/if}
+      <!-- The whole band, header included, takes drops: a folded group still catches a note dropped on its header -->
+      <div class="spring {section.group && drag.id && drag.zone === section.key ? 'bg-surface-raised' : ''}" use:dropzone={zoneFor(section)}>
+        {#if section.group}
+          <GroupHeader group={section.group} notes={section.notes} total={groupTotals.get(section.group.id) ?? section.notes.length} class="pt-4 pb-2 text-fluid-sm" />
+        {:else if section.title}
+          {@const picked = section.notes.filter((note) => ui.selected.has(note.id)).length}
+          <h2 class="flex items-center gap-1.5 pt-4 pb-2 font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint">
+            <button class="spring press -m-1 p-1 {picked ? 'text-accent' : 'hover:text-ink'}" role="checkbox" aria-checked={picked === section.notes.length ? 'true' : picked ? 'mixed' : 'false'}
+              aria-label="Select all in {section.title}" title="Select all in {section.title}" onclick={() => toggleBand(section.notes)}>
+              {#if picked === section.notes.length}<SquareCheck class="size-3.5 tv:size-5" />{:else if picked}<SquareMinus class="size-3.5 tv:size-5" />{:else}<Square class="size-3.5 tv:size-5" />{/if}
+            </button>
+            {section.title} <span class="text-ink-faint">· {section.notes.length}</span>
+          </h2>
+        {/if}
+        {#if !section.group?.collapsed}
+          <!-- A group's notes sit indented behind a rail in the group's color, set apart from ungrouped notes -->
+          <div class="flex items-start gap-2 {section.group ? `${GROUP_INDENT} ${RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (section.group.color)] || RAIL_BORDER.default}` : ''}" transition:slide={{ duration: FOLD_MS }}>
+            {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
+              <div class="flex min-w-0 flex-1 flex-col gap-2">
+                {#each column as note, index (note.id)}
+                  <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
+                  <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+                    data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
+                    <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
+                    <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
+                  </div>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/each}
   {/if}
   <DragGhost {showProject} />
