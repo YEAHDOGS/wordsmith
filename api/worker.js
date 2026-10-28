@@ -35,6 +35,7 @@ import * as v1Batches from './functions/api/v1/batches.js';
 import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
 import * as sharedNote from './functions/n/[id].js';
+import { checkSpend } from './lib/cost-breaker.js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
 const API_PREFIX = '/api';
@@ -135,5 +136,15 @@ export default {
     let position = 0;
     context.next = () => chain[position++](context);
     return context.next();
+  },
+
+  /**
+   * Cron (wrangler.jsonc "triggers", production only): the account-wide spend breaker.
+   * @param {unknown} _controller
+   * @param {Record<string, any>} env
+   * @param {{ waitUntil: (promise: Promise<any>) => void }} ctx
+   */
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(checkSpend(env));
   },
 };
