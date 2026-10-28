@@ -1,5 +1,6 @@
-// GET /api/v1/projects - projects with feature counts per state.
-import { json } from '../../../lib/http.js';
+// GET /api/v1/projects - projects with feature counts per state. POST - create one: { name, description?, color?, repo? }.
+import { createProject } from '../../../lib/agent.js';
+import { json, readJson } from '../../../lib/http.js';
 import { toApi } from '../../../lib/rows.js';
 
 /** @param {{ env: Record<string, any>, data: Record<string, any> }} context */
@@ -16,4 +17,9 @@ export async function onRequestGet({ env, data }) {
       return { ...toApi(row), features };
     }),
   });
+}
+
+/** @param {{ request: Request, env: Record<string, any>, data: Record<string, any> }} context */
+export async function onRequestPost({ request, env, data }) {
+  return json({ project: await createProject(env, data.auth.user.id, await readJson(request)) }, 201);
 }

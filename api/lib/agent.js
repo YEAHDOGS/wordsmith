@@ -1,10 +1,10 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, columnOf, isId, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
 import { saveNotes } from './notes.js';
-import { safeJson, toApi } from './rows.js';
+import { safeJson, toApi, upsertStatement } from './rows.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -14,6 +14,8 @@ const MAX_BATCH_NOTES = 500;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
+// A GitHub repo as owner/name, the form the app stores in projects.repo.
+const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
 
 /**
@@ -28,6 +30,32 @@ export async function resolveProject(env, userId, ref) {
     .bind(userId, String(ref), String(ref)).first();
   if (!row) throw new HttpError(404, `No project "${ref}"`);
   return toApi(row);
+}
+
+/**
+ * Creates a project for an agent: { name, description?, color?, repo? (owner/name) }. Names are unique per user
+ * (case-insensitive), so an agent that asks for a project it already has gets a 409 and can use the existing one.
+ * @param {Record<string, any>} env
+ * @param {string} userId
+ * @param {Record<string, any>} input
+ */
+export async function createProject(env, userId, input) {
+  const name = String(input.name ?? '').trim();
+  if (!name) throw new HttpError(400, 'name is required');
+  const repo = String(input.repo ?? '').trim();
+  if (repo && !REPO_PATTERN.test(repo)) throw new HttpError(400, 'repo must look like owner/name');
+  const taken = await env.DB.prepare('SELECT id FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?) LIMIT 1').bind(userId, name).first();
+  if (taken) throw new HttpError(409, `A project named "${name}" already exists (id ${taken.id})`);
+  let fields;
+  try {
+    fields = cleanRow('projects', { name, repo, description: input.description ?? '', color: input.color ?? 'default' });
+  } catch (error) {
+    throw new HttpError(400, /** @type {Error} */ (error).message);
+  }
+  const row = { ...newRow('projects', fields), user_id: userId };
+  await upsertStatement(env, 'projects', row).run();
+  const { user_id: _owner, ...project } = row;
+  return project;
 }
 
 /** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */
