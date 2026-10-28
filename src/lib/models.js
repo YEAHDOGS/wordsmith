@@ -34,6 +34,8 @@ const MAX_ID = 64;
 export const MAX_STATUS = 500;
 // A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
 export const MAX_MISSION = 20_000;
+// Projects per user: bounds every projects query and sync download (agents can create projects, see api/lib/agent.js).
+export const MAX_PROJECTS = 200;
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;

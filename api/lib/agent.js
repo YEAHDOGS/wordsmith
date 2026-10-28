@@ -1,10 +1,10 @@
 // Agent-facing reads and writes behind /api/v1. Agents authenticate with a personal API token.
-import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl } from '../../src/lib/models.js';
+import { DEFAULT_COLUMNS, DIFFICULTY_LABELS, FEATURES_SCOPE, FEATURE_STATES, MAX_DIFFICULTY, MAX_TITLE, MAX_PROJECTS, STATE_LABELS, cleanRow, columnOf, isId, newRow, parsePullRequestUrl } from '../../src/lib/models.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
 import { saveNotes } from './notes.js';
-import { safeJson, toApi, upsertStatement } from './rows.js';
+import { safeJson, toApi } from './rows.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -13,9 +13,10 @@ const MAX_EVENTS = 200;
 const MAX_BATCH_NOTES = 500;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
+// A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
+// name not '.' or '..'.
+const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
 // Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
-// A GitHub repo as owner/name, the form the app stores in projects.repo.
-const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
 
 /**
@@ -34,30 +35,45 @@ export async function resolveProject(env, userId, ref) {
 
 /**
  * Creates a project for an agent: { name, description?, color?, repo? (owner/name) }. Names are unique per user
- * (case-insensitive), so an agent that asks for a project it already has gets a 409 and can use the existing one.
+ * (case-insensitive for A-Z, like resolveProject), so an agent asking for a project it already has gets
+ * { existing } back and can use that one. The duplicate check, the MAX_PROJECTS cap and the insert are one statement,
+ * so two agents creating the same name at once can't both succeed.
  * @param {Record<string, any>} env
  * @param {string} userId
- * @param {Record<string, any>} input
+ * @param {unknown} input
+ * @returns {Promise<{ project: Record<string, any> } | { existing: { id: string, name: string } }>}
  */
 export async function createProject(env, userId, input) {
-  const name = String(input.name ?? '').trim();
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'Send a JSON object: { name, description?, color?, repo? }');
+  const body = /** @type {Record<string, unknown>} */ (input);
+  for (const field of ['name', 'description', 'color', 'repo']) {
+    if (body[field] !== undefined && typeof body[field] !== 'string') throw new HttpError(400, `${field} must be text`);
+  }
+  const name = String(body.name ?? '').trim();
   if (!name) throw new HttpError(400, 'name is required');
-  const repo = String(input.repo ?? '').trim();
+  const repo = String(body.repo ?? '').trim();
   if (repo && !REPO_PATTERN.test(repo)) throw new HttpError(400, 'repo must look like owner/name');
-  const taken = await env.DB.prepare('SELECT id FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?) LIMIT 1').bind(userId, name).first();
-  if (taken) throw new HttpError(409, `A project named "${name}" already exists (id ${taken.id})`);
   let fields;
   try {
-    fields = cleanRow('projects', { name, repo, description: input.description ?? '', color: input.color ?? 'default' });
+    fields = cleanRow('projects', { name, repo, description: body.description ?? '', color: body.color ?? 'default' });
   } catch (error) {
     throw new HttpError(400, /** @type {Error} */ (error).message);
   }
   const row = { ...newRow('projects', fields), user_id: userId };
-  await upsertStatement(env, 'projects', row).run();
-  const { user_id: _owner, ...project } = row;
-  return project;
+  const columns = Object.keys(row);
+  const result = await env.DB.prepare(
+    `INSERT INTO projects (${columns.join(', ')}) SELECT ${columns.map(() => '?').join(', ')}
+     WHERE NOT EXISTS (SELECT 1 FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?))
+       AND (SELECT COUNT(*) FROM projects WHERE user_id = ? AND deleted_at IS NULL) < ?`,
+  ).bind(...columns.map((column) => row[column]), userId, name, userId, MAX_PROJECTS).run();
+  if (result.meta.changes) {
+    const { user_id: _owner, ...project } = row;
+    return { project };
+  }
+  const existing = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL AND lower(name) = lower(?) LIMIT 1').bind(userId, name).first();
+  if (!existing) throw new HttpError(409, `You can have at most ${MAX_PROJECTS} projects`);
+  return { existing: { id: String(existing.id), name: String(existing.name) } };
 }
-
 /** Labels, projects and board columns keyed by id or scope, for readable agent output. @param {Record<string, any>} env @param {string} userId */
 async function lookups(env, userId) {
   const [projects, labels, boards] = await env.DB.batch([

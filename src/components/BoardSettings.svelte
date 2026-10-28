@@ -1,6 +1,6 @@
 <script>
-  // Settings for a board page. A project gets its name, color, linked GitHub repo, mission statement (Markdown), agent
-  // prompt and delete, plus its
+  // Settings for a board page. A project gets its name, color, linked GitHub repo, mission statement (Markdown), agent prompt
+  // and delete, plus its
   // board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
   // (#/project-settings/<id>, #/features-settings). One stacked column on phones, a 1px grid of cards from lg up,
   // matching the main Settings page.
@@ -8,6 +8,7 @@
   import Copy from '@lucide/svelte/icons/copy';
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
+  import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import BoardColumns from './BoardColumns.svelte';
   import ColorPicker from './ColorPicker.svelte';
@@ -36,9 +37,11 @@
   const MISSION_SAVE_MS = 600;
 
   let copied = $state(false);
-  // The mission statement is loaded once per project and saved after a pause, so a sync landing mid-typing can't
-  // overwrite what you're writing.
+  // Mission statement: savedMission is the text last loaded or saved here. Only typing (mission differs from it) is ever
+  // saved, so a newer version synced from another device is shown, never written over; and a sync landing mid-typing
+  // doesn't replace what you're writing.
   let mission = $state('');
+  let savedMission = '';
   let missionPreview = $state(false);
   let loadedMission = '';
   /** @type {HTMLTextAreaElement | undefined} */
@@ -48,12 +51,25 @@
   $effect.pre(() => {
     if (!project || loadedMission === project.id) return;
     loadedMission = project.id;
-    mission = project.description;
+    mission = savedMission = project.description;
+  });
+  // A newer mission synced in while nothing is being typed: show it.
+  $effect.pre(() => {
+    const incoming = project?.description;
+    if (incoming === undefined || incoming === savedMission || untrack(() => mission) !== savedMission) return;
+    mission = savedMission = incoming;
   });
 
   function saveMission() {
     clearTimeout(missionTimer);
-    if (project && mission !== project.description) store.update('projects', project.id, { description: mission });
+    if (!project || mission === savedMission) return;
+    savedMission = mission;
+    store.update('projects', project.id, { description: mission });
+  }
+
+  function queueMissionSave() {
+    clearTimeout(missionTimer);
+    missionTimer = setTimeout(saveMission, MISSION_SAVE_MS);
   }
   // Leaving the page saves what's typed.
   $effect(() => () => saveMission());
@@ -89,7 +105,7 @@
       <ArrowLeft class="size-3.5" />{TEXT.back}
     </button>
   </div>
-  <div class="mx-auto grid max-w-7xl grid-cols-1 gap-px border-line bg-line sm:border-x lg:grid-cols-2 ultrawide:max-w-none">
+  <div class="mx-auto grid max-w-7xl grid-cols-1 gap-px border-line bg-line sm:border-x lg:grid-flow-row-dense lg:grid-cols-2 ultrawide:max-w-none">
     {#if project}
       <section class={CARD} use:reveal={0}>
         <h2 class={HEADING}>{TEXT.project}</h2>
@@ -122,16 +138,16 @@
 
       <section class="{CARD} lg:col-span-2" use:reveal={1}>
         <h2 class={HEADING}>{TEXT.mission}</h2>
-        <p class={HINT}>{TEXT.missionHint}</p>
+        <p id="mission-hint" class={HINT}>{TEXT.missionHint}</p>
         <div class="flex min-h-48 flex-col {BOX}">
           {#if missionPreview}
             <!-- Rendered by src/lib/markdown.js, which escapes all input -->
             <div class="markdown selectable min-h-40 flex-1 px-3 py-2 text-fluid-sm text-ink">
-              {#if mission.trim()}{@html renderMarkdown(mission)}{:else}<p class="text-ink-faint">Nothing to preview yet.</p>{/if}
+              {#if mission.trim()}{@html renderMarkdown(mission)}{:else}<p class="text-ink-faint">{TEXT.nothingToPreview}</p>{/if}
             </div>
           {:else}
             <textarea bind:this={missionField} bind:value={mission} use:markdownKeys maxlength={MAX_MISSION} aria-label={TEXT.mission} placeholder={TEXT.missionPlaceholder}
-              oninput={() => { clearTimeout(missionTimer); missionTimer = setTimeout(saveMission, MISSION_SAVE_MS); }} onblur={saveMission}
+              aria-describedby="mission-hint" oninput={queueMissionSave} onblur={saveMission}
               class="min-h-40 flex-1 resize-y bg-transparent px-3 py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
           {/if}
           <div class="flex justify-end border-t border-line">

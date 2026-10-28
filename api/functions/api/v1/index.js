@@ -6,7 +6,7 @@ const BYTES_PER_MB = 1024 * 1024;
 
 const ENDPOINTS = [
   ['GET', '/api/v1/projects', 'Projects with counts of features per state. description is the mission statement (Markdown): read it before working a project.'],
-  ['POST', '/api/v1/projects', `Create a project: { name, description? (its mission statement, Markdown), color? (${COLORS.join(', ')}), repo? (owner/name) }. 409 if the name is taken.`],
+  ['POST', '/api/v1/projects', `Create a project: { name, description? (its mission statement, Markdown), color? (${COLORS.join(', ')}), repo? (owner/name) }. 409 with { project: { id, name } } if the name is taken: use that one.`],
   ['GET', '/api/v1/features?project=&state=requested,in_progress&analyzed=false&max_difficulty=&batch=&format=md', 'Feature requests, most important and oldest first. analyzed=false: not triaged yet. max_difficulty=2: small ones only. format=md gives a checklist.'],
   ['POST', '/api/v1/features/next', 'Claim the next requested feature: { project? }. Atomic: two agents never get the same one. 204 when the queue is empty.'],
   ['POST', '/api/v1/features', 'File a new feature request: { project, title, body, priority? (0 none, 1 low to 5 critical), labels? }.'],

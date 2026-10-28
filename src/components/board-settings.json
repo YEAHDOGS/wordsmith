@@ -10,6 +10,7 @@
   "mission": "Mission statement",
   "missionHint": "What this project is, why it exists, where it runs and how to build it. Markdown works. Agents read it before they start.",
   "missionPlaceholder": "## What\n\n## Why\n\n## How to build it",
+  "nothingToPreview": "Nothing to preview yet.",
   "agent": "Agent prompt",
   "agentHint": "Paste into an agent to have it work this project's queue.",
   "copy": "Copy",
