@@ -114,13 +114,15 @@
   function save() {
     if (saved) return;
     flush();
+    // Typing stops here, so "Saved" describes everything that's saved.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     saved = true;
     savedTimer = setTimeout(close, SAVED_MS);
   }
 
   /** Ctrl/Cmd+S saves instead of opening the browser's save-page dialog. @param {KeyboardEvent} event */
   function onSaveKey(event) {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== SAVE_KEY) return;
+    if (!note || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== SAVE_KEY) return;
     event.preventDefault();
     save();
   }

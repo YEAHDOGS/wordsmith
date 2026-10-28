@@ -4,7 +4,6 @@
 // every PURGE_CHECK_MS per user per isolate, so there are no cron triggers or extra Workers), or right away by
 // "Delete forever" and "Empty trash" (POST /api/trash).
 import { MODELS, TRASH_MS, TRASH_TABLES } from '../../src/lib/models.js';
-import { release } from './attachments.js';
 import { MAX_BIND_PARAMS, dbValue, toApi } from './rows.js';
 
 // Rows purged per table per pass; a backlog clears over the next passes.
@@ -94,10 +93,13 @@ async function purgeAttachments(env, userId, noteIds, now) {
   const updates = [];
   for (let start = 0; start < ids.length; start += chunkSize) {
     const chunk = ids.slice(start, start + chunkSize);
-    updates.push(env.DB.prepare(`UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE id IN (${chunk.map(() => '?').join(', ')})`).bind(now, now, ...chunk));
+    const list = chunk.map(() => '?').join(', ');
+    // One batch (a transaction): give back the storage of the files still live, then tombstone them. A file the
+    // person deleted meanwhile was already released, so it's counted once (the same storage_usage row as release()).
+    updates.push(env.DB.prepare(`UPDATE storage_usage SET bytes = MAX(0, bytes - (SELECT COALESCE(SUM(size), 0) FROM attachments WHERE deleted_at IS NULL AND id IN (${list}))) WHERE id = 1`).bind(...chunk));
+    updates.push(env.DB.prepare(`UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND id IN (${list})`).bind(now, now, ...chunk));
   }
   await env.DB.batch(updates);
-  await release(env, results.reduce((sum, /** @type {any} */ file) => sum + Number(file.size), 0));
 }
 
 /**

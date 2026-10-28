@@ -163,7 +163,8 @@ async function saveProjects(env, userId, incoming, existing, now) {
       rejected.push({ id: row.id, table: 'projects', error: /** @type {Error} */ (error).message, current: before });
       continue;
     }
-    next.name_key = projectKey(next.name);
+    // A purged project keeps the NULL name_key the purge gave it.
+    next.name_key = next.purged_at ? null : projectKey(next.name);
     const holder = names.get(next.name_key);
     const keepsOwnName = before !== null && projectKey(before.name) === next.name_key;
     const taken = !next.deleted_at && holder !== undefined && holder !== next.id && !keepsOwnName;

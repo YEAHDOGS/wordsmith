@@ -180,31 +180,24 @@ class Store {
   }
 
   /**
-   * Deletes trashed rows for good on the server ("Delete forever"), or the whole trash with 'all' ("Empty trash").
+   * Deletes trashed rows for good on the server ("Delete forever", "Empty trash"), in batches the server accepts.
    * Needs a connection: purging removes attachment files, which only the server can do. Deletes still waiting in the
    * outbox are pushed first, since the server only purges rows it knows are deleted.
-   * @param {Partial<Record<Table, string[]>> | 'all'} rows
+   * @param {Partial<Record<Table, string[]>>} rows
    */
   async purge(rows) {
-    const keys = rows === 'all' ? [...this.#outbox.keys()] : Object.entries(rows).flatMap(([table, ids]) => (ids || []).map((id) => `${table}:${id}`));
-    if (keys.some((key) => this.#outbox.has(key))) await this.sync();
-    // 'all' pages through the server's trash; a list of ids goes in batches the server accepts.
-    const ids = rows === 'all' ? [] : Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
-    const bodies = rows === 'all' ? null : Array.from({ length: Math.ceil(ids.length / MAX_SYNC_BATCH) }, (_, index) => {
+    const ids = Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
+    if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) await this.sync();
+    for (let start = 0; start < ids.length; start += MAX_SYNC_BATCH) {
       /** @type {Record<string, string[]>} */
       const body = {};
-      for (const [table, id] of ids.slice(index * MAX_SYNC_BATCH, (index + 1) * MAX_SYNC_BATCH)) (body[table] ||= []).push(id);
-      return body;
-    });
-    let more = true;
-    while (more) {
-      const result = await api('/api/trash', { method: 'POST', body: bodies ? bodies.shift() : { all: true } });
+      for (const [table, id] of ids.slice(start, start + MAX_SYNC_BATCH)) (body[table] ||= []).push(id);
+      const result = await api('/api/trash', { method: 'POST', body });
       for (const table of SYNCED) {
         const saved = result.saved[table] || [];
         for (const row of saved) this.#upsertLocal(table, row);
         await this.#db?.put(table, saved);
       }
-      more = bodies ? bodies.length > 0 : result.more;
     }
     this.sync();
   }
