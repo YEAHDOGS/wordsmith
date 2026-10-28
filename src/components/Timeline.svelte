@@ -7,7 +7,7 @@
   import { fade, fly } from 'svelte/transition';
   import { store } from '../lib/store.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
-  import { DIFFICULTY_LABELS } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, attachmentKind } from '../lib/models.js';
   import { clockTime, dayLabel, duration, fullTime } from '../lib/time.js';
 
   /** @type {{ note: any }} */
@@ -16,6 +16,7 @@
   const ACTOR_ICONS = { user: User, agent: Bot, github: GitMerge };
   const ROW_STAGGER_MS = 40;
   const MAX_STAGGER_MS = 400;
+  const ATTACHED = { image: 'an image', video: 'a video', document: 'a document' };
 
   const events = $derived(store.eventsFor(note.id));
   const firstPr = $derived(events.find((event) => event.type === 'pr_linked')?.created_at ?? null);
@@ -55,7 +56,7 @@
       case 'unarchived': return 'restored it from the archive';
       case 'deleted': return 'deleted it';
       case 'restored': return 'restored it';
-      case 'attached': return `attached ${data.type?.startsWith('video/') ? 'a video' : 'an image'}: ${data.name}`;
+      case 'attached': return `attached ${ATTACHED[attachmentKind(data.type)] || ATTACHED.image}: ${data.name}`;
       case 'detached': return `removed ${data.name}`;
       case 'published': return 'made it public';
       case 'unpublished': return 'made it private';

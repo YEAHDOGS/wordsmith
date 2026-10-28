@@ -3,7 +3,8 @@
 // MAX_SIDE_PX on the long side, and encoded as WebP (JPEG on browsers that can't encode WebP, such as Safari 15),
 // stepping the quality down and then the size until they fit. Small images upload untouched. GIFs keep their animation,
 // so they are sent as they are; videos can't be re-encoded without a large library, so both are only checked.
-import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, VIDEO_TYPES } from './models.js';
+// Documents are only checked too, and carry the type their extension names (browsers often leave .md untyped).
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, VIDEO_TYPES, attachmentKind, uploadType } from './models.js';
 
 const MAX_SIDE_PX = 2560;
 const MIN_SIDE_PX = 480;
@@ -29,6 +30,11 @@ const megabytes = (bytes) => `${Math.round((bytes / BYTES_PER_MB) * 10) / 10} MB
  * @returns {Promise<File>}
  */
 export async function prepareForUpload(file) {
+  const type = uploadType(file);
+  if (attachmentKind(type) === 'document') {
+    if (file.size > MAX_DOCUMENT_BYTES) throw new Error(`${file.name} is ${megabytes(file.size)}; documents can be at most ${megabytes(MAX_DOCUMENT_BYTES)}.`);
+    return file.type === type ? file : new File([file], file.name, { type, lastModified: file.lastModified });
+  }
   if (VIDEO_TYPES.includes(file.type) || PASS_THROUGH.includes(file.type)) {
     const max = VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
     if (file.size > max) throw new Error(`${file.name} is ${megabytes(file.size)}; ${VIDEO_TYPES.includes(file.type) ? 'videos' : 'GIFs'} can be at most ${megabytes(max)}. Try a shorter clip.`);

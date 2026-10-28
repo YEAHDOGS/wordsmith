@@ -1,4 +1,4 @@
-// POST /api/notes/:id/attachments - upload one image or video as the raw request body.
+// POST /api/notes/:id/attachments - upload one image, video or document (pdf, docx, md, txt) as the raw request body.
 // Headers: Content-Type (the file's type), Content-Length, X-File-Name (URI-encoded). Works for the app and agent tokens.
 import { requireAuth } from '../../../../lib/auth.js';
 import { assertRoomOnNote, bucket, checkUpload, presentAttachment, release, reserve } from '../../../../lib/attachments.js';

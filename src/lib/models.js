@@ -13,7 +13,7 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 // Timeline entries in note_events, written by the server on every interaction.
 export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
 
-// Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
+// Attachments: images, videos and documents on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 // Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
@@ -23,6 +23,45 @@ export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 // Images up to this size are accepted for shrinking on the device before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+// Documents: each type and the file extensions it may carry. The server requires both to match, and never serves
+// HTML, so nothing uploaded can run as a page. Browsers report .md (and sometimes .docx) with an empty or odd type,
+// so the app names the type from the extension (documentType) before uploading.
+export const DOCUMENT_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/markdown': ['.md', '.markdown'],
+  'text/plain': ['.txt'],
+};
+// Documents aren't shrunk on the device, so they're only capped; 5 MB covers long specs and exported PDFs.
+export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+// The file pickers' accept list: every type, plus document extensions for systems that don't know the types.
+export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
+
+/** The lowercase extension of a file name, with its dot ('' when none). @param {string} name */
+export const fileExtension = (name) => (/\.[^.]+$/.exec(name)?.[0] || '').toLowerCase();
+
+/**
+ * The document type a file name stands for ('' when it isn't a document). @param {string} name
+ * @returns {string}
+ */
+export function documentType(name) {
+  const extension = fileExtension(name);
+  if (!extension) return '';
+  return Object.keys(DOCUMENT_TYPES).find((type) => DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].includes(extension)) || '';
+}
+
+/** 'image', 'video', 'document', or '' for a type that can't be attached. @param {string} type */
+export function attachmentKind(type) {
+  if (IMAGE_TYPES.includes(type)) return 'image';
+  if (VIDEO_TYPES.includes(type)) return 'video';
+  return Object.hasOwn(DOCUMENT_TYPES, type) ? 'document' : '';
+}
+
+/**
+ * The type a picked file uploads as: images and videos keep the browser's type, documents are named by their
+ * extension. '' when the file can't be attached. @param {{ name: string, type: string }} file
+ */
+export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : documentType(file.name));
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
