@@ -57,8 +57,6 @@
     const all = features.filter((note) => columnOf(note, boardColumns).id === column.id).sort(SORTS[/** @type {keyof typeof SORTS} */ (column.state)]);
     return { ...column, all, shown: column.state === COMPLETE ? all.slice(0, completeLimit) : all };
   }));
-  // The feature an agent would claim next: claim order across every Requested-role column.
-  const nextUp = $derived(features.filter((note) => note.state === REQUESTED).sort(SORTS.requested)[0]?.id);
   // Groups belong to a project; the all-projects Features page (scope FEATURES_SCOPE) has none.
   const noteGroups = $derived(groupsIn(scope));
   const groupIds = $derived(new Set(noteGroups.map((group) => group.id)));
@@ -169,9 +167,6 @@
 
 {#snippet card(/** @type {any} */ note)}
   <div class="relative bg-app {drag.id === note.id ? 'outline-1 -outline-offset-1 outline-dashed outline-accent' : ''}" data-flip-id={note.id}>
-    {#if note.id === nextUp}
-      <span class="absolute top-0 right-0 z-10 bg-accent px-1.5 font-mono text-[0.625rem] text-accent-ink" transition:scale={{ start: 0.8, duration: 150 }}>next up</span>
-    {/if}
     <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
   </div>
 {/snippet}
