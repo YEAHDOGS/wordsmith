@@ -7,7 +7,7 @@
   import ProviderIcon from './ProviderIcon.svelte';
   import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
-  import { PROVIDERS } from '../lib/models.js';
+  import { MAX_PASSWORD_LENGTH, PROVIDERS } from '../lib/models.js';
   import TEXT from './login.json';
 
   /** @type {{ notice?: { kind: 'device_confirm' | 'device_done', device?: string, provider?: string, code?: string } | null, message?: string }} */
@@ -82,6 +82,12 @@
   }
 </script>
 
+<!-- The beta password field, on the sign-in screen and on the native-login confirmation screen -->
+{#snippet betaInput(/** @type {string} */ extraClass)}
+  <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength={MAX_PASSWORD_LENGTH}
+    placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} {extraClass}" />
+{/snippet}
+
 <main class="relative flex h-dvh w-full flex-col overflow-hidden bg-app text-ink">
   <!-- The spine: one continuous 1px line the whole page hangs from -->
   <div class="spine-line pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
@@ -112,10 +118,7 @@
         <p class="selectable my-4 font-mono text-fluid-xl tracking-[0.4em] text-accent">{notice.code}</p>
         <p class="mb-5 text-fluid-sm text-ink-muted">{TEXT.confirmBody}</p>
         <form class="flex flex-col gap-px" onsubmit={confirmDevice}>
-          {#if showBeta}
-            <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength="200"
-              placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} border border-line" />
-          {/if}
+          {#if showBeta}{@render betaInput('border border-line')}{/if}
           <button type="submit" class="{BUTTON_CLASS} border-accent" disabled={Boolean(busy)}>
             <ProviderIcon provider={notice.provider || ''} />
             {TEXT.confirmButton}
@@ -146,7 +149,7 @@
 
       {#if auth.previewLogin}
         <form class="flex flex-col gap-px border border-line bg-line" onsubmit={unlockPreview} in:fly={{ y: 8, delay: 200, duration: 300 }}>
-          <input type="password" bind:value={password} autocomplete="current-password" maxlength="200" placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
+          <input type="password" bind:value={password} autocomplete="current-password" maxlength={MAX_PASSWORD_LENGTH} placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
             class={INPUT_CLASS} />
           <button type="submit" class={BUTTON_CLASS} disabled={Boolean(busy) || !password}>{TEXT.previewButton}</button>
         </form>
@@ -155,8 +158,7 @@
       <div class="flex flex-col gap-px border border-line bg-line">
         {#if showBeta && available.length}
           <form class="flex" onsubmit={submitBeta} in:fly={{ y: 8, delay: 150, duration: 300 }}>
-            <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength="200"
-              placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} w-full" />
+            {@render betaInput('w-full')}
           </form>
           {#if betaAccepted}
             <p role="status" class="bg-complete-soft px-5 py-2 text-center text-fluid-sm text-complete" in:fade>{TEXT.betaAccepted}</p>
@@ -178,8 +180,9 @@
       <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
     {/if}
 
-    {#if message || auth.error}
-      <p role="alert" class="border border-accent bg-accent-soft px-4 py-2 text-center text-fluid-sm text-ink" transition:fade>{message || auth.error}</p>
+    <!-- A fresh error beats the one the redirect brought; an accepted beta password answers the redirect's -->
+    {#if auth.error || (message && !betaAccepted)}
+      <p role="alert" class="border border-accent bg-accent-soft px-4 py-2 text-center text-fluid-sm text-ink" transition:fade>{auth.error || message}</p>
     {/if}
   </section>
 

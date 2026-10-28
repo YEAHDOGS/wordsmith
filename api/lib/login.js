@@ -11,8 +11,13 @@ export const STATE_TTL_MS = 600_000;
 export const STATE_TTL_SECONDS = STATE_TTL_MS / 1000;
 export const LOGIN_RATE_LIMIT = 30;
 export const LOGIN_RATE_WINDOW_MS = 600_000;
+// Wrong-or-right password guesses allowed per IP per LOGIN_RATE_WINDOW_MS, on the Preview and beta password routes.
+export const PASSWORD_ATTEMPT_LIMIT = 10;
 // Holds proof of the beta password (SIGNUP_PASSWORD) through the OAuth round trip, so the callback may create an account.
 export const SIGNUP_COOKIE = 'ws_signup';
+// How long an accepted beta password lasts: longer than STATE_TTL_MS so a slow provider sign-in (2FA) still fits after it.
+export const SIGNUP_PROOF_TTL_MS = 1_800_000;
+export const SIGNUP_PROOF_TTL_SECONDS = SIGNUP_PROOF_TTL_MS / 1000;
 const SIGNUP_PROOF_PREFIX = 'wordsmith-signup:';
 // A proof is "<expires_at ms>.<hex HMAC>".
 const SIGNUP_PROOF_PATTERN = /^(\d+)\.[0-9a-f]+$/;
@@ -59,18 +64,20 @@ export function signupLocked(env) {
 /**
  * The SIGNUP_COOKIE value once the beta password checked out: its expiry, signed with a key only the server holds
  * (TOKEN_ENCRYPTION_KEY plus the password), so a copied cookie stops working at expiresAt or when the password changes,
- * and can't be brute-forced back into the password offline.
+ * and can't be brute-forced back into the password offline. Callers make sure TOKEN_ENCRYPTION_KEY is set.
  * @param {Record<string, any>} env
  * @param {number} expiresAt epoch ms
  */
 export async function signupProof(env, expiresAt) {
-  const signature = await hmacSha256(`${env.TOKEN_ENCRYPTION_KEY || ''}:${env.SIGNUP_PASSWORD}`, SIGNUP_PROOF_PREFIX + expiresAt);
+  const signature = await hmacSha256(`${env.TOKEN_ENCRYPTION_KEY}:${env.SIGNUP_PASSWORD}`, SIGNUP_PROOF_PREFIX + expiresAt);
   return `${expiresAt}.${signature}`;
 }
 
 /** May this request create a new account? @param {Request} request @param {Record<string, any>} env */
 export async function signupAllowed(request, env) {
   if (!signupLocked(env)) return true;
+  // No server key, no proof: fail closed rather than sign with the password alone.
+  if (!env.TOKEN_ENCRYPTION_KEY) return false;
   const proof = readCookie(request, SIGNUP_COOKIE) || '';
   const expiresAt = Number(SIGNUP_PROOF_PATTERN.exec(proof)?.[1]);
   if (!(expiresAt > Date.now())) return false;
