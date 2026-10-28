@@ -4,6 +4,8 @@
   import Pause from '@lucide/svelte/icons/pause';
   import Play from '@lucide/svelte/icons/play';
   import { router } from '../lib/router.svelte.js';
+  import { auth } from '../lib/auth.svelte.js';
+  import { store } from '../lib/store.svelte.js';
 
   let { gardenMode = $bindable(false) } = $props();
 
@@ -22,12 +24,42 @@
   ];
   const BUILDING_STYLES = ['one', 'two', 'three', 'four', 'five', 'six'];
   const NOTICE_DURATION = 1800;
-  let agents = $state(INITIAL_AGENTS.map((agent) => ({ ...agent })));
-  let buildings = $state(INITIAL_BUILDINGS.map((building) => ({ ...building })));
+  const STORAGE_KEY = `ws_ai_garden_${auth.user?.id || 'local'}`;
+  const DEFAULT_STATE = { agents: INITIAL_AGENTS.map((agent) => ({ ...agent })), buildings: INITIAL_BUILDINGS.map((building) => ({ ...building })) };
+
+  function restoreCity() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (!Array.isArray(saved?.agents) || !Array.isArray(saved?.buildings)) return DEFAULT_STATE;
+      return {
+        agents: saved.agents.filter((agent) => agent && typeof agent.id === 'string' && typeof agent.name === 'string' && Number.isFinite(agent.x) && Number.isFinite(agent.y)),
+        buildings: saved.buildings.filter((building) => building && typeof building.id === 'string' && Number.isFinite(building.x) && Number.isFinite(building.y) && BUILDING_STYLES.includes(building.style)),
+      };
+    } catch {
+      return DEFAULT_STATE;
+    }
+  }
+
+  const restored = restoreCity();
+  let agents = $state(restored.agents);
+  let buildings = $state(restored.buildings);
   let selected = $state('claude');
   let selectedBuilding = $state('');
   let notice = $state('');
+  /** @type {HTMLElement | undefined} */
+  let viewport = $state();
+  let movingBuilding = '';
+  let movingPointer = 0;
   const current = $derived(agents.find((agent) => agent.id === selected) || agents[0]);
+  const currentTask = $derived.by(() => current && store.notes.find((note) => !note.deleted_at && !note.archived && note.state === 'in_progress' && String(note.assignee || '').toLowerCase() === current.name.toLowerCase()));
+
+  $effect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ agents, buildings }));
+    } catch {
+      // The city remains usable when browser storage is unavailable.
+    }
+  });
 
   function addAgent() {
     const index = agents.length + 1;
@@ -57,11 +89,39 @@
     current.active = !current.active;
   }
 
+  function startBuildingMove(event, building) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    movingBuilding = building.id;
+    movingPointer = event.pointerId;
+    selectedBuilding = building.id;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveBuilding(event) {
+    if (!movingBuilding || event.pointerId !== movingPointer || !viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const building = buildings.find((item) => item.id === movingBuilding);
+    if (!building || !rect.width || !rect.height) return;
+    const x = Math.max(6, Math.min(94, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(16, Math.min(78, ((event.clientY - rect.top) / rect.height) * 100));
+    building.x = Math.round(x / 2) * 2;
+    building.y = Math.round(y / 3) * 3;
+  }
+
+  function stopBuildingMove(event) {
+    if (event.pointerId !== movingPointer) return;
+    movingBuilding = '';
+    movingPointer = 0;
+  }
+
   function openView(view) {
     gardenMode = false;
     router.go(view);
   }
 </script>
+
+<svelte:window onpointermove={moveBuilding} onpointerup={stopBuildingMove} onpointercancel={stopBuildingMove} />
 
 <section class="city-mode flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="AI Garden city">
   <div class="city-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-line px-3 py-2 sm:px-5">
@@ -72,7 +132,7 @@
     </div>
   </div>
 
-  <div class="city-viewport relative min-h-0 flex-1 overflow-hidden" aria-label="Futuristic city district">
+  <div class="city-viewport relative min-h-0 flex-1 overflow-hidden" aria-label="Futuristic city district" bind:this={viewport}>
     <div class="city-haze"></div>
     <div class="distant-skyline" aria-hidden="true">
       <i style="--left:2%;--width:5%;--height:24%"></i><i style="--left:8%;--width:4%;--height:34%"></i>
@@ -92,7 +152,7 @@
     {#each buildings as building (building.id)}
       <button class="building {building.style} {selectedBuilding === building.id ? 'building-selected' : ''}"
         style="--x:{building.x}%;--y:{building.y}%;--height:{building.height}%"
-        onclick={() => (selectedBuilding = building.id)} title={building.name} aria-label="Select {building.name}" aria-pressed={selectedBuilding === building.id}>
+        onpointerdown={(event) => startBuildingMove(event, building)} onclick={() => (selectedBuilding = building.id)} title="Drag to place {building.name}" aria-label="Select or move {building.name}" aria-pressed={selectedBuilding === building.id}>
         <span class="building-roof"></span><span class="building-face"></span><span class="building-side"></span><span class="building-base"></span>
       </button>
     {/each}
@@ -109,7 +169,7 @@
       <div class="agent-console" aria-label="Selected agent controls">
         <span class="console-indicator {current.active ? 'online' : ''}"></span>
         <span class="console-name">{current.name}</span>
-        <span class="console-state">{current.active ? 'Active' : 'Paused'}</span>
+        <span class="console-state" title={currentTask?.title || ''}>{currentTask ? currentTask.title : current.active ? 'Idle' : 'Paused'}</span>
         <button class="console-toggle spring press" onclick={toggleAutonomy} title={current.active ? 'Pause agent' : 'Resume agent'} aria-label={current.active ? 'Pause agent' : 'Resume agent'}>
           {#if current.active}<Pause class="size-4" />{:else}<Play class="size-4" />{/if}
         </button>
@@ -154,7 +214,8 @@
   .city-rails { position:absolute; inset:0; pointer-events:none; }
   .city-rails span { position:absolute; height:1px; left:0; right:0; background:linear-gradient(90deg,transparent,var(--ws-city-rail),transparent); }
   .city-rails span:nth-child(1) { top:27%; }.city-rails span:nth-child(2) { top:49%; opacity:.45; }.city-rails span:nth-child(3) { bottom:15%; opacity:.25; }
-  .building { position:absolute; z-index:2; left:var(--x); top:var(--y); width:clamp(2.25rem,7vw,5rem); height:var(--height); min-height:5.5rem; transform:translate(-50%,-100%); }
+  .building { position:absolute; z-index:2; left:var(--x); top:var(--y); width:clamp(2.25rem,7vw,5rem); height:var(--height); min-height:5.5rem; transform:translate(-50%,-100%); touch-action:none; cursor:grab; }
+  .building:active { cursor:grabbing; }
   .building-face,.building-side,.building-roof,.building-base { position:absolute; display:block; }
   .building-face { inset:0 16% 0 0; border:1px solid var(--ws-city-outline); border-bottom:0; background:linear-gradient(90deg,var(--building-face-a),var(--building-face-b)); }
   .building-face::after { content:""; position:absolute; inset:7% 10%; background:repeating-linear-gradient(90deg,transparent 0 8px,var(--building-window) 8px 10px),repeating-linear-gradient(0deg,transparent 0 10px,var(--building-window) 10px 12px); opacity:.84; }
@@ -183,7 +244,7 @@
   .agent-console { position:absolute; z-index:8; right:.75rem; bottom:.75rem; display:flex; align-items:center; gap:.55rem; border:1px solid var(--ws-city-console-line); background:var(--ws-city-console); padding:.45rem .5rem .45rem .7rem; color:var(--ws-city-label); box-shadow:0 7px 18px var(--ws-city-shadow); }
   .console-indicator,.agent-pip { flex:none; width:.42rem; height:.42rem; border-radius:50%; background:var(--ws-city-muted); }
   .console-indicator.online,.agent-pip.online { background:var(--ws-city-cyan); box-shadow:0 0 8px var(--ws-city-glow); }
-  .console-name { font-size:.74rem; font-weight:650; }.console-state { border-left:1px solid var(--ws-city-console-line); padding-left:.5rem; color:var(--ws-city-muted); font-size:.68rem; }
+  .console-name { font-size:.74rem; font-weight:650; }.console-state { max-width:min(45vw,14rem); overflow:hidden; border-left:1px solid var(--ws-city-console-line); padding-left:.5rem; color:var(--ws-city-muted); font-size:.68rem; text-overflow:ellipsis; white-space:nowrap; }
   .console-toggle { display:grid; width:1.8rem; height:1.8rem; place-items:center; color:var(--ws-city-label); }
   .city-notice { position:absolute; z-index:10; top:.75rem; left:50%; transform:translateX(-50%); border:1px solid var(--ws-city-console-line); background:var(--ws-city-console); padding:.4rem .7rem; color:var(--ws-city-label); font-size:.75rem; }
   .agent-tab { display:flex; align-items:center; gap:.45rem; min-height:2rem; border:1px solid transparent; padding:.35rem .55rem; color:var(--ws-ink-faint); font-size:.72rem; white-space:nowrap; }
