@@ -7,6 +7,7 @@
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
   import Archive from '@lucide/svelte/icons/archive';
+  import Sprout from '@lucide/svelte/icons/sprout';
   import Settings from '@lucide/svelte/icons/settings';
   import Plus from '@lucide/svelte/icons/plus';
   import Pencil from '@lucide/svelte/icons/pencil';
@@ -26,7 +27,7 @@
   import { APP_VERSION } from '../lib/version.js';
 
   /** @type {{ compact?: boolean }} */
-  let { compact = false } = $props();
+  let { compact = false, gardenMode = $bindable(false) } = $props();
 
   // Destinations above the archive/settings footer. Empty for now; new tabs land here (see the markup).
   /** @type {{ view: string, label: string, icon: any }[]} */
@@ -137,7 +138,7 @@
   <!-- Top nav, then Projects and Labels: each list scrolls inside its own capped box, so neither crowds the other or
        the tabs below. When the sidebar is short, both lists shrink and scroll; if even that isn't enough (a 320px-tall
        window with both add forms open), the whole column scrolls, so nothing is ever cut off. -->
-  <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2" bind:this={lists}>
+  <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2 {gardenMode ? 'hidden' : ''}" bind:this={lists}>
     {#each NAV as item (item.view)}
       <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
         <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
@@ -229,6 +230,19 @@
     {/if}
   </div>
 
+  {#if gardenMode}
+    <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 {compact ? 'items-center px-1' : ''}" aria-label="Garden navigation">
+      {#if compact}
+        <Sprout class="size-5 text-complete" />
+      {:else}
+        <p class="font-mono text-[0.6875rem] uppercase tracking-widest text-complete">Garden paths</p>
+        <p class="text-sm font-semibold text-ink">Friends & activity</p>
+        <p class="text-xs leading-relaxed text-ink-faint">Choose a friend in the meadow to see what they’re up to.</p>
+        <div class="mt-2 border-t border-line pt-3 text-xs text-ink-faint">Agent connections<br /><span class="text-ink-muted">Local preview</span></div>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Lower tabs: more destinations go here, right above the footer, by adding to LOWER_NAV. Same look as the top nav. -->
   {#if LOWER_NAV.length}
     <div class="shrink-0 border-t border-line py-1">
@@ -243,6 +257,11 @@
   {/if}
 
   <div class="shrink-0 border-t border-line">
+    <button class="{ITEM} {gardenMode ? 'bg-complete-soft text-complete' : 'text-ink-muted'} {compact ? 'justify-center px-0' : ''}"
+      onclick={() => { gardenMode = !gardenMode; ui.drawerOpen = false; }} title="AI Garden" aria-label="Toggle AI Garden" aria-pressed={gardenMode}>
+      <span class="flex spring"><Sprout class="size-4 tv:size-6 shrink-0" /></span>
+      {#if !compact}<span class="font-semibold">AI Garden</span>{/if}
+    </button>
     <div class="flex items-center {compact ? 'flex-col justify-center gap-0.5 py-1' : 'gap-0.5 py-1 pr-1.5 pl-4'}">
       {#if !compact}<span class="mr-auto font-mono text-[0.6875rem] tv:text-sm text-ink-faint selectable" title="wordsmith version">v{APP_VERSION}</span>{/if}
       <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}

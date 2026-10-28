@@ -17,6 +17,7 @@
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
   import SelectionBar from './SelectionBar.svelte';
+  import AIGarden from './AIGarden.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
@@ -33,6 +34,7 @@
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
 
   let projectTab = $state('board');
+  let gardenMode = $state(false);
   const route = $derived(router.route);
   const live = $derived(store.notes.filter((note) => !note.deleted_at));
   const project = $derived(route.view === 'project' || route.view === 'project-settings' ? store.find('projects', route.id) : null);
@@ -118,17 +120,19 @@
 
 <div class="flex h-dvh w-full overflow-hidden bg-app text-ink">
   <aside class="hidden w-16 shrink-0 border-r border-line md:block lg:w-64 ultrawide:w-72 tv:w-80">
-    <div class="h-full lg:hidden"><Sidebar compact /></div>
-    <div class="hidden h-full lg:block"><Sidebar /></div>
+    <div class="h-full lg:hidden"><Sidebar compact bind:gardenMode /></div>
+    <div class="hidden h-full lg:block"><Sidebar bind:gardenMode /></div>
   </aside>
 
   <div class="flex min-w-0 flex-1 flex-col">
     <div class="relative">
-      <TopBar title={view.title} subtitle={view.subtitle} onsettings={openSettings} />
+      <TopBar title={gardenMode ? 'AI Garden' : view.title} subtitle={gardenMode ? 'Your agents, growing together' : view.subtitle} onsettings={gardenMode ? null : openSettings} />
       {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} projectId={route.view === 'project' ? (project?.id ?? null) : null} />{/if}
     </div>
 
     <main class="relative min-h-0 flex-1 overflow-hidden">
+      <div class="h-full {gardenMode ? '' : 'hidden'}"><AIGarden bind:gardenMode /></div>
+      {#if !gardenMode}
       {#key route.view + route.id}
         <div class="absolute inset-0 flex flex-col" in:fly={PAGE_IN} out:fade={PAGE_OUT}>
           {#if route.view === 'settings'}
@@ -176,6 +180,7 @@
           {/if}
         </div>
       {/key}
+      {/if}
     </main>
 
     <div class="md:hidden"><BottomNav onnew={newNote} /></div>
@@ -185,7 +190,7 @@
     <div class="fixed inset-0 z-40 flex lg:hidden">
       <button class="absolute inset-0 bg-scrim" aria-label="Close navigation" onclick={() => (ui.drawerOpen = false)} in:fade={{ duration: 220 }} out:fade={{ duration: 180 }}></button>
       <div class="relative h-full w-72 max-w-[85vw] border-r border-line" in:fly={DRAWER_IN} out:fly={DRAWER_OUT}>
-        <Sidebar />
+        <Sidebar bind:gardenMode />
       </div>
     </div>
   {/if}

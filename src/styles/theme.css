@@ -55,6 +55,41 @@
   --ws-dot-blue: #5aa8ff;
   --ws-dot-purple: #b18cff;
   --ws-dot-pink: #ff7ac6;
+  /* AI Garden meadow, critters and scene details */
+  --ws-garden-sky: #203747;
+  --ws-garden-meadow: #365e3d;
+  --ws-garden-hill: #477247;
+  --ws-garden-grass: #57884b;
+  --ws-garden-sun: #f5d875;
+  --ws-garden-sun-glow: #f5d87555;
+  --ws-garden-water: #548fa0;
+  --ws-garden-water-edge: #b3d9c1;
+  --ws-garden-water-light: #d8f0d5;
+  --ws-garden-path: #c6a570;
+  --ws-garden-wood: #76563e;
+  --ws-garden-leaves: #739c53;
+  --ws-garden-leaves-shade: #56783f;
+  --ws-garden-flower: #f3d26b;
+  --ws-garden-flower-alt: #ed9ca7;
+  --ws-garden-outline: #354a36;
+  --ws-garden-shadow: #263d2e;
+  --ws-garden-orange: #ef9a56;
+  --ws-garden-orange-shade: #ce7541;
+  --ws-garden-blue: #86bac1;
+  --ws-garden-blue-shade: #6297a3;
+  --ws-garden-pink: #e6a3a3;
+  --ws-garden-pink-shade: #c97f86;
+  --ws-garden-mint: #91c38e;
+  --ws-garden-mint-shade: #6d9e72;
+  --ws-garden-face: #493a36;
+  --ws-garden-muzzle: #fff0d4;
+  --ws-garden-blush: #df8581;
+  --ws-garden-belly: #ffe7bf;
+  --ws-garden-label: #fff4d8;
+  --ws-garden-label-line: #a8855c;
+  --ws-garden-label-ink: #3f4030;
+  --ws-garden-ready: #54c777;
+  --ws-garden-caption: #f3f4d6;
 }
 
 /* Light theme: same roles, paper background, darker accent for AA on white. */
@@ -95,6 +130,41 @@
   --ws-dot-blue: #1f5fbf;
   --ws-dot-purple: #6d3fd1;
   --ws-dot-pink: #b8237a;
+  /* AI Garden tokens are brightened for the sunlit paper palette */
+  --ws-garden-sky: #a9d9dc;
+  --ws-garden-meadow: #a7cf93;
+  --ws-garden-hill: #8ebc7f;
+  --ws-garden-grass: #78ad68;
+  --ws-garden-sun: #f4c94e;
+  --ws-garden-sun-glow: #f4c94e55;
+  --ws-garden-water: #68a9b6;
+  --ws-garden-water-edge: #f5f2d6;
+  --ws-garden-water-light: #ffffff;
+  --ws-garden-path: #d8b77f;
+  --ws-garden-wood: #76563e;
+  --ws-garden-leaves: #5c8d4b;
+  --ws-garden-leaves-shade: #47743e;
+  --ws-garden-flower: #e7b83f;
+  --ws-garden-flower-alt: #d87583;
+  --ws-garden-outline: #38533a;
+  --ws-garden-shadow: #52744f;
+  --ws-garden-orange: #e78a45;
+  --ws-garden-orange-shade: #c56e37;
+  --ws-garden-blue: #6da9b1;
+  --ws-garden-blue-shade: #4a838d;
+  --ws-garden-pink: #d78388;
+  --ws-garden-pink-shade: #b95f6b;
+  --ws-garden-mint: #70a86d;
+  --ws-garden-mint-shade: #4b8157;
+  --ws-garden-face: #342b28;
+  --ws-garden-muzzle: #fff3db;
+  --ws-garden-blush: #b94d59;
+  --ws-garden-belly: #fff0d0;
+  --ws-garden-label: #fff8e8;
+  --ws-garden-label-line: #95784f;
+  --ws-garden-label-ink: #353528;
+  --ws-garden-ready: #268748;
+  --ws-garden-caption: #263c2c;
 }
 
 /* Custom colors (Settings → Appearance) are not written here: src/lib/appearance.svelte.js reads the values above
