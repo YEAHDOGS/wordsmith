@@ -1,5 +1,6 @@
 <script>
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
+  // Projects and Labels scroll inside their own capped boxes; LOWER_NAV holds future tabs right above the footer.
   // Top: logo, wordmark and the sync icon, the same height as the top bar so their bottom lines meet. Bottom: the app
   // version, the archive (no count badge; the count is in its tooltip) and a settings cog; the rail stacks the two buttons. The Made by DOGS
   // sticker lives in Settings → About.
@@ -12,6 +13,7 @@
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
+  import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { slide } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
@@ -26,6 +28,13 @@
   /** @type {{ compact?: boolean }} */
   let { compact = false } = $props();
 
+  // Destinations above the archive/settings footer. Empty for now; new tabs land here (see the markup).
+  /** @type {{ view: string, label: string, icon: any }[]} */
+  const LOWER_NAV = [];
+  // Projects and Labels each scroll in their own box: it shrinks with the sidebar and is capped at about seven rows.
+  // relative: the list is its rows' offsetParent, so scrolling the open one into view measures from the list's top.
+  const LIST = 'relative min-h-0 shrink overflow-x-hidden overflow-y-auto overscroll-contain';
+  const LIST_CAP = 'max-h-64 short:max-h-32 tv:max-h-96';
   const NAV = [
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
@@ -95,6 +104,23 @@
     newLabel = '';
   }
 
+  /** @type {HTMLElement | undefined} */
+  let lists = $state();
+  // The open project or label scrolls into view inside its list when you navigate to it.
+  $effect(() => {
+    router.route.view;
+    router.route.id;
+    tick().then(() => {
+      const item = /** @type {HTMLElement | null | undefined} */ (lists?.querySelector('[role="group"] [aria-current="page"]'));
+      const box = /** @type {HTMLElement | null | undefined} */ (item?.closest('[role="group"]'));
+      if (!item || !box) return;
+      // Scroll only the list itself (scrollIntoView could also move the clipped sidebar around it).
+      const top = item.offsetTop;
+      if (top < box.scrollTop) box.scrollTop = top;
+      else if (top + item.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + item.offsetHeight - box.clientHeight;
+    });
+  });
+
   const active = (/** @type {string} */ view, id = '') => router.route.view === view && (!id || router.route.id === id);
 </script>
 
@@ -108,7 +134,9 @@
     <SyncStatus {compact} />
   </div>
 
-  <div class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-2">
+  <!-- Top nav, then Projects and Labels: each list scrolls inside its own capped box, so neither crowds the other or
+       the tabs below. When the sidebar is short, both lists shrink and scroll rather than pushing anything off screen. -->
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden py-2" bind:this={lists}>
     {#each NAV as item (item.view)}
       <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
         <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
@@ -137,6 +165,7 @@
         {#if projectError}<p id="project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
       </form>
     {/if}
+    <div class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects">
     {#each projects as project (project.id)}
       <button animate:flip={{ duration: 150 }} class="{ITEM} {active('project', project.id) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go('project', project.id)}
         title={openCounts[project.id] ? `${project.name}, ${openCounts[project.id]} open` : project.name} aria-current={active('project', project.id) ? 'page' : undefined}>
@@ -150,6 +179,7 @@
         {/if}
       </button>
     {/each}
+    </div>
 
     {#if !compact}
       <div class={SECTION}>
@@ -172,6 +202,7 @@
             onkeydown={(event) => event.key === 'Escape' && (addingLabel = false)} />
         </form>
       {/if}
+      <div class="{LIST} {LIST_CAP}" role="group" aria-label="Labels">
       {#each labels as label (label.id)}
         <div animate:flip={{ duration: 150 }}>
           {#if editingLabels}
@@ -193,8 +224,22 @@
           {/if}
         </div>
       {/each}
+      </div>
     {/if}
   </div>
+
+  <!-- Lower tabs: more destinations go here, right above the footer, by adding to LOWER_NAV. Same look as the top nav. -->
+  {#if LOWER_NAV.length}
+    <div class="shrink-0 border-t border-line py-1">
+      {#each LOWER_NAV as item (item.view)}
+        <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
+          <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
+          <item.icon class="size-4 tv:size-6 shrink-0" />
+          {#if !compact}<span>{item.label}</span>{/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <div class="shrink-0 border-t border-line">
     <div class="flex items-center {compact ? 'flex-col justify-center gap-0.5 py-1' : 'gap-0.5 py-1 pr-1.5 pl-4'}">
