@@ -1,6 +1,8 @@
 <script>
-  // Sync icon beside the wordmark. Always the same size and color; it spins while syncing and finishes its turn
+  // Sync icon beside the wordmark. Always the same size; it spins while syncing and finishes its turn
   // before stopping, so it never snaps. On a problem it turns yellow with a "?" and opens a plain-words explanation.
+  // A ring around it sweeps clockwise toward red as time since the last sync runs out; once full the whole symbol
+  // turns red. Each successful sync snaps the ring back. The sweep is one CSS animation keyed to the sync time.
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import X from '@lucide/svelte/icons/x';
   import { fly, scale } from 'svelte/transition';
@@ -17,18 +19,56 @@
   const PANEL_IN = { y: -6, duration: 180, easing: backOut };
   const PANEL_OUT = { y: -4, duration: 120, easing: cubicOut };
   const BADGE = { start: 0.4, duration: 180, easing: backOut };
+  const STALE_AFTER_MS = 120_000;
+  const SNAP_BACK_MS = 360;
+  const SNAP_BACK_TURN_DEG = -270;
+  const SNAP_BACK_MIN_SCALE = 0.6;
+  // How often "Last synced N ago" in the label refreshes; ago() rounds to minutes anyway.
+  const LABEL_TICK_MS = 30_000;
+  // The ring circle in a 32-unit box, inside the button edge
+  const RING_CENTER = 16;
+  const RING_RADIUS = 14;
 
   let open = $state(false);
   let spinning = $state(false);
   /** @type {HTMLElement | undefined} */ let root = $state();
   /** @type {HTMLButtonElement | undefined} */ let trigger = $state();
+  let stale = $state(false);
+  let now = $state(Date.now());
+  // Never synced yet (offline from the start): count from when the icon appeared.
+  const mountedAt = Date.now();
+  const since = $derived(store.lastSync || mountedAt);
+  const sinceText = $derived.by(() => {
+    if (!store.lastSync || !now) return 'Not synced yet';
+    return `Last synced ${ago(store.lastSync)}`;
+  });
 
   const problem = $derived(syncProblem(store));
   const label = $derived.by(() => {
     if (problem) return `Sync problem: ${problem.title}. Show details`;
     if (store.syncing) return 'Syncing';
-    return store.lastSync ? `Synced ${ago(store.lastSync)}. Sync now` : 'Sync now';
+    return `${sinceText}${stale ? ', out of date' : ''}. Sync now`;
   });
+
+  // Restart the clock on every sync; already past the limit (e.g. on wake) means stale straight away.
+  $effect(() => {
+    stale = Date.now() - since >= STALE_AFTER_MS;
+  });
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), LABEL_TICK_MS);
+    return () => clearInterval(timer);
+  });
+
+  /** The old arc unwinds counterclockwise and shrinks away while the fresh one starts empty. @param {Element} _node */
+  function snapBack(_node) {
+    return {
+      duration: SNAP_BACK_MS,
+      easing: cubicOut,
+      css: (/** @type {number} */ t, /** @type {number} */ u) =>
+        `transform: rotate(${u * SNAP_BACK_TURN_DEG}deg) scale(${SNAP_BACK_MIN_SCALE + (1 - SNAP_BACK_MIN_SCALE) * t}); opacity: ${t}`,
+    };
+  }
 
   // Start spinning as soon as a sync starts; stopping waits for the end of a turn (onanimationiteration).
   $effect(() => {
@@ -65,9 +105,17 @@
 <svelte:window {onpointerdown} {onkeydown} />
 
 <div class="contents" bind:this={root}>
-  <button bind:this={trigger} class="spring press relative flex size-8 tv:size-11 shrink-0 items-center justify-center hover:bg-surface-raised {problem ? 'text-requested' : 'text-ink-faint'}"
-    {onclick} aria-label={label} title={store.lastSync ? `Last synced ${fullTime(store.lastSync)}` : 'Not synced yet'}
+  <button bind:this={trigger} class="spring press relative flex size-8 tv:size-11 shrink-0 items-center justify-center hover:bg-surface-raised {problem ? 'text-requested' : stale ? 'text-stale' : 'text-ink-faint'}"
+    {onclick} aria-label={label} title={store.lastSync ? `${sinceText} (${fullTime(store.lastSync)})` : sinceText}
     aria-expanded={problem ? open : undefined} aria-controls={problem ? PANEL_ID : undefined}>
+    {#key since}
+      {@const ringSince = since}
+      <svg class="pointer-events-none absolute inset-0 size-full -rotate-90 text-stale" viewBox="0 0 32 32" aria-hidden="true" out:snapBack>
+        <circle class="stale-sweep" cx={RING_CENTER} cy={RING_CENTER} r={RING_RADIUS} fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" pathLength="1" style:--stale-ms="{STALE_AFTER_MS}ms" style:animation-delay="{-(Date.now() - since)}ms"
+          onanimationend={() => (stale = ringSince === since)} />
+      </svg>
+    {/key}
     <span class="flex {spinning ? 'spinning' : ''}" onanimationiteration={() => !store.syncing && (spinning = false)}>
       <RefreshCw class="size-4 tv:size-6" />
     </span>

@@ -36,6 +36,7 @@
   --ws-progress-soft: #0b1c30;
   --ws-complete: #3ddc84;       /* feature state: complete, merged PRs */
   --ws-complete-soft: #0a2717;
+  --ws-stale: #ff5a68;          /* sync icon ring and glyph as time since the last sync runs out (SyncStatus), 3:1 on surfaces */
   --ws-scrim: #000000b3;        /* behind dialogs and the mobile drawer */
   /* Note and label tints (Google Keep style), muted so ink stays AA on top */
   --ws-tint-red: #3a1418;
@@ -78,6 +79,7 @@
   --ws-progress-soft: #e3eefc;
   --ws-complete: #17773f;
   --ws-complete-soft: #def5e7;
+  --ws-stale: #d3142a;
   --ws-scrim: #12121673;
   --ws-tint-red: #fbe1e1;
   --ws-tint-orange: #fde9d7;
@@ -162,6 +164,7 @@
   --color-progress-soft: var(--ws-progress-soft);
   --color-complete: var(--ws-complete);
   --color-complete-soft: var(--ws-complete-soft);
+  --color-stale: var(--ws-stale);
   --color-scrim: var(--ws-scrim);
   --color-tint-red: var(--ws-tint-red);
   --color-tint-orange: var(--ws-tint-orange);
