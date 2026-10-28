@@ -55,6 +55,73 @@
   --ws-dot-blue: #5aa8ff;
   --ws-dot-purple: #b18cff;
   --ws-dot-pink: #ff7ac6;
+  /* AI Garden city sky and horizon */
+  --ws-city-sky: #08131f;
+  --ws-city-horizon: #11283a;
+  --ws-city-ground: #0a1119;
+  --ws-city-haze: #1b536544;
+  /* AI Garden distant skyline depth and windows */
+  --ws-city-distant-line: #385b70;
+  --ws-city-distant-a: #122b3c;
+  --ws-city-distant-b: #0b1c2a;
+  --ws-city-window-dim: #77aaba30;
+  /* AI Garden streets, map grid and elevated roads */
+  --ws-city-floor: #101e28;
+  --ws-city-grid: #4f758522;
+  --ws-city-road: #17232e;
+  --ws-city-road-edge: #456074;
+  --ws-city-road-inner: #253b4c;
+  --ws-city-marking: #9bb2b933;
+  --ws-city-rail: #6ca0b62b;
+  /* AI Garden tower glass: cool glass, brushed silver, teal, violet, blue and bronze */
+  --ws-city-glass-a: #17384b;
+  --ws-city-glass-b: #102737;
+  --ws-city-glass-side: #0c1b28;
+  --ws-city-silver-a: #526475;
+  --ws-city-silver-b: #293c4a;
+  --ws-city-silver-side: #1d2b39;
+  --ws-city-teal-a: #176064;
+  --ws-city-teal-b: #103d4b;
+  --ws-city-teal-side: #0d2c39;
+  --ws-city-purple-a: #463856;
+  --ws-city-purple-b: #29293e;
+  --ws-city-purple-side: #211f32;
+  --ws-city-blue-a: #315d79;
+  --ws-city-blue-b: #203e5a;
+  --ws-city-blue-side: #172b42;
+  --ws-city-bronze-a: #665442;
+  --ws-city-bronze-b: #3c3840;
+  --ws-city-bronze-side: #292a33;
+  /* AI Garden tower roofs, silhouettes and lit office windows */
+  --ws-city-roof-a: #32718a;
+  --ws-city-roof-b: #8094a2;
+  --ws-city-roof-c: #35a19a;
+  --ws-city-roof-d: #9a77a8;
+  --ws-city-roof-e: #5d94b3;
+  --ws-city-roof-f: #b58c62;
+  --ws-city-window: #8bd4dd;
+  --ws-city-window-warm: #f1c98b;
+  --ws-city-outline: #17212b;
+  --ws-city-base: #243b4a;
+  /* AI Garden resident suits, visors and status lights */
+  --ws-city-agent-shadow: #02070c99;
+  --ws-city-agent-outline: #182b39;
+  --ws-city-agent-a: #9caeb5;
+  --ws-city-agent-b: #526979;
+  --ws-city-agent-shade: #40505d;
+  --ws-city-helmet: #c4d3d5;
+  --ws-city-visor: #233e4d;
+  --ws-city-pack: #344854;
+  --ws-city-agent-active-a: #70b9b5;
+  --ws-city-agent-active-b: #345f69;
+  --ws-city-cyan: #70d8dc;
+  --ws-city-glow: #52bdcf66;
+  /* AI Garden labels and small agent console */
+  --ws-city-label: #dbe8e9;
+  --ws-city-console-line: #466071;
+  --ws-city-console: #0b1721ef;
+  --ws-city-muted: #91a7b2;
+  --ws-city-shadow: #02070ccc;
 }
 
 /* Light theme: same roles, paper background, darker accent for AA on white. */
