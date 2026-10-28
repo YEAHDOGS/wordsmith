@@ -1,5 +1,6 @@
 <script>
-  // Settings for a board page. A project gets its name, color, linked GitHub repo, agent prompt and delete, plus its
+  // Settings for a board page. A project gets its name, color, linked GitHub repo, mission statement (Markdown), agent
+  // prompt and delete, plus its
   // board columns; the Features page (no project) gets just its columns. Opened from the gear next to the page title
   // (#/project-settings/<id>, #/features-settings). One stacked column on phones, a 1px grid of cards from lg up,
   // matching the main Settings page.
@@ -16,7 +17,10 @@
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { reveal } from '../lib/reveal.js';
-  import { FEATURES_SCOPE, MAX_NAME } from '../lib/models.js';
+  import { FEATURES_SCOPE, MAX_MISSION, MAX_NAME } from '../lib/models.js';
+  import { renderMarkdown } from '../lib/markdown.js';
+  import { markdownKeys } from '../lib/markdown-input.js';
+  import MarkdownToolbar from './MarkdownToolbar.svelte';
   import { projectPrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './board-settings.json';
@@ -29,7 +33,30 @@
   const FIELD = 'h-10 w-full border border-line bg-surface px-3 text-sm text-ink hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
   const LABEL = 'mb-1.5 block text-xs font-semibold tracking-wide text-ink-faint uppercase';
 
+  const MISSION_SAVE_MS = 600;
+
   let copied = $state(false);
+  // The mission statement is loaded once per project and saved after a pause, so a sync landing mid-typing can't
+  // overwrite what you're writing.
+  let mission = $state('');
+  let missionPreview = $state(false);
+  let loadedMission = '';
+  /** @type {HTMLTextAreaElement | undefined} */
+  let missionField = $state();
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let missionTimer;
+  $effect.pre(() => {
+    if (!project || loadedMission === project.id) return;
+    loadedMission = project.id;
+    mission = project.description;
+  });
+
+  function saveMission() {
+    clearTimeout(missionTimer);
+    if (project && mission !== project.description) store.update('projects', project.id, { description: mission });
+  }
+  // Leaving the page saves what's typed.
+  $effect(() => () => saveMission());
   let pickingRepo = $state(false);
   let confirming = $state(false);
 
@@ -93,7 +120,26 @@
         </div>
       </section>
 
-      <section class={CARD} use:reveal={1}>
+      <section class="{CARD} lg:col-span-2" use:reveal={1}>
+        <h2 class={HEADING}>{TEXT.mission}</h2>
+        <p class={HINT}>{TEXT.missionHint}</p>
+        <div class="flex min-h-48 flex-col {BOX}">
+          {#if missionPreview}
+            <!-- Rendered by src/lib/markdown.js, which escapes all input -->
+            <div class="markdown selectable min-h-40 flex-1 px-3 py-2 text-fluid-sm text-ink">
+              {#if mission.trim()}{@html renderMarkdown(mission)}{:else}<p class="text-ink-faint">Nothing to preview yet.</p>{/if}
+            </div>
+          {:else}
+            <textarea bind:this={missionField} bind:value={mission} use:markdownKeys maxlength={MAX_MISSION} aria-label={TEXT.mission} placeholder={TEXT.missionPlaceholder}
+              oninput={() => { clearTimeout(missionTimer); missionTimer = setTimeout(saveMission, MISSION_SAVE_MS); }} onblur={saveMission}
+              class="min-h-40 flex-1 resize-y bg-transparent px-3 py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+          {/if}
+          <div class="flex justify-end border-t border-line">
+            <MarkdownToolbar textarea={missionField} bind:preview={missionPreview} showPreview class="-mr-1 py-0.5" />
+          </div>
+        </div>
+      </section>
+      <section class={CARD} use:reveal={2}>
         <h2 class={HEADING}>{TEXT.agent}</h2>
         <p class={HINT}>{TEXT.agentHint}</p>
         <button class={BUTTON} onclick={copyPrompt}>
@@ -119,7 +165,7 @@
       </section>
     {/if}
 
-    <section class="{CARD} lg:col-span-2" use:reveal={project ? 2 : 0}>
+    <section class="{CARD} lg:col-span-2" use:reveal={project ? 3 : 0}>
       <h2 class={HEADING}>{TEXT.columns}</h2>
       <p class={HINT}>{TEXT.columnsHint}{project ? '' : ` ${TEXT.featuresColumnsHint}`}</p>
       <BoardColumns scope={project ? project.id : FEATURES_SCOPE} />

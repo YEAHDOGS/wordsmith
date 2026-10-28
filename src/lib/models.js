@@ -32,6 +32,8 @@ export const MAX_BODY = 100_000;
 export const MAX_NAME = 80;
 const MAX_ID = 64;
 export const MAX_STATUS = 500;
+// A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
+export const MAX_MISSION = 20_000;
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;
@@ -65,7 +67,8 @@ export const MAX_ANALYSIS = 20_000;
 export const MODELS = {
   projects: {
     name: { type: 'text', max: MAX_NAME, default: '' },
-    description: { type: 'text', max: MAX_STATUS, default: '' },
+    // Shown and edited as the mission statement in project settings; agents read it from GET /api/v1/projects.
+    description: { type: 'text', max: MAX_MISSION, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
     repo: { type: 'text', max: MAX_REPO, default: '' },
   },
