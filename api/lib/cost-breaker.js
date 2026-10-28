@@ -3,10 +3,13 @@
 // public ones served outside this Worker. A cron (wrangler.jsonc "triggers") runs checkSpend every 10 minutes:
 //   - reads the whole account's R2 operations over the last OPERATIONS_WINDOW_MS and each bucket's recent peak storage
 //     from Cloudflare's GraphQL analytics;
-//   - past a limit set well under the free tier, opens the breaker: attachments refuse every upload and read (reserve()
-//     in attachments.js; deletes are free and still allowed, so space can be freed) and every public bucket domain
-//     (custom domains and r2.dev) is switched off so nobody outside can run up reads. Domains stay off until turned back
-//     on by hand, and reason keeps the list; the D1 flag closes again once usage is back under.
+//   - past an operations limit set well under the free tier, opens the breaker: attachments refuse every upload and
+//     read (reserve() in attachments.js; deletes are free and still allowed) and every public bucket domain (custom
+//     domains and r2.dev) is switched off so nobody outside can run up reads. Domains stay off until turned back on by
+//     hand, and reason keeps the list; the D1 flag closes again once usage is back under.
+//   - past the storage limit alone, opens it uploads_only: only uploads are refused (reads and public traffic don't add
+//     stored bytes) and domains stay on. Storage is a 30-day peak, so this can last up to STORAGE_WINDOW_DAYS after
+//     the peak even once space is freed.
 //   - if usage can't be read for MAX_FAILURES checks in a row (token missing or revoked, API down), opens the breaker too.
 //   - while open, every check retries switching off domains, in case one failed before.
 // Needs CF_ACCOUNT_ID (var) and CF_BUDGET_TOKEN (secret: Account Analytics Read + Workers R2 Storage Write).
@@ -31,6 +34,13 @@ const HOUR_MS = 3_600_000;
 const OPERATIONS_WINDOW_MS = 31 * DAY_MS - HOUR_MS;
 // Buckets created with a jurisdiction (eu, fedramp, us) need it named on every bucket API call.
 const DEFAULT_JURISDICTION = 'default';
+// Workers Free allows 50 subrequests per invocation and closing costs 2+ per bucket, so one check reaches about this
+// many buckets. Each check starts this many further along the list, so with more buckets every one is reached in turn.
+const BUCKETS_PER_CHECK = 20;
+// The cron interval in wrangler.jsonc: numbers the checks, to pick each one's starting bucket.
+const CHECK_INTERVAL_MS = 600_000;
+// reason keeps earlier trips' text (their switched-off domains); past this many characters the oldest is cut.
+const MAX_REASON = 4000;
 // Storage is sampled, not reported live, and a quiet bucket may have no recent sample: take each bucket's peak over
 // this window. Billing is the month's average, so the peak can only overstate it.
 const STORAGE_WINDOW_DAYS = 30;
@@ -122,13 +132,13 @@ async function closeBucket(env, url, headers, closed) {
 }
 
 /**
- * Switches off every public way into every bucket. One bucket failing doesn't stop the rest.
- * Each check makes 2 API calls per bucket plus one per domain it switches off. Workers Free allows 50 subrequests per
- * invocation, so roughly 20 buckets is the most one check can cover; buckets past that fail and are retried next check.
+ * Switches off every public way into every bucket. One bucket failing doesn't stop the rest. Past BUCKETS_PER_CHECK
+ * buckets the subrequest limit cuts a check short, so each check starts further along the list (see BUCKETS_PER_CHECK).
  * @param {Record<string, any>} env
+ * @param {number} now
  * @returns {Promise<{ closed: string[], failures: string[] }>} domains switched off, and what went wrong
  */
-async function closePublicBuckets(env) {
+async function closePublicBuckets(env, now) {
   const base = `${API_URL}/accounts/${env.CF_ACCOUNT_ID}/r2/buckets`;
   /** @type {string[]} */
   const closed = [];
@@ -138,7 +148,8 @@ async function closePublicBuckets(env) {
     failures.push(`listing buckets: ${error}`);
     return [];
   });
-  for (const { name, jurisdiction } of buckets) {
+  const start = (Math.floor(now / CHECK_INTERVAL_MS) * BUCKETS_PER_CHECK) % (buckets.length || 1);
+  for (const { name, jurisdiction } of [...buckets.slice(start), ...buckets.slice(0, start)]) {
     /** @type {Record<string, string>} */
     const headers = jurisdiction && jurisdiction !== DEFAULT_JURISDICTION ? { 'cf-r2-jurisdiction': jurisdiction } : {};
     await closeBucket(env, `${base}/${name}`, headers, closed).catch((error) => failures.push(`${name}: ${error}`));
@@ -153,21 +164,27 @@ async function closePublicBuckets(env) {
  * @param {number} now
  * @param {string} why
  * @param {number | null} checkedAt set after a successful check (which also resets failures), null after a failed one
+ * @param {boolean} uploadsOnly only storage is over: refuse uploads, leave reads and public domains alone
  */
-async function trip(env, now, why, checkedAt) {
+async function trip(env, now, why, checkedAt, uploadsOnly) {
   // SET expressions all read the row as it was, so reason is only replaced on the closed -> open transition, and then
   // keeps the old text after it: domains an earlier trip switched off may still be off and must not drop off the list.
-  await env.DB.prepare(
+  // A successful check knows what is over right now, so it sets uploads_only outright (a full trip steps back down to
+  // uploads only once just storage is over); a failed check can't tell, so it only ever makes the trip full.
+  const row = await env.DB.prepare(
     `UPDATE cost_breaker SET tripped_at = COALESCE(tripped_at, ?1),
-       reason = CASE WHEN tripped_at IS NOT NULL THEN reason WHEN reason = '' THEN ?2 ELSE ?2 || ' | before: ' || reason END,
-       failures = CASE WHEN ?3 IS NULL THEN failures ELSE 0 END, checked_at = COALESCE(?3, checked_at) WHERE id = 1`,
-  ).bind(now, why, checkedAt).run();
-  console.error(`cost breaker: OPEN, ${why}`);
+       reason = CASE WHEN tripped_at IS NOT NULL THEN reason WHEN reason = '' THEN ?2 ELSE substr(?2 || ' | before: ' || reason, 1, ?5) END,
+       uploads_only = CASE WHEN ?3 IS NOT NULL OR tripped_at IS NULL THEN ?4 ELSE uploads_only AND ?4 END,
+       failures = CASE WHEN ?3 IS NULL THEN failures ELSE 0 END, checked_at = COALESCE(?3, checked_at) WHERE id = 1
+     RETURNING uploads_only`,
+  ).bind(now, why, checkedAt, uploadsOnly ? 1 : 0, MAX_REASON).first();
+  console.error(`cost breaker: OPEN${row?.uploads_only ? ' (uploads only)' : ''}, ${why}`);
+  if (row?.uploads_only) return;
   if (!env.CF_ACCOUNT_ID || !env.CF_BUDGET_TOKEN) {
     console.error('cost breaker: cannot switch off public buckets without CF_ACCOUNT_ID and CF_BUDGET_TOKEN');
     return;
   }
-  const { closed, failures } = await closePublicBuckets(env);
+  const { closed, failures } = await closePublicBuckets(env, now);
   if (closed.length) {
     await env.DB.prepare('UPDATE cost_breaker SET reason = reason || ? WHERE id = 1').bind(`; switched off ${closed.join(', ')}`).run();
     console.error(`cost breaker: switched off ${closed.join(', ')} (turn back on by hand)`);
@@ -186,21 +203,22 @@ export async function checkSpend(env) {
     const row = await env.DB.prepare('UPDATE cost_breaker SET failures = failures + 1 WHERE id = 1 RETURNING failures').first();
     console.error(`cost breaker: usage check failed (${row?.failures} in a row): ${error}`);
     if (Number(row?.failures) < MAX_FAILURES) return;
-    await trip(env, now, `R2 usage unreadable for ${MAX_FAILURES} checks: ${error}`, null);
+    await trip(env, now, `R2 usage unreadable for ${MAX_FAILURES} checks: ${error}`, null, false);
     return;
   }
 
-  const over = [
-    usage.bytes > MAX_STORAGE_BYTES && `storage ${(usage.bytes / GB).toFixed(2)} GB > ${MAX_STORAGE_BYTES / GB} GB`,
+  const storageOver = usage.bytes > MAX_STORAGE_BYTES && `storage ${(usage.bytes / GB).toFixed(2)} GB > ${MAX_STORAGE_BYTES / GB} GB`;
+  const operationsOver = [
     usage.classA > MAX_CLASS_A && `Class A ${usage.classA} > ${MAX_CLASS_A}`,
     usage.classB > MAX_CLASS_B && `Class B ${usage.classB} > ${MAX_CLASS_B}`,
-  ].filter(Boolean).join(', ');
+  ].filter(Boolean);
+  const over = [storageOver, ...operationsOver].filter(Boolean).join(', ');
   console.log(`cost breaker: storage ${(usage.bytes / GB).toFixed(2)} GB, Class A ${usage.classA}, Class B ${usage.classB}`);
 
   if (!over) {
-    await env.DB.prepare('UPDATE cost_breaker SET tripped_at = NULL, failures = 0, checked_at = ? WHERE id = 1').bind(now).run();
+    await env.DB.prepare('UPDATE cost_breaker SET tripped_at = NULL, uploads_only = 0, failures = 0, checked_at = ? WHERE id = 1').bind(now).run();
     return;
   }
   // The D1 flag goes first: that alone stops wordsmith, even if switching the domains off fails.
-  await trip(env, now, over, now);
+  await trip(env, now, over, now, !operationsOver.length);
 }

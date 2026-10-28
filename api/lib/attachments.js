@@ -2,7 +2,8 @@
 // per month). That allowance is shared by the whole Cloudflare account (other buckets, and wordsmith's staging and production),
 // so each environment gets its own slice via R2_MAX_GB / R2_MAX_MONTHLY_WRITES / R2_MAX_MONTHLY_READS in wrangler.jsonc.
 // When a cap is reached the request is refused with 507 instead of costing money. The bucket is private: every byte goes through here.
-// The account-wide spend breaker (cost-breaker.js) refuses everything here the same way while it is open.
+// The account-wide spend breaker (cost-breaker.js) refuses everything here the same way while it is open, or only
+// writes (uploads) when storage alone tripped it (uploads_only).
 import { IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_FILE_NAME, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, VIDEO_TYPES } from '../../src/lib/models.js';
 import { HttpError } from './http.js';
 
@@ -47,7 +48,7 @@ export async function reserve(env, { bytes = 0, writes = 0, reads = 0 }) {
        AND bytes + ?2 <= ?5
        AND (CASE WHEN month = ?1 THEN writes ELSE 0 END) + ?3 <= ?6
        AND (CASE WHEN month = ?1 THEN reads ELSE 0 END) + ?4 <= ?7
-       AND NOT EXISTS (SELECT 1 FROM cost_breaker WHERE tripped_at IS NOT NULL)
+       AND NOT EXISTS (SELECT 1 FROM cost_breaker WHERE tripped_at IS NOT NULL AND (uploads_only = 0 OR ?3 > 0))
      RETURNING bytes`,
   ).bind(month, bytes, writes, reads, cap.bytes, cap.writes, cap.reads).first();
   if (!row) throw new HttpError(INSUFFICIENT_STORAGE, 'Attachment storage is at its free-tier limit');

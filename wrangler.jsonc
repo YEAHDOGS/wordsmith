@@ -74,7 +74,8 @@
         { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations", "remote": true }
       ],
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging", "remote": true }],
-      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
+      // CF_ACCOUNT_ID is empty on purpose: the spend breaker runs only on production (no crons here).
+      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "CF_ACCOUNT_ID": "" }
     }
   }
 }
