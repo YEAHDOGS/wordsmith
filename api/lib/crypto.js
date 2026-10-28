@@ -28,6 +28,14 @@ export async function sha256(text) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/** Compares two strings in constant time (their SHA-256 hex digests). @param {string} a @param {string} b */
+export async function sameSecret(a, b) {
+  const [left, right] = await Promise.all([sha256(a), sha256(b)]);
+  let difference = 0;
+  for (let index = 0; index < left.length; index++) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
 /** PKCE S256 challenge for a verifier. @param {string} verifier */
 export async function pkceChallenge(verifier) {
   return base64url(await crypto.subtle.digest('SHA-256', encoder.encode(verifier)));

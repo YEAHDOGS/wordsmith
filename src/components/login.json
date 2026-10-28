@@ -9,6 +9,7 @@
   "previewLabel": "Preview password",
   "previewHint": "This is a pull request Preview on test data. Enter the Preview password to look around.",
   "previewButton": "Unlock Preview",
+  "betaLabel": "Beta password (new accounts only)",
   "deviceTitle": "Finish signing in in your browser",
   "deviceBody": "Check the browser shows this code, then continue there.",
   "cancel": "Cancel",

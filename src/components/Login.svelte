@@ -5,6 +5,7 @@
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
   import ProviderIcon from './ProviderIcon.svelte';
+  import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
   import { PROVIDERS } from '../lib/models.js';
   import TEXT from './login.json';
@@ -18,9 +19,15 @@
   const STEP_STAGGER_MS = 90;
   const BUTTON_CLASS =
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
+  const INPUT_CLASS =
+    'bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised';
 
   let busy = $state('');
   let password = $state('');
+  // Private beta: only needed to create an account. The app's WebView can't pass it to the system browser, so native
+  // logins enter it on the browser's confirmation screen instead.
+  let betaPassword = $state('');
+  const showBeta = $derived(auth.signupLocked && !IS_NATIVE);
   // Start-up may have trusted a cached user and skipped the session request; the sign-in buttons need its provider list.
   $effect(() => {
     if (!auth.sessionFetched) auth.load();
@@ -40,11 +47,26 @@
     busy = '';
   }
 
+  /** Sends the beta password, if one was typed, before the OAuth redirect. */
+  async function unlockBeta() {
+    if (!betaPassword) return true;
+    return auth.unlockSignup(betaPassword);
+  }
+
   /** @param {string} provider */
   async function signIn(provider) {
     busy = provider;
-    await auth.signIn(provider);
+    if (await unlockBeta()) await auth.signIn(provider);
     busy = '';
+  }
+
+  /** @param {MouseEvent} event */
+  async function confirmDevice(event) {
+    if (!betaPassword) return;
+    event.preventDefault();
+    busy = 'confirm';
+    if (await unlockBeta()) location.href = confirmHref;
+    else busy = '';
   }
 </script>
 
@@ -77,7 +99,11 @@
         <h2 class="text-fluid-lg font-bold">{TEXT.confirmTitle}</h2>
         <p class="selectable my-4 font-mono text-fluid-xl tracking-[0.4em] text-accent">{notice.code}</p>
         <p class="mb-5 text-fluid-sm text-ink-muted">{TEXT.confirmBody}</p>
-        <a href={confirmHref} class="{BUTTON_CLASS} border-accent">
+        {#if showBeta}
+          <input type="password" bind:value={betaPassword} autocomplete="off" maxlength="200" placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel}
+            class="{INPUT_CLASS} mb-px w-full border border-line" />
+        {/if}
+        <a href={confirmHref} onclick={confirmDevice} aria-disabled={busy === 'confirm'} class="{BUTTON_CLASS} border-accent">
           <ProviderIcon provider={notice.provider || ''} />
           {TEXT.confirmButton}
         </a>
@@ -107,12 +133,16 @@
       {#if auth.previewLogin}
         <form class="flex flex-col gap-px border border-line bg-line" onsubmit={unlockPreview} in:fly={{ y: 8, delay: 200, duration: 300 }}>
           <input type="password" bind:value={password} autocomplete="current-password" maxlength="200" placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
-            class="bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised" />
+            class={INPUT_CLASS} />
           <button type="submit" class={BUTTON_CLASS} disabled={Boolean(busy) || !password}>{TEXT.previewButton}</button>
         </form>
         <p class="short:hidden text-center text-fluid-sm text-ink-muted">{TEXT.previewHint}</p>
       {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
+        {#if showBeta && available.length}
+          <input type="password" bind:value={betaPassword} autocomplete="off" maxlength="200" placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel}
+            class={INPUT_CLASS} in:fly={{ y: 8, delay: 150, duration: 300 }} />
+        {/if}
         {#each available as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>
             <ProviderIcon {provider} />

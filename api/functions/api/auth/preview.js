@@ -1,7 +1,7 @@
 // POST /api/auth/preview { password } - Worker Previews only (see previewLoginEnabled). The right password signs in one
 // fixed Preview user on the staging database, so the owner can try a pull request's live site. 404 everywhere else.
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, cookie, createSession } from '../../../lib/auth.js';
-import { sha256 } from '../../../lib/crypto.js';
+import { sameSecret } from '../../../lib/crypto.js';
 import { HttpError, json, readJson } from '../../../lib/http.js';
 import { LOGIN_RATE_WINDOW_MS, previewLoginEnabled } from '../../../lib/login.js';
 import { clientIp, rateLimit } from '../../../lib/rate-limit.js';
@@ -10,14 +10,6 @@ const PREVIEW_USER = { id: 'preview-owner', email: 'preview@wordsmith.dogs.red',
 // Wrong guesses allowed per IP per LOGIN_RATE_WINDOW_MS (10 minutes).
 const ATTEMPT_LIMIT = 10;
 const MAX_PASSWORD = 200;
-
-/** Compares two strings in constant time (their SHA-256 hex digests). @param {string} a @param {string} b */
-async function sameSecret(a, b) {
-  const [left, right] = await Promise.all([sha256(a), sha256(b)]);
-  let difference = 0;
-  for (let index = 0; index < left.length; index++) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
 
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestPost({ request, env }) {
