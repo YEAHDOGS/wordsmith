@@ -24,6 +24,7 @@
   import { DOT_BG } from '../lib/colors.js';
   import { MAX_NAME, projectKey } from '../lib/models.js';
   import { APP_VERSION } from '../lib/version.js';
+  import { byName } from '../lib/nav-order.js';
 
   /** @type {{ compact?: boolean }} */
   let { compact = false } = $props();
@@ -58,8 +59,8 @@
   let addingLabel = $state(false);
   let editingLabels = $state(false);
 
-  const projects = $derived(store.projects.filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
-  const labels = $derived(store.labels.filter((l) => !l.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
+  const projects = $derived(byName(store.projects));
+  const labels = $derived(byName(store.labels));
   const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
