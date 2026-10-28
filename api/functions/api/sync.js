@@ -95,26 +95,43 @@ export async function onRequestPost(context) {
       continue;
     }
 
-    const statements = [];
-    // Projects: one live project per name (projectKey). Each live project's key -> id, kept current through this batch.
+    // Projects: one live project per name. Names are compared with projectKey on the stored name, not name_key (an old
+    // Worker may have left it empty, and the migration's SQL backfill only folds A-Z); the map stays current through
+    // this batch.
     /** @type {Map<string, string> | null} */
-    const projectNames = table === 'projects' ? new Map((await env.DB.prepare('SELECT id, name_key, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).all())
-      .results.map((/** @type {any} */ project) => [project.name_key ?? projectKey(project.name), String(project.id)])) : null;
+    const projectNames = table === 'projects' ? new Map((await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).all())
+      .results.map((/** @type {any} */ project) => [projectKey(project.name), String(project.id)])) : null;
+    /** @type {{ statement: any, row: Record<string, any> }[]} */
+    const writes = [];
     for (const row of incoming) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
         const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
         if (projectNames) claimProjectName(projectNames, next);
         const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
-        if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
+        if (upsert) writes.push({ statement: upsert, row: apiRow });
         saved[table].push(apiRow);
       } catch (error) {
-        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+        // A refused project comes back with the server's copy (or null), so the device can put itself right.
+        rejected.push({ id: row.id, table, error: /** @type {Error} */ (error).message, ...(projectNames ? { current: existing.get(row.id) ?? null } : {}) });
       }
     }
-    if (statements.length) await env.DB.batch(statements);
-  }
+    if (!projectNames) {
+      if (writes.length) await env.DB.batch(writes.map((write) => write.statement));
+      continue;
+    }
+    // Projects one at a time: another device may have taken a name since the check above, and then the unique index
+    // refuses just that row instead of failing the whole sync (which the device would retry forever).
+    for (const { statement, row } of writes) {
+      try {
+        await statement.run();
+      } catch (error) {
+        if (!/UNIQUE/i.test(/** @type {Error} */ (error).message)) throw error;
+        saved.projects = saved.projects.filter((project) => project.id !== row.id);
+        rejected.push({ id: row.id, table, error: `A project named "${row.name}" already exists`, current: existing.get(row.id) ?? null });
+      }
+    }  }
   return json({ saved, rejected, server_time: now });
 }
 

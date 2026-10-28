@@ -8,7 +8,7 @@
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
-import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow } from './models.js';
+import { LEGACY_PRIORITY, MAX_SYNC_BATCH, newRow, projectKey } from './models.js';
 
 const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
 const SYNC_DEBOUNCE_MS = 2_500;
@@ -23,6 +23,8 @@ const FOCUS_STALE_MS = 15_000;
 const PR_REFRESH_MS = 600_000;
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
 const UNAUTHORIZED = 401;
+// A project created offline under a name that's taken is renamed "<name> (2)", (3)... from this number.
+const FIRST_COPY = 2;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
 /** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups'} Table */
@@ -247,9 +249,10 @@ class Store {
           saved.push([table, row]);
         }
       }
-      for (const { id, error } of result.rejected) {
+      for (const { id, table: refusedTable, error, current } of result.rejected) {
         for (const table of SYNCED) this.#outbox.delete(`${table}:${id}`);
         this.error = `A change was rejected: ${error}`;
+        if (refusedTable === 'projects') await this.#settleProject(id, current);
       }
       // Anything left from this batch that the server didn't mention would loop forever; drop it.
       for (const [key, version] of batch) if (this.#outbox.get(key) === version) this.#outbox.delete(key);
@@ -257,6 +260,28 @@ class Store {
       this.#persistOutbox();
     }
     return sent;
+  }
+
+  /**
+   * The server refused a project (its name is taken, by another device or offline twin). With the server's copy (a
+   * refused rename), show that. Without one (created here, never saved), keep it and its notes but give it a free
+   * name, "Café (2)", which syncs on the next pass of this push.
+   * @param {string} id @param {any} current
+   */
+  async #settleProject(id, current) {
+    if (current) {
+      this.#upsertLocal('projects', current);
+      await this.#db?.put('projects', [current]);
+      return;
+    }
+    const project = this.find('projects', id);
+    if (!project) return;
+    const taken = new Set(this.projects.filter((other) => other.id !== id && !other.deleted_at).map((other) => projectKey(other.name)));
+    let copy = FIRST_COPY;
+    while (taken.has(projectKey(`${project.name} (${copy})`))) copy++;
+    const name = `${project.name} (${copy})`;
+    this.update('projects', id, { name });
+    this.error = `"${project.name}" already existed, so this device's copy is now "${name}".`;
   }
 
   async #pull() {

@@ -62,6 +62,11 @@ export async function createProject(env, userId, input) {
     throw new HttpError(400, /** @type {Error} */ (error).message);
   }
   const key = projectKey(name);
+  // Compare with every live name using projectKey first (at most MAX_PROJECTS rows): name_key can be missing (an old
+  // Worker mid-deploy) or folded A-Z only (the migration's backfill), and the atomic insert below only sees name_key.
+  const { results: live } = await env.DB.prepare('SELECT id, name FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId).all();
+  const same = live.find((/** @type {any} */ project) => projectKey(project.name) === key);
+  if (same) return { existing: { id: String(same.id), name: String(same.name) } };
   const row = { ...newRow('projects', fields), user_id: userId, name_key: key };
   const columns = Object.keys(row);
   const result = await env.DB.prepare(
