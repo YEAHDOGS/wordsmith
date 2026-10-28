@@ -1,12 +1,16 @@
 // Hold-and-slide reordering for note cards, shared by the note grid and the feature board. One drag at a time.
 // Lists register as drop zones (use:dropzone). While a card is up, every zone shows a live preview of where it would
-// land (drag.arrange), the list auto-scrolls near its edges, and letting go hands the zone (note, index) to save.
+// land (drag.arrange), the list auto-scrolls near its edges, and letting go hands the zone (notes, index) to save.
+// Picking up a card that is part of a multi-selection carries the whole selection: the cards move as one block, in
+// the order they were shown, and a zone that only takes some of them (a project band) takes those and leaves the rest.
 // Keyboard: Alt+Arrow on a focused card moves it one step (or one board column sideways).
 // Order is stored in notes.position (REAL, lower first) with fractional indexing: a moved note takes the midpoint of
 // its new neighbours, so a drop writes one row. Notes never placed by hand sort by a key implied by their age.
 import { tick } from 'svelte';
 import { MAX_PRIORITY } from './models.js';
 import { buzz } from './press.js';
+import { store } from './store.svelte.js';
+import { ui } from './ui.svelte.js';
 
 const ZONE_ATTR = 'data-drop-zone';
 const CARD_SELECTOR = '[data-flip-id]';
@@ -32,7 +36,7 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @typedef {object} Zone
  * @property {string} key unique among the zones on screen
  * @property {() => any[]} list the zone's notes in display order, without any drag preview
- * @property {(note: any, index: number) => void} ondrop save `note` at `index` of list() minus the note
+ * @property {(notes: any[], index: number) => void} ondrop save `notes` (in order, as a block) at `index` of list() minus them
  * @property {(note: any) => boolean} [accepts] which notes may land here (default: all)
  * @property {boolean} [sortable] false = the zone keeps its own order (time); a drop only moves the note into it
  * @property {(note: any) => number} [naturalIndex] where a note lands when the slot isn't chosen by hand
@@ -85,6 +89,28 @@ export function placeNote(list, note, index, byPriority = false) {
   if (own) Object.assign(own.patch, extra);
   else writes.push({ id: note.id, patch: extra });
   return writes;
+}
+
+/**
+ * The writes for dropping several notes as one block at `index` of `list` (the zone's order without any of them),
+ * in the order given: each is placed right after the one before, against the list as the earlier writes leave it.
+ * @param {any[]} list
+ * @param {any[]} notes
+ * @param {number} index
+ * @param {boolean} [byPriority]
+ * @returns {{ id: string, patch: Record<string, any> }[]}
+ */
+export function placeNotes(list, notes, index, byPriority = false) {
+  let placed = [...list];
+  /** @type {Map<string, Record<string, any>>} */
+  const writes = new Map();
+  notes.forEach((note, offset) => {
+    const at = index + offset;
+    for (const { id, patch } of placeNote(placed, note, at, byPriority)) writes.set(id, { ...writes.get(id), ...patch });
+    placed = placed.map((entry) => (writes.has(entry.id) ? { ...entry, ...writes.get(entry.id) } : entry));
+    placed.splice(at, 0, { ...note, ...writes.get(note.id) });
+  });
+  return [...writes].map(([id, patch]) => ({ id, patch }));
 }
 
 /**
@@ -167,6 +193,8 @@ async function refocus(id) {
 class Drag {
   /** The note in the air (a snapshot from when it was picked up), or null. @type {any} */
   note = $state(null);
+  /** Every note being carried, in the order shown: just `note`, or the whole selection when it was part of one. @type {any[]} */
+  group = $state([]);
   /** Zone showing the preview; '' = not placed yet, the card still holds its own slot. */
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
@@ -195,6 +223,16 @@ class Drag {
     return this.note?.id ?? '';
   }
 
+  /** Whether a card is being carried (the picked one or another selected one). @param {string} id */
+  carries(id) {
+    return this.group.some((note) => note.id === id);
+  }
+
+  /** The carried notes a zone takes, in order. @param {Zone | undefined} zone */
+  #takenBy(zone) {
+    return this.group.filter((note) => note.id === this.id || (zone?.accepts?.(note) ?? true));
+  }
+
   /** @param {Element} node @param {Zone} zone */
   register(node, zone) {
     node.setAttribute(ZONE_ATTR, '');
@@ -213,9 +251,11 @@ class Drag {
    */
   arrange(list, key) {
     if (!this.note || !this.zone) return list;
-    const rest = list.filter((note) => note.id !== this.note.id);
+    const rest = list.filter((note) => !this.carries(note.id));
     if (key !== this.zone) return rest;
-    rest.splice(Math.min(this.index, rest.length), 0, list.find((note) => note.id === this.note.id) ?? this.note);
+    const zone = [...this.#zones.values()].find((entry) => entry.key === key);
+    const block = this.#takenBy(zone).map((note) => list.find((entry) => entry.id === note.id) ?? note);
+    rest.splice(Math.min(this.index, rest.length), 0, ...block);
     return rest;
   }
 
@@ -233,6 +273,11 @@ class Drag {
     this.#grab = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     this.width = rect.width;
     this.note = note;
+    // Part of a multi-selection: carry every selected note, in the order this zone shows them, then any others.
+    const selected = ui.selected.has(note.id) && ui.selected.size > 1;
+    const shown = zone.list().filter((entry) => selected && ui.selected.has(entry.id));
+    const elsewhere = selected ? [...ui.selected].filter((id) => !shown.some((entry) => entry.id === id)).map((id) => store.find('notes', id)).filter((entry) => entry && !entry.deleted_at) : [];
+    this.group = selected ? [...shown, ...elsewhere] : [note];
     this.zone = '';
     this.index = 0;
     this.landing = false;
@@ -268,7 +313,7 @@ class Drag {
     const from = list.findIndex((entry) => entry.id === note.id);
     const to = from + step;
     if (from === -1 || to < 0 || to >= list.length) return announce(to < 0 ? 'Already first' : 'Already last');
-    zone.ondrop(list[from], to);
+    zone.ondrop([list[from]], to);
     announce(`Moved to ${to + 1} of ${list.length}`);
     refocus(note.id);
   }
@@ -278,7 +323,7 @@ class Drag {
     const row = [...document.querySelectorAll(`[${ZONE_ATTR}]`)].filter((node) => this.#zones.get(node)?.group === zone.group);
     const target = this.#zones.get(row[row.indexOf(zoneEl) + step]);
     if (!target || !(target.accepts?.(note) ?? true)) return;
-    target.ondrop(note, target.naturalIndex?.(note) ?? 0);
+    target.ondrop([note], target.naturalIndex?.(note) ?? 0);
     announce(`Moved to ${target.label ?? 'the next column'}`);
     refocus(note.id);
   }
@@ -353,7 +398,7 @@ class Drag {
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) return;
     this.#last = { x, y };
-    const ids = zone.list().map((note) => note.id).filter((id) => id !== this.id);
+    const ids = zone.list().map((note) => note.id).filter((id) => !this.carries(id));
     const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.zone = zone.key;
@@ -376,8 +421,9 @@ class Drag {
     const { note, index } = this;
     this.#stop();
     const list = zone?.list() ?? [];
-    // Dropped back on its own slot: nothing to save.
-    if (zone && list.findIndex((entry) => entry.id === note.id) !== index) zone.ondrop(note, index);
+    const notes = this.#takenBy(zone);
+    // A single card dropped back on its own slot: nothing to save. A block always saves (it gathers the selection).
+    if (zone && (notes.length > 1 || list.findIndex((entry) => entry.id === note.id) !== index)) zone.ondrop(notes, index);
     this.#land();
   };
 
@@ -399,6 +445,7 @@ class Drag {
       await new Promise((resolve) => setTimeout(resolve, LAND_MS));
     }
     this.note = null;
+    this.group = [];
     this.zone = '';
     this.landing = false;
   }

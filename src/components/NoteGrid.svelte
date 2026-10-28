@@ -27,7 +27,7 @@
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNote } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, orderKey, placeNotes } from '../lib/reorder.svelte.js';
 
   /** @type {{ notes: any[], showProject?: boolean, empty?: string, projectId?: string | null }} */
   let { notes, showProject = true, empty = 'Nothing here yet.', projectId = null } = $props();
@@ -200,28 +200,42 @@
    * top) in manual order, and only then does the grid switch to manual so the drop sticks. Picking a card up,
    * cancelling, or letting go on its own slot never reaches here, so none of those touch the chosen sort.
    * Priority order only moves features between levels: plain notes have no priority control to undo it.
-   * @param {{ key: string, notes: any[] }} section @param {any} note @param {number} index
+   * Several selected notes dropped together go in as one block, in the order they were shown, each taking its own pin
+   * and group change.
+   * @param {{ key: string, notes: any[] }} section @param {any[]} notes @param {number} index
    */
-  function drop(section, note, index) {
-    const others = section.notes.filter((other) => other.id !== note.id);
-    const pinned = section.group ? Boolean(note.pinned) : section.key === 'pinned';
+  function drop(section, notes, index) {
+    const moving = new Set(notes.map((note) => note.id));
+    const others = section.notes.filter((other) => !moving.has(other.id));
     const groupId = section.group?.id ?? null;
-    const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
     const timeOrder = TIME_ORDERS.includes(/** @type {any} */ (ui.order));
     const list = timeOrder ? [...others].sort(COMPARE.manual) : others;
     const [before, after] = [others[index - 1], others[index]];
     const slot = !timeOrder ? index : before ? list.indexOf(before) + 1 : after ? list.indexOf(after) : list.length;
-    // The dropped note's own write also carries its pin and group, when those change.
-    const own = {
-      ...(Boolean(note.pinned) !== pinned ? { pinned } : {}),
-      // Compared with the group shown here, so a drop on a page without groups never ungroups a note.
-      ...(leftGroup !== groupId ? { group_id: groupId } : {}),
-    };
-    for (const { id, patch } of placeNote(list, note, slot, ui.order === 'priority' && note.kind === 'feature')) store.update('notes', id, id === note.id ? { ...patch, ...own } : patch);
-    if (leftGroup !== groupId) pruneGroups([leftGroup]);
+    // Each dropped note's own write also carries its pin and group, when those change.
+    /** @type {Map<string, Record<string, any>>} */
+    const own = new Map();
+    /** @type {(string | null)[]} */
+    const leftGroups = [];
+    for (const note of notes) {
+      const pinned = section.group ? Boolean(note.pinned) : section.key === 'pinned';
+      const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
+      own.set(note.id, {
+        ...(Boolean(note.pinned) !== pinned ? { pinned } : {}),
+        // Compared with the group shown here, so a drop on a page without groups never ungroups a note.
+        ...(leftGroup !== groupId ? { group_id: groupId } : {}),
+      });
+      if (leftGroup !== groupId) leftGroups.push(leftGroup);
+    }
+    const writes = placeNotes(list, notes, slot, ui.order === 'priority');
+    for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
+    for (const { id, patch } of writes) {
+      const change = { ...patch, ...own.get(id) };
+      if (Object.keys(change).length) store.update('notes', id, change);
+    }
+    if (leftGroups.length) pruneGroups(leftGroups);
     if (timeOrder) ui.setOrder('manual');
   }
-
   /** The drop zone for one band. @param {{ key: string, title: string, notes: any[] }} section */
   function zoneFor(section) {
     return {
@@ -230,7 +244,7 @@
       list: () => section.notes,
       // Notes move freely in and out of note groups and Pinned; a project or season band only takes its own.
       accepts: (/** @type {any} */ note) => Boolean(section.group) || section.key === 'pinned' || looseBand(note) === section.key,
-      ondrop: (/** @type {any} */ note, /** @type {number} */ index) => drop(section, note, index),
+      ondrop: (/** @type {any[]} */ notes, /** @type {number} */ index) => drop(section, notes, index),
     };
   }
 
@@ -336,10 +350,10 @@
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-                  <div class="overflow-hidden rounded-ui border bg-app spring {drag.id === note.id ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+                  <div class="overflow-hidden rounded-ui border bg-app spring {drag.carries(note.id) ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
                     data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
                     <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
-                    <div class="spring h-full {drag.id === note.id ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
+                    <div class="spring h-full {drag.carries(note.id) ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
                   </div>
                 {/each}
               </div>
