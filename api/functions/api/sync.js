@@ -109,7 +109,7 @@ export async function onRequestPost(context) {
     for (const row of incoming) {
       try {
         const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null });
+        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, existing.get(row.id) ?? null);
         const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
@@ -156,7 +156,7 @@ async function saveProjects(env, userId, incoming, existing, now) {
     let next;
     try {
       const base = before ?? newRow('projects', { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-      next = settleTrash('projects', { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null });
+      next = settleTrash('projects', { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
     } catch (error) {
       // A refused deletion keeps its project, so it gives its slot back.
       if (freed.delete(String(row.id))) count++;

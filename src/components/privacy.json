@@ -74,21 +74,21 @@
           "what": "Everything you or your agents write in a note: title, body, color, labels, pinned and archived flags, state, status line, priority, difficulty, agent analysis and batch, assignee, board column, group, order, linked pull requests, whether it is shared publicly, and when it was created, changed, started and completed.",
           "where": "d1",
           "why": "This is the app: so your notes are on every device you sign in on, and your agents can work through them.",
-          "kept": "Until you delete it. Deleted items wait 30 days in Trash, where you can restore them, then are purged for good."
+          "kept": "Until you delete it. Deleted items wait 30 days in Trash, where you can restore them. Then every field is erased, along with the note's history and attachments; only a blank marker with its id and dates stays, so your other devices learn it's gone."
         },
         {
           "name": "Projects, labels, boards and groups",
           "what": "Project names, descriptions, colors and linked GitHub repository names; label names and colors; board column names and order; note group names, colors and whether they are folded.",
           "where": "d1",
           "why": "To organize your notes the same way on every device.",
-          "kept": "Until you delete them. Deleted items wait 30 days in Trash, then are purged for good."
+          "kept": "Until you delete them. Deleted projects, labels and groups wait 30 days in Trash, then every field is erased; only a blank marker with its id and dates stays. Board columns are kept until you change them."
         },
         {
           "name": "Note history",
           "what": "A timeline of what happened to each note: created, edited, moved, claimed, linked to a pull request, merged, archived, deleted or restored, with who did it (you, an agent by its token name, or GitHub) and when.",
           "where": "d1",
           "why": "So you and your agents can see how a feature moved from idea to merged.",
-          "kept": "As long as the note it belongs to."
+          "kept": "As long as the note it belongs to, and erased with it when the note is purged from Trash."
         },
         {
           "name": "Attachments",
@@ -212,7 +212,7 @@
       "title": "Exporting and deleting",
       "paragraphs": [
         "Export: select notes and copy them as Markdown, or create an API token in Settings and fetch everything as JSON from /api/v1.",
-        "Delete: delete any note, project, label, board or group in the app. It waits 30 days in Trash, then is purged along with its attachments and history.",
+        "Delete: delete any note, project, label or group in the app. It waits 30 days in Trash, then is erased along with its attachments and history. Delete forever in Trash erases it right away.",
         "Your account: to delete your whole account and everything in it, contact us at dogs.red. We delete it within 30 days, and it ages out of database history 30 days after that.",
         "Signing out in Settings wipes this device's offline copy. You can also revoke your GitHub access in GitHub's settings at any time."
       ]

@@ -36,7 +36,7 @@ export function safeJson(text, fallback) {
 }
 
 /** A column's value as D1 stores it: JSON text, 0/1, or null. @param {string} column @param {any} value */
-function dbValue(column, value) {
+export function dbValue(column, value) {
   if (JSON_FIELDS.includes(column)) return JSON.stringify(value ?? []);
   if (BOOL_FIELDS.includes(column)) return value ? 1 : 0;
   return value ?? null;

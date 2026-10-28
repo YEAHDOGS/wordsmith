@@ -3,9 +3,9 @@
 // tombstone so offline devices still learn about the delete. Rows are purged by age (checked during sync, at most
 // every PURGE_CHECK_MS per user per isolate, so there are no cron triggers or extra Workers), or right away by
 // "Delete forever" and "Empty trash" (POST /api/trash).
-import { TRASH_MS, TRASH_TABLES } from '../../src/lib/models.js';
+import { MODELS, TRASH_MS, TRASH_TABLES } from '../../src/lib/models.js';
 import { release } from './attachments.js';
-import { MAX_BIND_PARAMS, toApi } from './rows.js';
+import { MAX_BIND_PARAMS, dbValue, toApi } from './rows.js';
 
 // Rows purged per table per pass; a backlog clears over the next passes.
 export const PURGE_BATCH = 50;
@@ -14,37 +14,41 @@ const PURGE_CHECK_MS = 6 * 3_600_000;
 const MAX_TRACKED_USERS = 10_000;
 // R2's delete() takes at most this many keys per call.
 const R2_DELETE_MAX = 1000;
-// What a purged row keeps of its content: nothing a person wrote.
+// What a purged row keeps: nothing anyone wrote. Every writable field goes back to its MODELS default, so only the
+// id, the owner and the timestamps remain (plus a project's name_key, cleared below).
 /** @type {Record<string, Record<string, any>>} */
-const PURGED_FIELDS = {
-  notes: { title: '', body: '', analysis: '', status: '', public: false },
-  projects: { name: '', description: '', repo: '' },
-  labels: { name: '' },
-  note_groups: { name: '' },
-};
-// Same as PURGED_FIELDS, as D1 stores it, for the purge UPDATE.
-/** @type {Record<string, string>} */
-const PURGE_SET = Object.fromEntries(Object.entries(PURGED_FIELDS).map(([table, fields]) =>
-  [table, Object.entries(fields).map(([column, value]) => `${column} = ${typeof value === 'boolean' ? Number(value) : "''"}`).join(', ')]));
+const PURGED_FIELDS = Object.fromEntries(TRASH_TABLES.map((table) =>
+  [table, Object.fromEntries(Object.entries(MODELS[table]).map(([column, rule]) => [column, rule.default]))]));
+// Same as PURGED_FIELDS, as D1 stores it, for the purge UPDATE: "column = ?" pairs and their bound values.
+/** @type {Record<string, { set: string, values: any[] }>} */
+const PURGE_SET = Object.fromEntries(Object.entries(PURGED_FIELDS).map(([table, fields]) => [table, {
+  set: [...Object.keys(fields).map((column) => `${column} = ?`), ...(table === 'projects' ? ['name_key = NULL'] : [])].join(', '),
+  values: Object.entries(fields).map(([column, value]) => dbValue(column, value)),
+}]));
 
 /** @type {Map<string, number>} user id -> last age check in this isolate */
 const lastCheck = new Map();
 
 /**
  * Keeps a row's trash state straight on every write: a restored row (no deleted_at) is out of the trash for good, and a
- * purged row that is still deleted keeps its blank content, whatever a stale device sends. Mutates `row`.
- * @param {string} table @param {Record<string, any>} row
+ * purged row stays deleted and blank, whatever a stale device sends (the Trash never lists purged rows, so no real
+ * restore can reach one). Mutates `row`.
+ * @param {string} table @param {Record<string, any>} row @param {Record<string, any> | null} before the stored row
  */
-export function settleTrash(table, row) {
+export function settleTrash(table, row, before) {
   if (!TRASH_TABLES.includes(table)) return row;
+  if (before?.purged_at && before.deleted_at) return Object.assign(row, structuredClone(PURGED_FIELDS[table]), { deleted_at: before.deleted_at, purged_at: before.purged_at });
   if (!row.deleted_at) return Object.assign(row, { purged_at: null });
-  if (row.purged_at) Object.assign(row, PURGED_FIELDS[table]);
+  // A note going to the trash stops being shared, so restoring it never republishes it unasked.
+  if (table === 'notes' && !before?.deleted_at) row.public = false;
+  if (row.purged_at) Object.assign(row, structuredClone(PURGED_FIELDS[table]));
   return row;
 }
 
 /**
- * Purges these rows (only those in the trash: deleted, not yet purged). A note's attachments go first, so a failure
- * leaves the note in the trash for the next pass instead of orphaning its files.
+ * Purges these rows (only those in the trash: deleted, not yet purged). A note is purged before its attachments, so a
+ * restore racing the purge either wins (the note isn't purged and keeps its files) or loses (the note is purged for
+ * good, see settleTrash). Files left behind by a failed delete are swept by purgeBefore's next pass.
  * @param {Record<string, any>} env @param {string} userId @param {string} table @param {string[]} ids
  * @returns {Promise<Record<string, any>[]>} the purged rows, API shaped
  */
@@ -52,16 +56,22 @@ export async function purgeRows(env, userId, table, ids) {
   if (!TRASH_TABLES.includes(table) || !ids.length) return [];
   const now = Date.now();
   const purged = [];
-  // now, now and the user id take three of the bound parameters.
-  const chunkSize = MAX_BIND_PARAMS - 3;
+  const { set, values } = PURGE_SET[table];
+  // The reset values, now, now and the user id take the first bound parameters.
+  const chunkSize = MAX_BIND_PARAMS - values.length - 3;
   for (let start = 0; start < ids.length; start += chunkSize) {
     const chunk = ids.slice(start, start + chunkSize);
-    if (table === 'notes') await purgeAttachments(env, userId, chunk, now);
     const { results } = await env.DB.prepare(
-      `UPDATE ${table} SET ${PURGE_SET[table]}, purged_at = ?, updated_at = ?
+      `UPDATE ${table} SET ${set}, purged_at = ?, updated_at = ?
        WHERE user_id = ? AND deleted_at IS NOT NULL AND purged_at IS NULL AND id IN (${chunk.map(() => '?').join(', ')})
        RETURNING *`,
-    ).bind(now, now, userId, ...chunk).all();
+    ).bind(...values, now, now, userId, ...chunk).all();
+    if (table === 'notes' && results.length) {
+      const noteIds = results.map((/** @type {any} */ row) => String(row.id));
+      // The note's history (status lines, assignees, batches) goes with it.
+      await env.DB.prepare(`DELETE FROM note_events WHERE user_id = ? AND note_id IN (${noteIds.map(() => '?').join(', ')})`).bind(userId, ...noteIds).run();
+      await purgeAttachments(env, userId, noteIds, now);
+    }
     purged.push(...results.map(toApi));
   }
   return purged;
@@ -103,6 +113,12 @@ export async function purgeBefore(env, userId, cutoff) {
   /** @type {Record<string, any[]>} */
   const saved = {};
   let more = false;
+  // Files of notes purged in an earlier pass whose R2 delete failed.
+  const { results: orphaned } = await env.DB.prepare(
+    `SELECT DISTINCT a.note_id FROM attachments a JOIN notes n ON n.id = a.note_id AND n.user_id = a.user_id
+     WHERE a.user_id = ? AND a.deleted_at IS NULL AND n.purged_at IS NOT NULL AND n.deleted_at IS NOT NULL LIMIT ?`,
+  ).bind(userId, PURGE_BATCH).all();
+  if (orphaned.length) await purgeAttachments(env, userId, orphaned.map((/** @type {any} */ row) => String(row.note_id)), Date.now());
   for (const [index, table] of TRASH_TABLES.entries()) {
     const ids = found[index].results.map((/** @type {any} */ row) => String(row.id));
     if (ids.length === PURGE_BATCH) more = true;

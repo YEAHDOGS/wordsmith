@@ -37,6 +37,18 @@ export function trashItems(now) {
 }
 
 /**
+ * Trash items as the ids store.purge takes, per table. "Empty trash" sends only what this device lists, so the count
+ * the person confirmed is the count erased.
+ * @param {TrashItem[]} items
+ */
+export function idsByTable(items) {
+  /** @type {Partial<Record<TrashItem['table'], string[]>>} */
+  const rows = {};
+  for (const item of items) (rows[item.table] ||= []).push(item.id);
+  return rows;
+}
+
+/**
  * Why a row can't come back right now, or '' when it can. A project can't share a name with a live one.
  * @param {TrashItem} item
  */

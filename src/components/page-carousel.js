@@ -14,7 +14,7 @@ const OVERSHOOT = 0.8;
 const PAGE_IN = { y: 10, duration: 260, delay: 60, easing: quintOut };
 const PAGE_OUT = { duration: 120, easing: cubicIn };
 const REDUCED_FADE_MS = 120;
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
 
 /** Back-out easing with a gentle overshoot. @param {number} t */
 const settle = (t) => (t - 1) * (t - 1) * ((OVERSHOOT + 1) * (t - 1) + OVERSHOOT) + 1;
@@ -54,13 +54,13 @@ const slide = (boards) => ({
 /** The incoming page. @param {Element} node */
 export function pageIn(node) {
   if (!move.boards) return fly(node, PAGE_IN);
-  if (reducedMotion.matches) return fade(node, { duration: REDUCED_FADE_MS });
+  if (REDUCED_MOTION.matches) return fade(node, { duration: REDUCED_FADE_MS });
   return slide(move.boards);
 }
 
 /** The outgoing page: moves with the incoming one, so the pair travel as one strip. @param {Element} node */
 export function pageOut(node) {
   if (!move.boards) return fade(node, PAGE_OUT);
-  if (reducedMotion.matches) return fade(node, { duration: REDUCED_FADE_MS });
+  if (REDUCED_MOTION.matches) return fade(node, { duration: REDUCED_FADE_MS });
   return slide(-move.boards);
 }

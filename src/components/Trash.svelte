@@ -16,7 +16,7 @@
   import { TINT_BG } from '../lib/colors.js';
   import { TRASH_DAYS } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
-  import { restoreBlocker, trashItems } from './trash.js';
+  import { idsByTable, restoreBlocker, trashItems } from './trash.js';
   import TEXT from './trash.json';
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
@@ -88,7 +88,7 @@
     <div class="grid shrink-0 justify-items-end">
       {#if confirmingAll}
         <div class="col-start-1 row-start-1 flex items-center gap-1" in:scale={SWAP_IN}>
-          <button class="{BUTTON} bg-accent text-accent-ink hover:bg-accent-hover" disabled={busy} onclick={() => purge('all')}><Trash class="size-4" />{fill(TEXT.confirmEmpty, { count: items.length })}</button>
+          <button class="{BUTTON} bg-accent text-accent-ink hover:bg-accent-hover" disabled={busy} onclick={() => purge(idsByTable(items))}><Trash class="size-4" />{fill(TEXT.confirmEmpty, { count: items.length })}</button>
           <button class="{BUTTON} text-ink-muted hover:text-ink" {@attach (node) => node.focus()} onclick={() => (confirmingAll = false)}>{TEXT.keep}</button>
         </div>
       {:else}

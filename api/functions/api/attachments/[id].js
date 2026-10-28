@@ -14,7 +14,7 @@ const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
 // document, and Chrome's viewer embeds the file itself, so PDFs drop the sandbox and allow only that embed; the
 // viewer runs apart from the app and can't reach it.
 const SANDBOXED = "default-src 'none'; sandbox";
-const PDF_POLICY = "default-src 'none'; object-src 'self'";
+const PDF_POLICY = "default-src 'none'; object-src 'self'; form-action 'none'; frame-ancestors 'none'";
 const PDF = 'application/pdf';
 // Text is sent as UTF-8 so notes in any language read right.
 const TEXT_CHARSET = '; charset=utf-8';

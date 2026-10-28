@@ -188,15 +188,23 @@ class Store {
   async purge(rows) {
     const keys = rows === 'all' ? [...this.#outbox.keys()] : Object.entries(rows).flatMap(([table, ids]) => (ids || []).map((id) => `${table}:${id}`));
     if (keys.some((key) => this.#outbox.has(key))) await this.sync();
+    // 'all' pages through the server's trash; a list of ids goes in batches the server accepts.
+    const ids = rows === 'all' ? [] : Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
+    const bodies = rows === 'all' ? null : Array.from({ length: Math.ceil(ids.length / MAX_SYNC_BATCH) }, (_, index) => {
+      /** @type {Record<string, string[]>} */
+      const body = {};
+      for (const [table, id] of ids.slice(index * MAX_SYNC_BATCH, (index + 1) * MAX_SYNC_BATCH)) (body[table] ||= []).push(id);
+      return body;
+    });
     let more = true;
     while (more) {
-      const result = await api('/api/trash', { method: 'POST', body: rows === 'all' ? { all: true } : rows });
+      const result = await api('/api/trash', { method: 'POST', body: bodies ? bodies.shift() : { all: true } });
       for (const table of SYNCED) {
         const saved = result.saved[table] || [];
         for (const row of saved) this.#upsertLocal(table, row);
         await this.#db?.put(table, saved);
       }
-      more = result.more;
+      more = bodies ? bodies.length > 0 : result.more;
     }
     this.sync();
   }
