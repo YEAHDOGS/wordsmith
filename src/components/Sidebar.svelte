@@ -26,6 +26,7 @@
   import { MAX_NAME, projectKey } from '../lib/models.js';
   import { trashItems } from './trash.js';
   import { APP_VERSION } from '../lib/version.js';
+  import { byName } from '../lib/nav-order.js';
 
   /** @type {{ compact?: boolean }} */
   let { compact = false } = $props();
@@ -60,8 +61,8 @@
   let addingLabel = $state(false);
   let editingLabels = $state(false);
 
-  const projects = $derived(store.projects.filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
-  const labels = $derived(store.labels.filter((l) => !l.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
+  const projects = $derived(byName(store.projects));
+  const labels = $derived(byName(store.labels));
   const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
   // Read on each change to the store; the page itself keeps the countdown fresh.
   const trashCount = $derived(trashItems(Date.now()).length);
