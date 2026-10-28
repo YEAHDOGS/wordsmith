@@ -63,6 +63,7 @@
   "iosNote": "iPhone and iPad can't install from GitHub. wordsmith is coming to TestFlight and the App Store; until then, open it in Safari and use Share → Add to Home Screen.",
   "platforms": { "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
   "version": "Version",
+  "privacy": "Privacy Policy",
   "latestPr": "Latest change",
   "updated": "updated",
   "providers": { "github": "GitHub", "google": "Google", "apple": "Apple" }
