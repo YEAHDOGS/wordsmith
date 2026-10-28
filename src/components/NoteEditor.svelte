@@ -11,6 +11,7 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
+  import Save from '@lucide/svelte/icons/save';
   import Bot from '@lucide/svelte/icons/bot';
   import { fly, fade, slide } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
@@ -34,6 +35,9 @@
 
   const SAVE_DEBOUNCE_MS = 400;
   const COPIED_MS = 1200;
+  // How long the Save button shows its "Saved" check before the editor closes
+  const SAVED_MS = 360;
+  const SAVE_KEY = 's';
   const FIELD = 'w-full border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none';
   const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   // Crossfade for icons and labels that swap in place (copy -> copied)
@@ -60,6 +64,9 @@
   let copied = $state(false);
   let copiedNote = $state(false);
   let preview = $state(false);
+  let saved = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
   let bodyField = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -103,9 +110,25 @@
     router.closeNote();
   }
 
+  /** Save is the X button with a confirmation: commit the fields now, flash "Saved", then close (which syncs). */
+  function save() {
+    if (saved) return;
+    flush();
+    saved = true;
+    savedTimer = setTimeout(close, SAVED_MS);
+  }
+
+  /** Ctrl/Cmd+S saves instead of opening the browser's save-page dialog. @param {KeyboardEvent} event */
+  function onSaveKey(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== SAVE_KEY) return;
+    event.preventDefault();
+    save();
+  }
+
   // However the editor closes (button, Escape, back-swipe, another note opening), it syncs right away, and a note left completely empty is
   // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
   $effect(() => () => {
+    clearTimeout(savedTimer);
     flush();
     const current = store.find('notes', id);
     if (!current || current.deleted_at) return;
@@ -182,6 +205,8 @@
   </button>
 {/snippet}
 
+<svelte:window onkeydown={onSaveKey} />
+
 {#if note}
   <dialog bind:this={dialog} aria-label={note.title || 'Note'} onclose={close} {oncancel} ondblclick={onBackdrop}
     class="m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 text-ink backdrop:bg-scrim sm:m-auto sm:h-[min(92dvh,56rem)] sm:w-[min(96vw,72rem)] tv:w-[min(90vw,96rem)]">
@@ -204,6 +229,18 @@
           <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden sm:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
         </div>
+        <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
+        <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
+          onclick={save} title="Save and close (Ctrl+S)" aria-keyshortcuts="Control+S Meta+S">
+          <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+            <Save class="size-4 {SWAP} {saved ? 'scale-50 opacity-0' : ''}" />
+            <Check class="size-4 {SWAP} {saved ? '' : 'scale-50 opacity-0'}" />
+          </span>
+          <span class="sr-only grid *:col-start-1 *:row-start-1 min-[360px]:not-sr-only">
+            <span class="{SWAP} {saved ? 'opacity-0' : ''}" aria-hidden={saved}>Save</span>
+            <span class="{SWAP} {saved ? '' : 'opacity-0'}" aria-hidden={!saved} aria-live="polite">Saved</span>
+          </span>
+        </button>
         <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={close} aria-label="Close"><X class="size-5" /></button>
       </div>
 
