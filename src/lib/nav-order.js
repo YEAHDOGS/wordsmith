@@ -1,7 +1,7 @@
 // The sidebar's order of pages, shared by the Sidebar (which draws it) and the Shell's page carousel (which slides
-// between them in that order): All notes, Features, projects A-Z, labels A-Z, then the Archive and Trash in the footer.
+// between them in that order): Needs you, All notes, Features, projects A-Z, labels A-Z, then the Archive and Trash in the footer.
 
-const TOP_VIEWS = ['notes', 'features'];
+const TOP_VIEWS = ['attention', 'notes', 'features'];
 const BOTTOM_VIEWS = ['archive', 'trash'];
 
 /** Live rows sorted by name, the way the sidebar lists them. @param {any[]} rows */

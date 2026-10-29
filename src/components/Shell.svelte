@@ -18,6 +18,8 @@
   import ProjectMedia from './ProjectMedia.svelte';
   import SelectionBar from './SelectionBar.svelte';
   import Trash from './Trash.svelte';
+  import Attention from './Attention.svelte';
+  import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
@@ -61,6 +63,7 @@
       }
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
+      case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
       case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
@@ -145,6 +148,8 @@
             <Settings />
           {:else if route.view === 'trash'}
             <Trash />
+          {:else if route.view === 'attention'}
+            <Attention />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}
