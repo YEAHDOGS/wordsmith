@@ -4,6 +4,10 @@
 # Local only: shows a "Local dev" sign-in button on localhost so you can work before OAuth apps exist.
 DEV_LOGIN=true
 
+# Private beta: while set, creating a new account needs this password (existing users sign in as usual).
+# Production: npx wrangler secret put SIGNUP_PASSWORD. Delete the secret to open sign-up.
+# SIGNUP_PASSWORD=
+
 # 32 random bytes, base64url. Encrypts stored GitHub OAuth tokens (PR auto-sync).
 # node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 TOKEN_ENCRYPTION_KEY=

@@ -5,8 +5,9 @@
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
   import ProviderIcon from './ProviderIcon.svelte';
+  import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
-  import { PROVIDERS } from '../lib/models.js';
+  import { MAX_PASSWORD_LENGTH, PROVIDERS } from '../lib/models.js';
   import TEXT from './login.json';
 
   /** @type {{ notice?: { kind: 'device_confirm' | 'device_done', device?: string, provider?: string, code?: string } | null, message?: string }} */
@@ -18,9 +19,17 @@
   const STEP_STAGGER_MS = 90;
   const BUTTON_CLASS =
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
+  const INPUT_CLASS =
+    'bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised';
 
   let busy = $state('');
   let password = $state('');
+  // Private beta: only needed to create an account. The app's WebView can't pass it to the system browser, so native
+  // logins enter it on the browser's confirmation screen instead.
+  let betaPassword = $state('');
+  // Set once the server accepted betaPassword, so a second provider click doesn't spend another guess.
+  let betaAccepted = $state(false);
+  const showBeta = $derived(auth.signupLocked && !IS_NATIVE);
   // Start-up may have trusted a cached user and skipped the session request; the sign-in buttons need its provider list.
   $effect(() => {
     if (!auth.sessionFetched) auth.load();
@@ -40,13 +49,44 @@
     busy = '';
   }
 
+  /** Sends the beta password, if one was typed and not yet accepted, before the OAuth redirect. */
+  async function unlockBeta() {
+    if (!betaPassword || betaAccepted) return true;
+    betaAccepted = await auth.unlockSignup(betaPassword);
+    return betaAccepted;
+  }
+
+  /** Enter in the beta field on the sign-in screen: check it now, then the user picks a provider. @param {SubmitEvent} event */
+  async function submitBeta(event) {
+    event.preventDefault();
+    if (busy) return;
+    busy = 'beta';
+    await unlockBeta();
+    busy = '';
+  }
+
   /** @param {string} provider */
   async function signIn(provider) {
     busy = provider;
-    await auth.signIn(provider);
+    if (await unlockBeta()) await auth.signIn(provider);
     busy = '';
   }
+
+  /** @param {SubmitEvent} event */
+  async function confirmDevice(event) {
+    event.preventDefault();
+    if (busy) return;
+    busy = 'confirm';
+    if (await unlockBeta()) location.href = confirmHref;
+    else busy = '';
+  }
 </script>
+
+<!-- The beta password field, on the sign-in screen and on the native-login confirmation screen -->
+{#snippet betaInput(/** @type {string} */ extraClass)}
+  <input type="password" bind:value={betaPassword} oninput={() => (betaAccepted = false)} autocomplete="off" maxlength={MAX_PASSWORD_LENGTH}
+    placeholder={TEXT.betaLabel} aria-label={TEXT.betaLabel} class="{INPUT_CLASS} {extraClass}" />
+{/snippet}
 
 <main class="relative flex h-dvh w-full flex-col overflow-hidden bg-app text-ink">
   <!-- The spine: one continuous 1px line the whole page hangs from -->
@@ -77,10 +117,13 @@
         <h2 class="text-fluid-lg font-bold">{TEXT.confirmTitle}</h2>
         <p class="selectable my-4 font-mono text-fluid-xl tracking-[0.4em] text-accent">{notice.code}</p>
         <p class="mb-5 text-fluid-sm text-ink-muted">{TEXT.confirmBody}</p>
-        <a href={confirmHref} class="{BUTTON_CLASS} border-accent">
-          <ProviderIcon provider={notice.provider || ''} />
-          {TEXT.confirmButton}
-        </a>
+        <form class="flex flex-col gap-px" onsubmit={confirmDevice}>
+          {#if showBeta}{@render betaInput('border border-line')}{/if}
+          <button type="submit" class="{BUTTON_CLASS} border-accent" disabled={Boolean(busy)}>
+            <ProviderIcon provider={notice.provider || ''} />
+            {TEXT.confirmButton}
+          </button>
+        </form>
       </div>
     {:else if notice?.kind === 'device_done'}
       <div class="border border-complete bg-complete-soft p-5 text-center" in:fly={{ y: 12, duration: 300 }}>
@@ -106,13 +149,21 @@
 
       {#if auth.previewLogin}
         <form class="flex flex-col gap-px border border-line bg-line" onsubmit={unlockPreview} in:fly={{ y: 8, delay: 200, duration: 300 }}>
-          <input type="password" bind:value={password} autocomplete="current-password" maxlength="200" placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
-            class="bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised" />
+          <input type="password" bind:value={password} autocomplete="current-password" maxlength={MAX_PASSWORD_LENGTH} placeholder={TEXT.previewLabel} aria-label={TEXT.previewLabel}
+            class={INPUT_CLASS} />
           <button type="submit" class={BUTTON_CLASS} disabled={Boolean(busy) || !password}>{TEXT.previewButton}</button>
         </form>
         <p class="short:hidden text-center text-fluid-sm text-ink-muted">{TEXT.previewHint}</p>
       {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
+        {#if showBeta && available.length}
+          <form class="flex" onsubmit={submitBeta} in:fly={{ y: 8, delay: 150, duration: 300 }}>
+            {@render betaInput('w-full')}
+          </form>
+          {#if betaAccepted}
+            <p role="status" class="bg-complete-soft px-5 py-2 text-center text-fluid-sm text-complete" in:fade>{TEXT.betaAccepted}</p>
+          {/if}
+        {/if}
         {#each available as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>
             <ProviderIcon {provider} />
@@ -129,8 +180,9 @@
       <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
     {/if}
 
-    {#if message || auth.error}
-      <p role="alert" class="border border-accent bg-accent-soft px-4 py-2 text-center text-fluid-sm text-ink" transition:fade>{message || auth.error}</p>
+    <!-- A fresh error beats the one the redirect brought; an accepted beta password answers the redirect's -->
+    {#if auth.error || (message && !betaAccepted)}
+      <p role="alert" class="border border-accent bg-accent-soft px-4 py-2 text-center text-fluid-sm text-ink" transition:fade>{auth.error || message}</p>
     {/if}
   </section>
 
