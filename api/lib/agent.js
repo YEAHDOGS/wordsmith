@@ -15,6 +15,8 @@ const FORBIDDEN = 403;
 const CONFLICT = 409;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
+// Text an agent may rewrite but never blank out: erasing a note is the owner's call.
+const ERASABLE_TEXT = ['title', 'body'];
 // A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
 // name not '.' or '..'.
 const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
@@ -267,6 +269,9 @@ export async function updateNote(env, userId, actor, id, input) {
   // Agents speak the 0..5 scale as "priority"; it is stored as priority_level.
   if (input.priority !== undefined) patch.priority_level = input.priority;
   if (typeof input.body_append === 'string') patch.body = `${patch.body ?? before.body}\n\n${input.body_append}`.trim();
+  if (actor.type === 'agent' && ERASABLE_TEXT.some((field) => patch[field] !== undefined && !String(patch[field]).trim() && String(before[field] ?? '').trim())) {
+    throw new HttpError(FORBIDDEN, 'API tokens cannot erase a note\'s title or body. Rewrite it instead, or leave it to the owner.');
+  }
   if (input.project !== undefined) patch.project_id = (await resolveProject(env, userId, input.project))?.id ?? null;
   // Move to a column (id or name) on the note's board, its project's or the Features page's; the column's role sets the state.
   if (input.column !== undefined) {
