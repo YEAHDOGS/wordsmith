@@ -33,6 +33,7 @@
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
   import { exit } from '../lib/flip.js';
+  import { renderMarkdown } from '../lib/markdown.js';
 
   /** @type {{ note: any, showProject?: boolean }} */
   let { note, showProject = true } = $props();
@@ -94,6 +95,7 @@
 
   /** @param {MouseEvent | KeyboardEvent} event */
   function activate(event) {
+    if (event.target instanceof Element && event.target.closest('a')) return;
     if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) ui.toggleSelected(note.id);
     else router.openNote(note.id);
   }
@@ -220,7 +222,7 @@
   </div>
 
   {#if note.body}
-    <p class="line-clamp-10 whitespace-pre-wrap wrap-break-word text-[0.8125rem] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
+    <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
   {/if}
 
   {#if isFeature && note.status}
