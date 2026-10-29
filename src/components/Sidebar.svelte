@@ -14,6 +14,7 @@
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { slide } from 'svelte/transition';
@@ -50,6 +51,9 @@
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
   const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
+  // The section name folds its list; the chevron turns to point at the closed list.
+  const SECTION_TOGGLE = 'spring press -mx-1 -my-1 flex items-center gap-1 px-1 py-1 hover:text-ink';
+  const FOLD_MS = 180;
   // Same heights as the TopBar header (h-12 sm:h-14 tv:h-20).
   const HEADER_HEIGHT = 'h-12 sm:h-14 tv:h-20';
   const FOOTER_BUTTON = 'spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised';
@@ -156,8 +160,10 @@
       <div class="mx-3 my-2 border-t border-line" role="separator"></div>
     {:else}
       <div class={SECTION}>
-        <span class={SECTION_LABEL}>Projects</span>
-        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; }}>
+        <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-expanded={!ui.folded.has('projects')} aria-controls="sidebar-projects" onclick={() => ui.toggleFolded('projects')}>
+          <ChevronDown class="size-3 spring {ui.folded.has('projects') ? '-rotate-90' : ''}" />Projects
+        </button>
+        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; ui.toggleFolded('projects', true); }}>
           <span class="flex spring {addingProject ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
         </button>
       </div>
@@ -171,7 +177,8 @@
         {#if projectError}<p id="new-project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
       </form>
     {/if}
-    <div class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects">
+    {#if compact || !ui.folded.has('projects')}
+    <div id={compact ? undefined : 'sidebar-projects'} class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects" transition:slide={{ duration: FOLD_MS }}>
     {#each projects as project (project.id)}
       <button animate:flip={{ duration: 150 }} class="{ITEM} {active('project', project.id) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go('project', project.id)}
         title={openCounts[project.id] ? `${project.name}, ${openCounts[project.id]} open` : project.name} aria-current={active('project', project.id) ? 'page' : undefined}>
@@ -186,17 +193,20 @@
       </button>
     {/each}
     </div>
+    {/if}
 
     {#if !compact}
       <div class={SECTION}>
-        <span class={SECTION_LABEL}>Labels</span>
+        <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-expanded={!ui.folded.has('labels')} aria-controls="sidebar-labels" onclick={() => ui.toggleFolded('labels')}>
+          <ChevronDown class="size-3 spring {ui.folded.has('labels') ? '-rotate-90' : ''}" />Labels
+        </button>
         <div class="-mr-1 flex gap-1">
-          <button class={SECTION_BUTTON} title={editingLabels ? 'Done editing' : 'Edit labels'} aria-label={editingLabels ? 'Done editing labels' : 'Edit labels'} onclick={() => (editingLabels = !editingLabels)}>
+          <button class={SECTION_BUTTON} title={editingLabels ? 'Done editing' : 'Edit labels'} aria-label={editingLabels ? 'Done editing labels' : 'Edit labels'} onclick={() => { editingLabels = !editingLabels; ui.toggleFolded('labels', true); }}>
             {#key editingLabels}
               <span class="icon-swap flex">{#if editingLabels}<Check class="size-4" />{:else}<Pencil class="size-4" />{/if}</span>
             {/key}
           </button>
-          <button class={SECTION_BUTTON} title="New label" aria-label="New label" aria-expanded={addingLabel} onclick={() => (addingLabel = !addingLabel)}>
+          <button class={SECTION_BUTTON} title="New label" aria-label="New label" aria-expanded={addingLabel} onclick={() => { addingLabel = !addingLabel; ui.toggleFolded('labels', true); }}>
             <span class="flex spring {addingLabel ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
           </button>
         </div>
@@ -208,7 +218,8 @@
             onkeydown={(event) => event.key === 'Escape' && (addingLabel = false)} />
         </form>
       {/if}
-      <div class="{LIST} {LIST_CAP}" role="group" aria-label="Labels">
+      {#if !ui.folded.has('labels')}
+      <div id="sidebar-labels" class="{LIST} {LIST_CAP}" role="group" aria-label="Labels" transition:slide={{ duration: FOLD_MS }}>
       {#each labels as label (label.id)}
         <div animate:flip={{ duration: 150 }}>
           {#if editingLabels}
@@ -231,6 +242,7 @@
         </div>
       {/each}
       </div>
+      {/if}
     {/if}
   </div>
 

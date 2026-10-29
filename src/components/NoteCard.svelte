@@ -14,6 +14,7 @@
   import { backOut } from 'svelte/easing';
   import Pin from '@lucide/svelte/icons/pin';
   import Bot from '@lucide/svelte/icons/bot';
+  import BotMessageSquare from '@lucide/svelte/icons/bot-message-square';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import Folder from '@lucide/svelte/icons/folder';
@@ -24,12 +25,12 @@
   import Trash from '@lucide/svelte/icons/trash';
   import AttachmentMedia from './AttachmentMedia.svelte';
   import StateBadge from './StateBadge.svelte';
+  import LevelDots from './LevelDots.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
-  import { LOUD_PRIORITY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
   import { exit } from '../lib/flip.js';
@@ -39,11 +40,6 @@
   let { note, showProject = true } = $props();
 
   const BODY_PREVIEW_CHARS = 600;
-  // Priority meter: one rising bar per level, bar i lit when priority > i; loud levels light up in the accent.
-  // Bar i is (i + BAR_BASE_STEPS) * BAR_STEP_REM tall, so five bars run from h-1 to h-3.
-  const PRIORITY_BARS = Array.from({ length: MAX_PRIORITY }, (_, bar) => bar);
-  const BAR_STEP_REM = 0.125;
-  const BAR_BASE_STEPS = 2;
   const FLIP_WRAPPER = '[data-flip-id]';
   // On narrow cards (two columns on a 320px phone) the labels hide and the actions sit icon-only in one row, so the
   // menu fits a title-only card; the label text stays for screen readers.
@@ -203,12 +199,10 @@
     </div>
   {/if}
   <div class="flex items-start gap-2">
-    {#if note.priority_level}
-      <span class="mt-1 flex h-3 shrink-0 items-end gap-px tv:mt-2" role="img" aria-label="{PRIORITY_LABELS[note.priority_level]} priority" title="Priority: {PRIORITY_LABELS[note.priority_level]}">
-        {#each PRIORITY_BARS as bar (bar)}
-          <span class="spring w-0.5 tv:w-1 {bar < note.priority_level ? (note.priority_level >= LOUD_PRIORITY ? 'bg-accent' : 'bg-ink-muted') : 'bg-line-strong'}" style:height="{(bar + BAR_BASE_STEPS) * BAR_STEP_REM}rem"></span>
-        {/each}
-      </span>
+    {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
+    {#if note.created_by_type === 'agent'}
+      <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
+      <span class="mt-0.5 shrink-0 text-ink-faint tv:mt-1.5" role="img" aria-label="Created by agent {note.created_by}" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3.5 tv:size-5" /></span>
     {/if}
     {#if note.title}
       <h3 class="min-w-0 flex-1 text-fluid-sm font-semibold leading-snug text-ink">{note.title}</h3>

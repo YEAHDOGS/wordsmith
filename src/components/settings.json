@@ -16,6 +16,7 @@
   "lastUsed": "last used",
   "never": "never used",
   "noTokens": "No tokens yet.",
+  "tokenColor": "Note color for {name}: every note it creates takes this color",
   "connect": "Connect an agent",
   "connectHint": "wordsmith works with T3 Code, Claude Code, Codex or any agent that can make HTTP requests. Set up once, then review one pull request a day.",
   "connectSteps": [
