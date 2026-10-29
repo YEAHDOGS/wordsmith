@@ -34,6 +34,9 @@ const WANTED_SCOPES = { 'read:org': ['read:org', 'write:org', 'admin:org'], repo
 // Org owners can block OAuth apps; members grant or request access on the app's connection page.
 const APP_CONNECTION_URL = 'https://github.com/settings/connections/applications/';
 const APPLICATIONS_URL = 'https://github.com/settings/applications';
+// GitHub answers 401 to a token it revoked (it keeps 10 per person per app, so the 11th sign-in anywhere drops the oldest).
+const UNAUTHORIZED = 401;
+const RECONNECT_MESSAGE = 'Your GitHub connection expired or was revoked. Sign out of wordsmith and sign in with GitHub again to reconnect.';
 
 const PULLS_QUERY = `query($owner: String!, $name: String!, $open: Int!, $merged: Int!) {
   repository(owner: $owner, name: $name) {
@@ -60,6 +63,7 @@ function headers(token) {
 /** Throws a readable error for a failed GitHub response. @param {Response} response */
 async function fail(response) {
   const data = await response.json().catch(() => ({}));
+  if (response.status === UNAUTHORIZED) throw new HttpError(502, RECONNECT_MESSAGE);
   if (response.status === 404) throw new HttpError(404, 'GitHub repo not found, or it is private and wordsmith has no access to it');
   if (response.status === 403 || response.status === 429) throw new HttpError(429, 'GitHub rate limit reached. Sign in with GitHub or set GITHUB_TOKEN for higher limits');
   throw new HttpError(502, `GitHub error: ${data.message || response.status}`);

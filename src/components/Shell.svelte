@@ -22,6 +22,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
+  import { topPosition } from '../lib/reorder.svelte.js';
   import { FEATURES_SCOPE, TRASH_DAYS } from '../lib/models.js';
   import { pageChange, pageIn, pageOut } from './page-carousel.js';
 
@@ -96,6 +97,7 @@
     const note = store.create('notes', {
       project_id: route.view === 'project' ? route.id : null,
       label_ids: route.view === 'label' ? [route.id] : [],
+      position: topPosition(),
     });
     router.openNote(note.id);
   }

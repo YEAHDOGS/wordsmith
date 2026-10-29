@@ -53,6 +53,12 @@ export function orderKey(note) {
   return note.position ?? (note.kind === 'feature' ? note.created_at : -note.created_at);
 }
 
+/** Position for a new note: one step ahead of every note's key, so it lands first in manual order, board and claim queue. */
+export function topPosition() {
+  const keys = store.notes.filter((note) => !note.deleted_at).map(orderKey);
+  return (keys.length ? Math.min(...keys) : Date.now()) - POSITION_STEP;
+}
+
 /**
  * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byPriority the list runs
  * highest priority first: the note keeps its priority when that fits between its neighbours, else takes the nearest
@@ -238,6 +244,10 @@ class Drag {
   #laneAt = 0;
   #frame = 0;
   #moved = false;
+  // Where the finger first touched. Its touchmoves keep coming there even after the card is rebuilt in another column,
+  // when they no longer reach window; listening there keeps the page from scrolling (and cancelling the drag).
+  /** @type {EventTarget | null} */
+  #touchTarget = null;
 
   get id() {
     return this.note?.id ?? '';
@@ -315,7 +325,8 @@ class Drag {
     addEventListener('pointerup', this.#ondrop);
     addEventListener('pointercancel', this.#oncancel);
     addEventListener('keydown', this.#onkey, true);
-    addEventListener('touchmove', this.#holdScroll, { passive: false });
+    this.#touchTarget = event.target;
+    this.#touchTarget?.addEventListener('touchmove', this.#holdScroll, { passive: false });
     this.#frame = requestAnimationFrame(this.#loop);
   }
 
@@ -439,7 +450,8 @@ class Drag {
     removeEventListener('pointerup', this.#ondrop);
     removeEventListener('pointercancel', this.#oncancel);
     removeEventListener('keydown', this.#onkey, true);
-    removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget?.removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget = null;
   }
 
   #ondrop = () => {

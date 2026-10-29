@@ -14,6 +14,7 @@
   import { store } from '../lib/store.svelte.js';
   import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadType } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
+  import { topPosition } from '../lib/reorder.svelte.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
   import DocumentTile from './DocumentTile.svelte';
   import LevelWheel from './LevelWheel.svelte';
@@ -136,6 +137,7 @@
       difficulty,
       status: status.trim(),
       pull_requests: pr ? [{ ...pr, title: '', state: 'open', merged_at: null }] : [],
+      position: topPosition(),
     });
     if (queued.length) {
       sentNoteIds = [...sentNoteIds, note.id];

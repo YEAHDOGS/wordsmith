@@ -64,8 +64,9 @@
   // Month index (0 = January) -> season. Winter runs December through February.
   const SEASONS = ['Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall', 'Winter'];
   const DECEMBER = 11;
-  // Toolbar toggles: equal columns at one height on phones (labels truncate), natural width from sm up.
-  const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:justify-start sm:px-2.5 tv:h-11 tv:text-base';
+  // Toolbar toggles: equal columns at one height. Phones split the row (labels truncate); from sm up every toggle takes
+  // the width of the widest one's longest label, so cycling a label never resizes it or its neighbours.
+  const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:px-2.5 tv:h-11 tv:text-base';
   const NO_PROJECT = 'No project';
   const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
   const FILTERED_EMPTY = 'No features in this state.';
@@ -291,7 +292,7 @@
         onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together" aria-label="Select all">
         <CheckCheck class="size-3.5 shrink-0" /><span class="hidden sm:inline">Select all</span>
       </button>
-      <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex sm:flex-none" role="group" aria-label="Sort notes">
+      <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex-none" role="group" aria-label="Sort notes">
         <!-- Every label sits in one grid cell, so the button keeps the width of its longest label and never jumps -->
         <button class="{TOGGLE}" onclick={() => ui.setOrder(ORDERS[(ORDERS.indexOf(ui.order) + 1) % ORDERS.length])}
           title="{ORDER_HINTS[ui.order]}. Tap to cycle {ORDERS.map((option) => ORDER_LABELS[option]).join(', ')}" aria-label="Order: {ORDER_HINTS[ui.order]}">
