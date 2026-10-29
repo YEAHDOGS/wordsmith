@@ -47,6 +47,8 @@
       case 'claimed': return 'claimed it and started work';
       case 'state': return `moved it ${stateName(data.from)} → ${stateName(data.to)}${data.reason ? ` (${data.reason})` : ''}`;
       case 'status': return `status: “${data.text}”`;
+      case 'asked': return `asked: “${data.text}”`;
+      case 'answered': return 'answered the question';
       case 'assigned': return `assigned it to ${data.to}`;
       case 'pr_linked': return `linked ${data.repo}#${data.number}`;
       case 'pr_merged': return `merged ${data.url?.split('/').slice(-3).join('/').replace('/pull/', '#')}`;

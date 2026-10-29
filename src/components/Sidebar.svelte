@@ -15,9 +15,11 @@
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import BellDot from '@lucide/svelte/icons/bell-dot';
+  import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
-  import { slide } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import SyncStatus from './SyncStatus.svelte';
   import { store } from '../lib/store.svelte.js';
@@ -40,6 +42,7 @@
   const LIST = 'relative min-h-0 shrink overflow-x-hidden overflow-y-auto overscroll-contain';
   const LIST_CAP = 'max-h-64 short:max-h-32 tv:max-h-96';
   const NAV = [
+    { view: 'attention', label: 'Needs you', icon: BellDot },
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
   ];
@@ -70,6 +73,8 @@
   const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
   // Read on each change to the store; the page itself keeps the countdown fresh.
   const trashCount = $derived(trashItems(Date.now()).length);
+  // Read on each change to the store; the Needs you page itself re-checks snoozes every minute.
+  const attentionCount = $derived(needsYou(Date.now()).length);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
     /** @type {Record<string, number>} */
@@ -148,10 +153,16 @@
        window with both add forms open), the whole column scrolls, so nothing is ever cut off. -->
   <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2" bind:this={lists}>
     {#each NAV as item (item.view)}
-      <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
+      <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.view === 'attention' && attentionCount ? `${item.label}, ${attentionCount}` : item.label} aria-current={active(item.view) ? 'page' : undefined}>
         <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
-        <item.icon class="size-4 tv:size-6 shrink-0" />
-        {#if !compact}<span>{item.label}</span>{/if}
+        <span class="relative flex shrink-0">
+          <item.icon class="size-4 tv:size-6 shrink-0" />
+          {#if compact && item.view === 'attention' && attentionCount}<span class="absolute -top-1 -right-1 size-2 rounded-full bg-accent" in:fade={{ duration: 150 }}></span>{/if}
+        </span>
+        {#if !compact}
+          <span class="min-w-0 flex-1 truncate">{item.label}</span>
+          {#if item.view === 'attention' && attentionCount}<span class="min-w-5 bg-accent px-1 text-center font-mono text-xs tabular-nums text-accent-ink" in:fade={{ duration: 150 }}>{attentionCount}</span>{/if}
+        {/if}
       </button>
     {/each}
 

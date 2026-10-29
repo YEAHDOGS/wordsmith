@@ -275,7 +275,7 @@ export async function updateNote(env, userId, actor, id, input) {
   const before = await getNote(env, userId, id, maps);
   /** @type {Record<string, any>} */
   const patch = {};
-  for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
+  for (const field of ['title', 'body', 'state', 'status', 'ask', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
     if (input[field] !== undefined) patch[field] = input[field];
   }
   if (typeof input.analysis_append === 'string') patch.analysis = `${patch.analysis ?? before.analysis}\n\n${input.analysis_append}`.trim();

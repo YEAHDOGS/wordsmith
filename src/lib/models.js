@@ -146,6 +146,10 @@ export const MODELS = {
     priority: { type: 'int', min: 0, max: MAX_LEGACY_PRIORITY, default: 0 },
     // Manual order from hold-and-drag. Lower sorts first; null = never placed by hand (fall back to the active sort).
     position: { type: 'real', nullable: true, default: null },
+    // An agent's open question to the owner ("Needs you"). Lines "1. ..." to "9. ..." are one-key options.
+    ask: { type: 'text', max: MAX_STATUS, default: '' },
+    // Hidden from "Needs you" until this time (ms). Set by the owner in the app; agents can't snooze.
+    snoozed_until: { type: 'real', nullable: true, default: null },
     pull_requests: { type: 'prs', max: MAX_PRS_PER_NOTE, default: [] },
     assignee: { type: 'text', max: MAX_NAME, default: '' },
     difficulty: { type: 'int', min: 0, max: MAX_DIFFICULTY, default: 0 },
