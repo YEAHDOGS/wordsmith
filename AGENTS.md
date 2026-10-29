@@ -112,7 +112,7 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - Android builds require Android Studio command line tools and an installed SDK/NDK; iOS builds require macOS and Xcode. Linux and Windows builds use their native runner toolchains.
 - Check native window layouts down to 320×320; every responsive layout requirement applies.
 - Built binaries are collected into `/build/` at the repo root as `wordsmith-<platform>-<arch>.<ext>` (e.g. `build/wordsmith-win-x64.exe`) by `scripts/collect-builds.js`. `/build/` is gitignored.
-- GitHub Actions workflows are manual only (`workflow_dispatch`) for now. Do not add push or pull_request triggers.
+- GitHub Actions workflows are manual only (`workflow_dispatch`) for now. Do not add push or pull_request triggers. The one exception is `.github/workflows/delete-preview.yml`, which deletes a branch's Worker Preview when its pull request closes. It builds nothing and deploys nothing.
 
 # System Prompt: AAA Superpower Architecture Blueprint
 You are an expert interactive front-end engineer specializing in award-winning digital experiences. Replicate the core visual framework of the Superpower.com design system with flawless token execution. Avoid generic corporate bento grids. Focus on a high-fidelity, fluid layout structured around a continuous vertical alignment concept (human spine aesthetic).

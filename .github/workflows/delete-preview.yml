@@ -1,0 +1,50 @@
+name: Delete Worker Preview
+
+# The one automatic workflow: when a pull request closes (merged or not), delete its Worker Preview and every
+# deployment in it, so nothing keeps serving or holds a Preview slot. Workers Builds names each Preview after its
+# branch (scripts/preview.js runs `wrangler preview` without --name).
+# pull_request_target runs this file from master, so it also covers branches cut before it existed. It never checks
+# out or runs pull request code, and the branch name only reaches the shell through an environment variable.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions: {}
+
+concurrency:
+  group: delete-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  WORKER: wordsmith
+  # `wrangler preview` is an open beta; stay on the major version this was tested with.
+  WRANGLER_MAJOR: "4"
+
+jobs:
+  delete:
+    name: Delete Preview
+    # Fork branches never get a Preview (no deploy secrets), so there is nothing to delete.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Delete the branch's Preview
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          name="$(printf '%s' "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+          if output="$(npx --yes "wrangler@$WRANGLER_MAJOR" preview delete --name "$name" --worker-name "$WORKER" --skip-confirmation 2>&1)"; then
+            printf '%s\n' "$output"
+            echo "Deleted Preview $name."
+          # Only Cloudflare's "Preview not found" (code 10025) means there is nothing to delete; any other error fails.
+          elif printf '%s' "$output" | grep -q 'code: 10025'; then
+            echo "No Preview named $name (the branch never built one); nothing to delete."
+          else
+            printf '%s\n' "$output"
+            exit 1
+          fi
