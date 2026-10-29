@@ -5,6 +5,10 @@ import { COLORS, DIFFICULTY_LABELS, FEATURE_STATES, MAX_DOCUMENT_BYTES, MAX_IMAG
 const BYTES_PER_MB = 1024 * 1024;
 
 const ENDPOINTS = [
+  ['POST', '/api/mcp', 'The same API as an MCP server (Streamable HTTP, JSON-RPC). Connect any MCP client with this URL and your token as a bearer.'],
+  ['GET', '/api/v1/context', "The owner's standing context: preferences, facts and pointers. Read it first, every session."],
+  ['GET', '/api/v1/projects/:project/context?format=md&events_since=&events_limit=', "One project's whole picture in one call: mission, open features with triage, recent events, attachment links."],
+  ['GET', '/api/v1/events?since=&limit=', 'Everything that happened across your projects since a moment, oldest first. Pass cursor back as since.'],
   ['GET', '/api/v1/projects', 'Projects with counts of features per state. description is the mission statement (Markdown): read it before working a project.'],
   ['POST', '/api/v1/projects', `Create a project: { name, description? (its mission statement, Markdown), color? (${COLORS.join(', ')}), repo? (owner/name) }. 409 with { project: { id, name } } if the name is taken: use that one.`],
   ['GET', '/api/v1/features?project=&state=requested,in_progress&analyzed=false&max_difficulty=&batch=&format=md', 'Feature requests, most important and oldest first. analyzed=false: not triaged yet. max_difficulty=2: small ones only. format=md gives a checklist.'],
@@ -40,6 +44,7 @@ export function onRequestGet({ data }) {
     ],
     limits: 'Tokens only add, never destroy: fill an empty title, body or analysis, append with body_append / analysis_append, add labels. Overwriting text, removing labels, archiving and deleting are the owner\'s, in the app (403).',
     workflow: [
+      'Start with GET /api/v1/context (standing context), then GET /api/v1/projects/:project/context?format=md for the project you work on.',
       'Send an X-Agent-Session header (letters, digits, . _ -, up to 32) naming your session, so sessions sharing a token show apart on claims and timelines.',
       'POST /api/v1/features/next to claim work (state becomes in_progress, started_at is stamped).',
       'PATCH status as you go so the human can follow along.',

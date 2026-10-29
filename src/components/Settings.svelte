@@ -17,6 +17,7 @@
   import ProviderIcon from './ProviderIcon.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
   import InstallApp from './InstallApp.svelte';
+  import StandingContext from './StandingContext.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { IS_NATIVE, api, apiUrl } from '../lib/api.js';
@@ -25,7 +26,7 @@
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
   import { githubProfileUrl } from './settings-data.js';
-  import { agentInstructions, triagePrompt } from './agent-prompts.js';
+  import { agentInstructions, mcpSetup, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';
 
@@ -51,8 +52,10 @@
 
   const linkedProviders = $derived(auth.linked.map((identity) => identity.provider));
   const githubId = $derived(auth.linked.find((identity) => identity.provider === 'github')?.provider_user_id || '');
-  // The two copy-paste prompts (agent-prompts.js), each shown folded to SETUP_PREVIEW_LINES until expanded.
+  // The copy-paste setups (agent-prompts.js), each shown folded to SETUP_PREVIEW_LINES until expanded. MCP comes first;
+  // the pasted prompt is the fallback for harnesses without MCP.
   const prompts = $derived([
+    { key: 'mcp', title: TEXT.mcp, hint: TEXT.mcpHint, text: mcpSetup(apiUrl) },
     { key: 'setup', title: TEXT.setup, hint: TEXT.setupHint, text: agentInstructions(apiUrl) },
     { key: 'triage', title: TEXT.triage, hint: TEXT.triageHint, text: triagePrompt(apiUrl) },
   ]);
@@ -238,6 +241,10 @@
     </section>
 
     <section class="{CARD} lg:col-span-2" use:reveal={4}>
+      <StandingContext />
+    </section>
+
+    <section class="{CARD} lg:col-span-2" use:reveal={5}>
       <h2 class={HEADING}>{TEXT.connect}</h2>
       <p class={HINT}>{TEXT.connectHint}</p>
       <ol class="mb-8 grid gap-px border border-line bg-line sm:grid-cols-2 xl:grid-cols-3">

@@ -73,6 +73,8 @@ const MAX_ID = 64;
 export const MAX_STATUS = 500;
 // A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
 export const MAX_MISSION = 20_000;
+// The owner's standing context (user_context.body): what every agent reads before it starts.
+export const MAX_CONTEXT = 50_000;
 // Projects per user: bounds every projects query and sync download (agents can create projects, see api/lib/agent.js).
 export const MAX_PROJECTS = 200;
 // Why sync refused a project row, so the app knows what to do: rename a clashing new project, or just say so.
