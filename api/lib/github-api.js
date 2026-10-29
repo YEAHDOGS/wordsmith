@@ -34,9 +34,10 @@ const WANTED_SCOPES = { 'read:org': ['read:org', 'write:org', 'admin:org'], repo
 // Org owners can block OAuth apps; members grant or request access on the app's connection page.
 const APP_CONNECTION_URL = 'https://github.com/settings/connections/applications/';
 const APPLICATIONS_URL = 'https://github.com/settings/applications';
-// GitHub answers 401 to a token it revoked (it keeps 10 per person per app, so the 11th sign-in anywhere drops the oldest).
+// GitHub answers 401 to a revoked or expired token: the user's sign-in token, or the Worker's GITHUB_TOKEN fallback
+// (used when the sign-in token can't be read).
 const UNAUTHORIZED = 401;
-const RECONNECT_MESSAGE = 'Your GitHub connection expired or was revoked. Sign out of wordsmith and sign in with GitHub again to reconnect.';
+const RECONNECT_MESSAGE = 'GitHub rejected wordsmith\'s credentials. Sign out and sign in with GitHub again; if that doesn\'t fix it, the Worker\'s GITHUB_TOKEN secret has expired.';
 
 const PULLS_QUERY = `query($owner: String!, $name: String!, $open: Int!, $merged: Int!) {
   repository(owner: $owner, name: $name) {
