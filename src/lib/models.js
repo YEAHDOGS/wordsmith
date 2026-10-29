@@ -10,6 +10,8 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 // Card and label tints. Each maps to a --color-tint-* token in src/styles/theme.css.
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
+// Longest Preview or beta password the sign-in screen accepts and the server checks.
+export const MAX_PASSWORD_LENGTH = 200;
 // Timeline entries in note_events, written by the server on every interaction.
 export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
 

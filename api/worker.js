@@ -9,6 +9,7 @@ import * as sync from './functions/api/sync.js';
 import * as authSession from './functions/api/auth/session.js';
 import * as authDev from './functions/api/auth/dev.js';
 import * as authPreview from './functions/api/auth/preview.js';
+import * as authSignup from './functions/api/auth/signup.js';
 import * as authDevice from './functions/api/auth/device/index.js';
 import * as authDevicePoll from './functions/api/auth/device/poll.js';
 import * as authStart from './functions/api/auth/[provider]/start.js';
@@ -35,6 +36,7 @@ import * as v1Batches from './functions/api/v1/batches.js';
 import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
 import * as sharedNote from './functions/n/[id].js';
+import { checkSpend } from './lib/cost-breaker.js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
 const API_PREFIX = '/api';
@@ -53,6 +55,7 @@ const ROUTES = [
   ['/api/auth/session', authSession, false],
   ['/api/auth/dev', authDev, false],
   ['/api/auth/preview', authPreview, false],
+  ['/api/auth/signup', authSignup, false],
   ['/api/auth/device', authDevice, false],
   ['/api/auth/device/poll', authDevicePoll, false],
   ['/api/auth/:provider/start', authStart, false],
@@ -135,5 +138,15 @@ export default {
     let position = 0;
     context.next = () => chain[position++](context);
     return context.next();
+  },
+
+  /**
+   * Cron (wrangler.jsonc "triggers", production only): the account-wide spend breaker.
+   * @param {unknown} _controller
+   * @param {Record<string, any>} env
+   * @param {{ waitUntil: (promise: Promise<any>) => void }} ctx
+   */
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(checkSpend(env));
   },
 };
