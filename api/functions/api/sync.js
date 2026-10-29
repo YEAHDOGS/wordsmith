@@ -4,6 +4,7 @@
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
+import { rateLimit } from '../../lib/rate-limit.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
@@ -13,11 +14,16 @@ import { MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
 const CURSOR_OVERLAP_MS = 5_000;
+// Per user, across all their devices. A device pulls about once a minute (more on focus and after edits) and pushes
+// after edits, so a few devices stay far below these; a runaway loop hits 429 and backs off instead of eating quota.
+const SYNC_LIMIT = 300;
+const SYNC_WINDOW_MS = 600_000;
 
 /** @param {{ request: Request, env: Record<string, any>, waitUntil?: (promise: Promise<any>) => void }} context */
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { env, request } = context;
+  await rateLimit(env, `sync-pull:${user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
   const now = Date.now();
   // Rows past their days in the trash are purged in the background; the purge stamps updated_at, so the next pull has them.
@@ -64,6 +70,7 @@ export async function onRequestGet(context) {
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestPost(context) {
   const auth = await requireAuth(context);
+  await rateLimit(context.env, `sync-push:${auth.user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const { env, request } = context;
   const body = await readJson(request);
   const total = SYNCED_TABLES.reduce((sum, table) => sum + (Array.isArray(body[table]) ? body[table].length : 0), 0);

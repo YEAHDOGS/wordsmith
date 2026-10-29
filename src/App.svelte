@@ -9,6 +9,7 @@
   import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
+  import { fileShare } from './share-capture.js';
 
   const NOTICE_PARAMS = ['auth', 'auth_error', 'device', 'provider', 'code'];
   const SCREEN_IN = { duration: 260, delay: 80 };
@@ -37,7 +38,8 @@
     // Close, don't wipe: an expired session must not lose unsynced edits. Settings' sign out wipes explicitly.
     if (openedFor) store.close();
     openedFor = userId;
-    if (userId) store.open(userId);
+    // A page shared into the app (share-capture.js) becomes a note once the store has loaded.
+    if (userId) store.open(userId).then(fileShare);
   });
 </script>
 

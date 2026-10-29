@@ -394,6 +394,7 @@ export function featuresMarkdown(features) {
     if (note.batch) lines.push(`  - batch: ${note.batch}`);
     if (note.analysis) lines.push('  - analysis:', ...note.analysis.split('\n').map((/** @type {string} */ line) => `    > ${line}`));
     for (const pr of note.pull_requests) lines.push(`  - PR (${pr.state}): ${pr.url}`);
+    for (const file of note.attachments ?? []) lines.push(`  - attachment: ${file.name} (${file.type}) ${file.url}`);
     if (note.body) lines.push('', ...note.body.split('\n').map((/** @type {string} */ line) => `    ${line}`), '');
   }
   return lines.join('\n');
