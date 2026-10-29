@@ -39,7 +39,10 @@
   "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments" }],
   // R2's free allowance (10 GB, 1M writes, 10M reads a month) is shared account-wide. dogs-data already uses ~5.75 GB,
   // so production gets 3 GB and staging 0.5 GB: 9.25 GB worst case. See api/lib/attachments.js.
-  "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000" },
+  "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000", "CF_ACCOUNT_ID": "8ec0025171fc3a4dbbefd7b9033a06b7" },
+  // Account-wide spend breaker (api/lib/cost-breaker.js): every 10 minutes, checks the whole account's R2 usage and
+  // shuts R2 off before the free tier runs out. Production only; it also needs the CF_BUDGET_TOKEN secret.
+  "triggers": { "crons": ["*/10 * * * *"] },
   // Worker Previews: every pull request branch gets its own Preview (`npx wrangler preview`, run by Workers Builds and
   // scripts/preview.js) at <branch>-wordsmith.<subdomain>.workers.dev. Previews never inherit the production bindings
   // above, so they are pointed at the staging D1 database and R2 bucket here: PR code never touches production data.
@@ -55,6 +58,8 @@
     "preview": {
       // No routes: inheriting the top-level custom domain would move wordsmith.dogs.red onto the staging Worker.
       "routes": [],
+      // One breaker per account is enough, and it lives on production.
+      "triggers": { "crons": [] },
       "workers_dev": true,
       "preview_urls": false,
       "assets": {
@@ -69,7 +74,8 @@
         { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations", "remote": true }
       ],
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging", "remote": true }],
-      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
+      // CF_ACCOUNT_ID is empty on purpose: the spend breaker runs only on production (no crons here).
+      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "CF_ACCOUNT_ID": "" }
     }
   }
 }
