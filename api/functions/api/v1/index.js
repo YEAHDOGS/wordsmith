@@ -39,6 +39,7 @@ export function onRequestGet({ data }) {
       'GET /api/v1/batches shows what earlier agents grouped and shipped.',
     ],
     workflow: [
+      'Send an X-Agent-Session header (letters, digits, . _ -, up to 32) naming your session, so sessions sharing a token show apart on claims and timelines.',
       'POST /api/v1/features/next to claim work (state becomes in_progress, started_at is stamped).',
       'PATCH status as you go so the human can follow along.',
       'PATCH pr_url once your pull request is open.',
