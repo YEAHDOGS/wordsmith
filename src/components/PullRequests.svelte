@@ -15,6 +15,8 @@
   import { router } from '../lib/router.svelte.js';
   import { api } from '../lib/api.js';
   import { ago, fullTime } from '../lib/time.js';
+  import { GITHUB_RECONNECT } from '../lib/models.js';
+  import SignOutButton from './SignOutButton.svelte';
 
   /** @type {{ project: any }} */
   let { project } = $props();
@@ -33,6 +35,8 @@
   let data = $state(null);
   let loading = $state(false);
   let error = $state('');
+  // GitHub rejected the stored sign-in: offer to sign out, since signing back in with GitHub fixes it.
+  let reconnect = $state(false);
 
   const features = $derived(store.notes.filter((note) => note.project_id === project.id && note.kind === 'feature' && !note.deleted_at));
   const linkable = $derived(features.filter((note) => note.state !== 'complete'));
@@ -45,12 +49,14 @@
   async function load() {
     loading = true;
     error = '';
+    reconnect = false;
     try {
       // The server only knows synced projects, so push a freshly created or edited one first.
       if (store.pending) await store.sync();
       data = await api(`/api/projects/${project.id}/pulls`);
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
+      reconnect = /** @type {any} */ (failure).code === GITHUB_RECONNECT;
     }
     loading = false;
   }
@@ -132,7 +138,10 @@
 
   <div class="min-h-0 flex-1 overflow-y-auto pb-3 sm:px-3">
     {#if error}
-      <p class="mx-4 border border-accent bg-accent-soft px-4 py-3 text-sm sm:mx-0" role="alert" transition:fade>{error}</p>
+      <div class="mx-4 flex flex-wrap items-center gap-x-4 gap-y-2 border border-accent bg-accent-soft px-4 py-3 text-sm sm:mx-0" role="alert" transition:fade>
+        <span class="min-w-0 flex-1 basis-56">{error}</span>
+        {#if reconnect}<SignOutButton />{/if}
+      </div>
     {:else if !data}
       <p class="px-4 py-10 text-center text-xs text-ink-faint">Loading pull requests from GitHub…</p>
     {:else}

@@ -78,6 +78,8 @@ export const MAX_PROJECTS = 200;
 // Why sync refused a project row, so the app knows what to do: rename a clashing new project, or just say so.
 export const NAME_TAKEN = 'name_taken';
 export const PROJECT_LIMIT = 'project_limit';
+// Why a GitHub route failed: GitHub rejected the stored sign-in token, and signing in with GitHub again replaces it.
+export const GITHUB_RECONNECT = 'github_reconnect';
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;

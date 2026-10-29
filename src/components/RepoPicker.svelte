@@ -22,6 +22,8 @@
   import { store } from '../lib/store.svelte.js';
   import { api } from '../lib/api.js';
   import { ago } from '../lib/time.js';
+  import { GITHUB_RECONNECT } from '../lib/models.js';
+  import SignOutButton from './SignOutButton.svelte';
 
   /** @type {{ project: any, onclose: () => void }} */
   let { project, onclose } = $props();
@@ -53,6 +55,8 @@
   // True until the first search answers, so the status line never flashes "no repos".
   let loading = $state(true);
   let error = $state('');
+  // GitHub rejected the stored sign-in: offer to sign out, since signing back in with GitHub fixes it.
+  let reconnect = $state(false);
   /** @type {{ url: string, restricted_orgs: string[], missing_scopes: string[] } | null} */
   let orgAccess = $state(null);
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -104,9 +108,11 @@
       needsGithub = result.needs_github;
       orgAccess = result.org_access ?? null;
       error = '';
+      reconnect = false;
     } catch (failure) {
       if (ticket !== latestSearch) return;
       error = /** @type {Error} */ (failure).message;
+      reconnect = /** @type {any} */ (failure).code === GITHUB_RECONNECT;
     }
     loading = false;
   }
@@ -127,6 +133,7 @@
   async function linkTyped() {
     if (!typedIsRepo) {
       error = 'Type a repo as owner/name, e.g. YEAHDOGS/wordsmith';
+      reconnect = false;
       return;
     }
     // Offline: link it anyway; the PR tab checks it once you are back online.
@@ -137,6 +144,7 @@
       link(repo.full_name);
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
+      reconnect = /** @type {any} */ (failure).code === GITHUB_RECONNECT;
     }
     loading = false;
   }
@@ -199,5 +207,10 @@
       <a href={orgAccess?.url} target="_blank" rel="noopener noreferrer" class="spring inline-flex shrink-0 items-center gap-1 font-semibold text-accent hover:text-accent-hover">Grant org access<ExternalLink class="size-3" /></a>
     </div>
   {/if}
-  {#if error}<p class="px-3 py-2 text-xs text-accent" role="alert" transition:slide={{ duration: FLIP_MS }}>{error}</p>{/if}
+  {#if error}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-xs text-accent" role="alert" transition:slide={{ duration: FLIP_MS }}>
+      <span class="min-w-0 flex-1 basis-48">{error}</span>
+      {#if reconnect}<SignOutButton />{/if}
+    </div>
+  {/if}
 </div>
