@@ -289,12 +289,13 @@
   </p>
 
   <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the credited agent
-       centered between them, truncated to fit -->
+       centered between them -->
   {#if note.priority_level || note.difficulty || credit}
     <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
       {#if credit}
-        <span class="inline-flex min-w-0 items-center gap-1 font-mono text-[0.6875rem] tv:text-sm text-ink-muted" title={credit.title}>
-          <credit.icon class="size-3 shrink-0 tv:size-4" /><span class="truncate">{credit.name}</span>
+        <!-- Robot over the full name (agent names run about 7 characters); never truncated -->
+        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm text-ink-muted" title={credit.title}>
+          <credit.icon class="size-3 shrink-0 tv:size-4" /><span>{credit.name}</span>
         </span>
       {/if}
     </LevelDots>
