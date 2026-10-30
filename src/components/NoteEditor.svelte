@@ -155,18 +155,21 @@
   // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
   $effect(() => () => {
     clearTimeout(savedTimer);
-    flush();
-    const current = store.find('notes', id);
-    if (!current) return;
-    if (current.deleted_at) {
+    clearTimeout(timer);
+    // Teardown can read Svelte's previous reactive snapshot. Sync after that snapshot is released,
+    // otherwise the queued deletion is sent with the note's old deleted_at: null.
+    queueMicrotask(() => {
+      flush();
+      const current = store.find('notes', id);
+      if (!current) return;
+      if (!current.deleted_at) {
+        const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
+        const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
+        if (!hasContent && !hasFiles) store.remove('notes', id);
+      }
+      // Push and pull after closing, including when the note was deleted.
       store.sync(true);
-      return;
-    }
-    const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
-    const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
-    if (!hasContent && !hasFiles) store.remove('notes', id);
-    // Sync as soon as a note closes (push and pull), instead of waiting for the typing pause or the next poll.
-    store.sync(true);
+    });
   });
 
   function addPr() {
@@ -282,7 +285,7 @@
           <textarea bind:this={titleField} bind:value={title} rows="1" maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
             oninput={() => { title = title.replace(LINE_BREAKS, ' '); queueSave(); }}
             onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); bodyField?.focus(); } }}
-            class="block w-full resize-none overflow-hidden bg-transparent text-fluid-xl font-bold leading-tight tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+            class="block max-h-[20dvh] w-full shrink-0 resize-none overflow-x-hidden overflow-y-auto bg-transparent text-fluid-xl font-bold leading-tight tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
 
           <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
             {#if preview}
