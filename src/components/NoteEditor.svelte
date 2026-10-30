@@ -70,6 +70,8 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
+  let titleField = $state();
+  /** @type {HTMLTextAreaElement | undefined} */
   let bodyField = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -89,6 +91,25 @@
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', '');
     dialogOpen = true;
+  });
+
+  // Measure after showModal and after the bound title reaches the textarea. A closed dialog reports one-line dimensions.
+  $effect(() => {
+    title;
+    if (!dialogOpen || !titleField) return;
+    const fitTitle = () => {
+      titleField.style.height = 'auto';
+      titleField.style.height = `${titleField.scrollHeight}px`;
+    };
+    fitTitle();
+    let width = titleField.clientWidth;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === width) return;
+      width = entry.contentRect.width;
+      fitTitle();
+    });
+    observer.observe(titleField);
+    return () => observer.disconnect();
   });
 
   function flush() {
@@ -252,9 +273,9 @@
       <!-- One column on phones, pinned to the screen width (minmax 0), so no field can ever widen the page sideways -->
       <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
         <!-- Content -->
-        <div class="flex min-w-0 flex-col gap-3 p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
+        <div class="flex min-w-0 flex-col gap-3 overflow-x-hidden p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
           <!-- A one-line field that wraps: long titles stay readable on phones. Enter moves on to the body. -->
-          <textarea bind:value={title} use:autosize={title} rows="1" maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
+          <textarea bind:this={titleField} bind:value={title} rows="1" maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
             oninput={() => { title = title.replace(LINE_BREAKS, ' '); queueSave(); }}
             onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); bodyField?.focus(); } }}
             class="block w-full resize-none overflow-hidden bg-transparent text-fluid-xl font-bold leading-tight tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"></textarea>

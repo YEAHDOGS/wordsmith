@@ -104,6 +104,12 @@ textarea,
   [data-popover] {
     border-radius: var(--ws-radius);
   }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href] {
+    cursor: pointer;
+  }
 }
 
 /* Native color pickers (Settings → Appearance): the chosen color fills the box, following the corner style */
