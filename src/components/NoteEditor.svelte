@@ -29,6 +29,7 @@
   import { copyText, noteMarkdown } from '../lib/export.js';
   import { renderMarkdown } from '../lib/markdown.js';
   import { markdownKeys } from '../lib/markdown-input.js';
+  import { LINE_BREAKS, autosize } from '../lib/autosize.js';
 
   /** @type {{ id: string }} */
   let { id } = $props();
@@ -246,11 +247,15 @@
         <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={close} aria-label="Close"><X class="size-5" /></button>
       </div>
 
-      <div class="grid min-h-0 flex-1 grid-rows-[auto_auto] overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
+      <!-- One column on phones, pinned to the screen width (minmax 0), so no field can ever widen the page sideways -->
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
         <!-- Content -->
-        <div class="flex flex-col gap-3 p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
-          <input bind:value={title} oninput={queueSave} maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
-            class="w-full bg-transparent text-fluid-xl font-bold tracking-tight text-ink placeholder:text-ink-faint focus:outline-none" />
+        <div class="flex min-w-0 flex-col gap-3 p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
+          <!-- A one-line field that wraps: long titles stay readable on phones. Enter moves on to the body. -->
+          <textarea bind:value={title} use:autosize={title} rows="1" maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
+            oninput={() => { title = title.replace(LINE_BREAKS, ' '); queueSave(); }}
+            onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); bodyField?.focus(); } }}
+            class="block w-full resize-none overflow-hidden bg-transparent text-fluid-xl font-bold leading-tight tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
 
           <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
             {#if preview}
@@ -295,7 +300,9 @@
                   <LevelWheel value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
                 </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
-                  <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
+                  <textarea bind:value={status} use:autosize={status} rows="1" maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status"
+                    oninput={() => { status = status.replace(LINE_BREAKS, ' '); queueSave(); }} onkeydown={(event) => event.key === 'Enter' && event.preventDefault()}
+                    class="{FIELD} block resize-none overflow-hidden"></textarea>
                   <input value={note.assignee} maxlength={MAX_NAME} placeholder="Assignee" aria-label="Assignee" class="{FIELD} sm:w-40"
                     onchange={(event) => set({ assignee: event.currentTarget.value.trim() })} />
                 </div>
@@ -349,13 +356,13 @@
         <aside class="border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline">
           <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
-          <dl class="mt-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
+          <dl class="mt-6 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
             <dt>created</dt><dd class="selectable text-ink-muted">{fullTime(note.created_at)}</dd>
             <dt>updated</dt><dd class="selectable text-ink-muted">{fullTime(note.updated_at)}</dd>
             <dt>id</dt>
-            <dd class="flex items-center gap-1">
-              <span class="selectable truncate text-ink-muted">{id}</span>
-              <button class="spring press p-0.5 hover:text-accent" onclick={copyId} aria-label="Copy id for agents" title="Copy id"><Copy class="size-3" /></button>
+            <dd class="flex min-w-0 items-center gap-1">
+              <span class="selectable min-w-0 truncate text-ink-muted">{id}</span>
+              <button class="spring press shrink-0 p-0.5 hover:text-accent" onclick={copyId} aria-label="Copy id for agents" title="Copy id"><Copy class="size-3" /></button>
               {#if copied}<span class="text-complete" transition:fade={{ duration: 100 }}>copied</span>{/if}
             </dd>
           </dl>
