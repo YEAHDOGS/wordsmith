@@ -23,7 +23,7 @@ const REJECTED = {
  * @param {(github: { auth: import('./auth.js').Auth, token: string | null, source: 'sign-in' | 'shared' | 'none' }) => Promise<T>} run
  */
 export async function withGithub(context, run) {
-  const auth = await requireAuth(context, { allowToken: true });
+  const auth = await requireAuth(context);
   await rateLimit(context.env, `github:${auth.user.id}`, GITHUB_ROUTE_LIMIT, GITHUB_ROUTE_WINDOW_MS);
   const credential = await githubCredential(context.env, auth.user.id);
   try {
