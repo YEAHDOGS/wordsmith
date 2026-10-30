@@ -25,7 +25,7 @@
       }}
       class="{TYPOGRAPHY} block resize-none overflow-hidden bg-transparent placeholder:text-ink-faint focus:outline-none"></textarea>
   {:else}
-    <button type="button" class="{TYPOGRAPHY} block focus-visible:outline-2 focus-visible:outline-accent"
+    <button type="button" class="{TYPOGRAPHY} block overflow-hidden focus-visible:outline-2 focus-visible:outline-accent"
       aria-label="Edit title" onclick={() => (editing = true)}>
       <span class="line-clamp-2 break-words [overflow-wrap:anywhere] {value ? '' : 'text-ink-faint'}">{value || 'Title'}</span>
     </button>

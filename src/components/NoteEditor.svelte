@@ -263,7 +263,7 @@
         <div class="flex min-w-0 flex-col gap-3 overflow-x-hidden p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
           <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
 
-          <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
+          <div class="flex min-h-[12dvh] flex-1 flex-col border-y border-line">
             {#if preview}
               <!-- Rendered by src/lib/markdown.js, which escapes all input -->
               <div class="markdown selectable min-h-0 flex-1 overflow-y-auto py-2 text-fluid-sm text-ink" in:fade={{ duration: 120 }}>
@@ -272,7 +272,7 @@
             {:else}
               <textarea bind:this={bodyField} bind:value={body} oninput={queueSave} use:markdownKeys maxlength={MAX_BODY} aria-label="Body" in:fade={{ duration: 120 }}
                 placeholder="Write anything. Agents read it verbatim. Markdown works: **bold**, _italic_, # headings, - lists"
-                class="min-h-32 flex-1 resize-none bg-transparent py-2 lg:min-h-48 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+                class="min-h-0 flex-1 resize-none overflow-x-hidden overflow-y-auto bg-transparent py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
             {/if}
             <!-- Formatting lives in the box's bottom-right corner -->
             <div class="flex justify-end border-t border-line">
@@ -281,7 +281,7 @@
           </div>
 
           <!-- Details: project, feature fields and labels, as tidy wrapping rows under the body (every note is a feature) -->
-          <section class="flex flex-col gap-2 tv:gap-3" aria-label="Details">
+          <section class="flex shrink-0 flex-col gap-2 tv:gap-3" aria-label="Details">
             <div class="flex flex-wrap gap-2">
               <select class="spring min-w-0 flex-1 basis-40 border border-line bg-surface px-2 py-2 text-xs text-ink hover:border-line-strong focus:border-accent focus:outline-none sm:max-w-64 sm:flex-none" aria-label="Project"
                 value={note.project_id ?? ''} onchange={(event) => set({ project_id: event.currentTarget.value || null })}>
@@ -325,22 +325,7 @@
 
           <Attachments bind:this={attachments} noteId={id} />
 
-            <section class="border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
-              <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
-              {#each note.pull_requests as pr (pr.url)}
-                <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
-                  {#if pr.state === 'merged'}<GitMerge class="size-4 {PR_STYLE.merged}" />{:else}<GitPullRequest class="size-4 {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" />{/if}
-                  <span class="min-w-0 flex-1 truncate">{pr.title || `${pr.repo}#${pr.number}`}</span>
-                  <span class="font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
-                  <ExternalLink class="size-3.5 text-ink-faint" />
-                </a>
-              {/each}
-              <form class="flex min-w-0" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
-                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} min-w-0 flex-1 border-0" />
-                <button class="spring press shrink-0 border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
-              </form>
-              {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
-            </section>
+
 
           <!-- What an agent decided when it triaged this (POST /api/v1/notes/:id/analysis): read-only here -->
           {#if note.analysis || note.batch}
@@ -359,9 +344,25 @@
         </div>
 
         <!-- Timeline -->
-        <aside class="border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline">
+        <aside class="min-w-0 overflow-x-hidden border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline and pull requests">
           <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
+            <section class="mt-6 border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
+              <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
+              {#each note.pull_requests as pr (pr.url)}
+                <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
+                  {#if pr.state === 'merged'}<GitMerge class="size-4 {PR_STYLE.merged}" />{:else}<GitPullRequest class="size-4 {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" />{/if}
+                  <span class="min-w-0 flex-1 truncate">{pr.title || `${pr.repo}#${pr.number}`}</span>
+                  <span class="font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
+                  <ExternalLink class="size-3.5 text-ink-faint" />
+                </a>
+              {/each}
+              <form class="flex min-w-0" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
+                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} min-w-0 flex-1 border-0" />
+                <button class="spring press shrink-0 border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
+              </form>
+              {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
+            </section>
           <dl class="mt-6 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
             <dt>created</dt><dd class="selectable text-ink-muted">{fullTime(note.created_at)}</dd>
             <dt>updated</dt><dd class="selectable text-ink-muted">{fullTime(note.updated_at)}</dd>
