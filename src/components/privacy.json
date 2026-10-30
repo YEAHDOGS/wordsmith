@@ -192,6 +192,11 @@
     {
       "id": "third-parties",
       "title": "Who else is involved",
+      "links": [
+        { "label": "Cloudflare Privacy Policy", "url": "https://www.cloudflare.com/privacypolicy/" },
+        { "label": "Google Privacy Policy", "url": "https://policies.google.com/privacy" },
+        { "label": "GitHub Privacy Statement", "url": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" }
+      ],
       "paragraphs": [
         "Cloudflare hosts wordsmith: the app, the API, the database (D1), file storage (R2) and logs all run on Cloudflare's network, and it handles your data only to provide that service.",
         "GitHub, Google and Apple handle sign-in when you choose them. GitHub also answers the repository and pull request lookups made with your token, and sends pull request updates to wordsmith if you set up a webhook. Each of them has its own privacy policy.",

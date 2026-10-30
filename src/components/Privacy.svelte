@@ -124,6 +124,18 @@
                 {#each section.paragraphs as paragraph (paragraph)}
                   <p class="text-fluid-sm leading-relaxed text-ink-muted">{paragraph}</p>
                 {/each}
+                {#if section.links}
+                  <ul class="flex flex-col items-start gap-2">
+                    {#each section.links as link (link.url)}
+                      <li>
+                        <a href={link.url} target="_blank" rel="noopener noreferrer"
+                          class="spring inline-flex items-center gap-2 text-fluid-sm text-accent underline underline-offset-4 hover:text-ink">
+                          {link.label}<ExternalLink class="size-3.5 shrink-0" />
+                        </a>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
               </div>
             </section>
           {/each}
