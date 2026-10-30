@@ -69,6 +69,7 @@
   const project = $derived(showProject && note.project_id ? store.find('projects', note.project_id) : null);
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
+  const agent = $derived(note.created_by_type === 'agent' ? note.created_by : '');
   const files = $derived(store.attachmentsFor(note.id));
   const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
     ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
@@ -224,15 +225,16 @@
   {/snippet}
   {#snippet pinButton()}
     {#if !inTrash}
-    <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
+    <button class="spring press -mx-1 flex h-[1.375em] items-center px-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-3 tv:size-4" /></button>
     {/if}
   {/snippet}
 
-  <!-- Title at the top, taking all the width it can; pin (small) over select in one column in the top-right corner -->
+  <!-- Title at the top, taking all the width it can; pin (small) over select in one column in the top-right corner.
+       The column shares the title's type, so the pin's box is one title line tall (leading-snug: 1.375em) and centers on it. -->
   <div class="flex items-start gap-2">
     {#if note.title}<h3 class="min-w-0 flex-1 line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{:else}<span class="flex-1"></span>{/if}
-    <div class="flex shrink-0 flex-col items-center gap-1">
+    <div class="flex shrink-0 flex-col items-center gap-0.5 text-fluid-sm leading-snug">
       {@render pinButton()}
       {@render selectButton()}
     </div>
@@ -248,10 +250,6 @@
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
-    {#if note.created_by_type === 'agent' && note.created_by}
-      <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3" />{note.created_by}</span>
-    {/if}
     {#if attachmentCounts.length}
       <!-- Attachment counts stay together on one line, never split across the wrap -->
       <span class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
@@ -285,8 +283,17 @@
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
 
-  <!-- Levels close the card: priority at the far left, difficulty at the far right -->
-  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
+  <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the agent that made it
+       (the server stamps notes.created_by for agent tokens) centered between them, truncated to fit -->
+  {#if note.priority_level || note.difficulty || agent}
+    <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
+      {#if agent}
+        <span class="inline-flex min-w-0 items-center gap-1 font-mono text-[0.6875rem] tv:text-sm text-ink-muted" title="Created by agent {agent}">
+          <BotMessageSquare class="size-3 shrink-0 tv:size-4" /><span class="truncate">{agent}</span>
+        </span>
+      {/if}
+    </LevelDots>
+  {/if}
 
   <!-- Hold menu: dims the card in place (absolute, so nothing moves) and floats the actions over it -->
   {#if menuOpen && !inTrash}
