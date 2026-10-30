@@ -178,7 +178,9 @@ class Store {
 
   /** Tombstones a row; every device drops it on its next sync. @param {Table} table @param {string} id */
   remove(table, id) {
-    return this.update(table, id, { deleted_at: Date.now() });
+    const removed = this.update(table, id, { deleted_at: Date.now() });
+    if (removed) this.sync();
+    return removed;
   }
 
   /**

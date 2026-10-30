@@ -43,10 +43,11 @@
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
   ];
-  const ITEM = 'spring press group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink';
+  const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';
   // The red bar on the active row is always there and scales in and out, so switching pages never pops.
-  const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent spring';
+  // Keep the indicator inside its row: spring overshoot creates temporary scroll overflow on the last item.
+  const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent transition-transform duration-150 ease-out';
   // Section headers: the + sits in the count column (same right edge as the project counts), centered on the label.
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
   const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';

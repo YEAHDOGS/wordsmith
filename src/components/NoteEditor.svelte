@@ -157,7 +157,11 @@
     clearTimeout(savedTimer);
     flush();
     const current = store.find('notes', id);
-    if (!current || current.deleted_at) return;
+    if (!current) return;
+    if (current.deleted_at) {
+      store.sync(true);
+      return;
+    }
     const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
     const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
     if (!hasContent && !hasFiles) store.remove('notes', id);
