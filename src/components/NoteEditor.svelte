@@ -1,6 +1,7 @@
 <script>
   // Full editor for one note, opened from #...?note=<id>. Autosaves as you type. Features get state, status,
-  // priority, difficulty, assignee, pull requests and any agent analysis; the right side (below on phones) is the timestamped timeline.
+  // priority, difficulty, assignee, pull requests and any agent analysis. The toolbar's top-right toggle swaps the whole
+  // body between the note and its timestamped timeline (with pull requests), at every size.
   import X from '@lucide/svelte/icons/x';
   import Pin from '@lucide/svelte/icons/pin';
   import Archive from '@lucide/svelte/icons/archive';
@@ -13,6 +14,8 @@
   import Check from '@lucide/svelte/icons/check';
   import Save from '@lucide/svelte/icons/save';
   import Bot from '@lucide/svelte/icons/bot';
+  import History from '@lucide/svelte/icons/history';
+  import FileText from '@lucide/svelte/icons/file-text';
   import { fly, fade, slide } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
   import LabelPicker from './LabelPicker.svelte';
@@ -47,6 +50,9 @@
   // Priority and difficulty share the 0..5 scale.
   const LEVELS = PRIORITY_LABELS.map((_, level) => level);
   const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
+  // The note and timeline panes share one grid cell; the hidden one slides aside and fades, so nothing reflows.
+  const PANE = 'col-start-1 row-start-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-4 tv:p-8 transition-[opacity,translate,visibility] duration-200 ease-(--ease-spring)';
+  const PANE_HIDDEN = 'invisible opacity-0';
   // Feature-only blocks open and close their height (slide), so the rows below glide instead of jumping
   const BLOCK_MS = 180;
 
@@ -68,6 +74,7 @@
   let copiedNote = $state(false);
   let preview = $state(false);
   let saved = $state(false);
+  let showTimeline = $state(false);
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
@@ -244,6 +251,11 @@
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
           {/if}
         </div>
+        <!-- Swaps the whole body between the note and its timeline; the icon shows where a press goes -->
+        <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={() => (showTimeline = !showTimeline)} aria-pressed={showTimeline}
+          aria-label={showTimeline ? 'Show note' : 'Show timeline'} title={showTimeline ? 'Note' : 'Timeline'}>
+          {#key showTimeline}<span class="icon-swap flex items-center gap-1.5">{#if showTimeline}<FileText class="size-4" /><span class="hidden sm:inline">Note</span>{:else}<History class="size-4" /><span class="hidden sm:inline">Timeline</span>{/if}</span>{/key}
+        </button>
         <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
         <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
           onclick={save} title="Save and close (Ctrl+S)" aria-keyshortcuts="Control+S Meta+S">
@@ -266,13 +278,13 @@
         </div>
       {/if}
 
-      <!-- One column on phones, pinned to the screen width (minmax 0), so no field can ever widen the page sideways -->
-      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
-        <!-- Content -->
-        <div class="flex min-w-0 flex-col gap-3 overflow-x-hidden p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
+      <!-- One column pinned to the dialog width (minmax 0), so no field can ever widen the page sideways; each pane scrolls itself -->
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden">
+        <!-- Note -->
+        <div class="{PANE} flex flex-col gap-3 tv:gap-5 {showTimeline ? `${PANE_HIDDEN} -translate-x-6` : ''}" inert={showTimeline}>
           <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
 
-          <div class="flex min-h-[12dvh] flex-1 flex-col border-y border-line">
+          <div class="flex min-h-[12dvh] shrink-0 grow flex-col border-y border-line">
             {#if preview}
               <!-- Rendered by src/lib/markdown.js, which escapes all input -->
               <div class="markdown selectable min-h-0 flex-1 overflow-y-auto py-2 text-fluid-sm text-ink" in:fade={{ duration: 120 }}>
@@ -353,7 +365,7 @@
         </div>
 
         <!-- Timeline -->
-        <aside class="min-w-0 overflow-x-hidden border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline and pull requests">
+        <aside class="{PANE} {showTimeline ? '' : `${PANE_HIDDEN} translate-x-6`}" inert={!showTimeline} aria-label="Timeline and pull requests">
           <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
             <section class="mt-6 border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>

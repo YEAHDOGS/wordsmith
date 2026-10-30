@@ -88,7 +88,7 @@
   {/each}
   {#if showPreview}
     <span class="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
-    <button type="button" class="{BUTTON} w-auto shrink-0 gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
+    <button type="button" class="{BUTTON} w-auto shrink-0 sm:w-auto tv:w-auto gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
       title={preview ? 'Back to editing' : 'Preview formatting'}>
       {#if preview}<Pencil class="size-4 shrink-0" /><span>Edit</span>{:else}<Eye class="size-4 shrink-0" /><span>Preview</span>{/if}
     </button>
