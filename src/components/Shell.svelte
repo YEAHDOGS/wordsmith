@@ -69,8 +69,14 @@
     }
   });
 
-  // The gear next to the title opens the board's settings; on those pages it isn't shown.
-  const openSettings = $derived(route.view === 'features' ? () => router.go('features-settings') : project && route.view === 'project' ? () => router.go('project-settings', project.id) : null);
+  // The board gear toggles between a board and its settings without stacking a duplicate history entry.
+  const openSettings = $derived.by(() => {
+    if (route.view === 'features') return () => router.go('features-settings');
+    if (route.view === 'features-settings') return () => router.replace('features');
+    if (project && route.view === 'project') return () => router.go('project-settings', project.id);
+    if (project && route.view === 'project-settings') return () => router.replace('project', project.id);
+    return null;
+  });
 
   /** The cards on screen right now: what "select all" picks. */
   const visible = $derived.by(() => {

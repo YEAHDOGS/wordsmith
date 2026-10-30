@@ -4,6 +4,7 @@
 
 const DEFAULT_VIEW = 'notes';
 const VIEWS = ['notes', 'features', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
+const RETURN_VIEWS = new Set(['archive', 'trash', 'settings']);
 
 /** @typedef {{ view: string, id: string, note: string }} Route */
 
@@ -24,17 +25,43 @@ class Router {
   route = $state(parse());
   /** True while the open note was pushed by us, so closing can step back instead of stacking history. */
   #pushedNote = false;
+  /** @type {Route | null} */
+  #returnRoute = null;
 
   constructor() {
     addEventListener('hashchange', () => {
-      this.route = parse();
+      const next = parse();
+      if (RETURN_VIEWS.has(next.view) && next.view !== this.route.view) this.#returnRoute = { ...this.route };
+      if (!RETURN_VIEWS.has(next.view)) this.#returnRoute = null;
+      this.route = next;
       if (!this.route.note) this.#pushedNote = false;
     });
   }
 
   /** @param {string} view @param {string} [id] */
   go(view, id = '') {
+    if (RETURN_VIEWS.has(view) && this.route.view === view) {
+      const target = this.#returnRoute ?? { view: DEFAULT_VIEW, id: '', note: '' };
+      this.#returnRoute = null;
+      this.#replace(target);
+      return;
+    }
+    if (RETURN_VIEWS.has(view)) this.#returnRoute = { ...this.route };
+    else this.#returnRoute = null;
     location.hash = format({ view, id, note: '' });
+  }
+
+  /** @param {Route} route Replace the current destination without leaving a stale settings page in browser history. */
+  #replace(route) {
+    history.replaceState(null, '', format(route));
+    this.route = route;
+    this.#returnRoute = null;
+    if (!route.note) this.#pushedNote = false;
+  }
+
+  /** @param {string} view @param {string} [id] */
+  replace(view, id = '') {
+    this.#replace({ view, id, note: '' });
   }
 
   /** @param {string} noteId */
