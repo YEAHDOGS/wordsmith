@@ -27,7 +27,7 @@
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNotes } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, orderKey, placeNotes, respace } from '../lib/reorder.svelte.js';
 
   /** @type {{ notes: any[], showProject?: boolean, empty?: string, projectId?: string | null }} */
   let { notes, showProject = true, empty = 'Nothing here yet.', projectId = null } = $props();
@@ -189,6 +189,7 @@
     columnCount;
     drag.zone;
     drag.index;
+    drag.anchor;
     if (!width) return;
     if (!mounted) {
       mounted = true;
@@ -233,8 +234,10 @@
       });
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
+    // A masonry drop saves the whole order the preview showed, so the note stays in the column it was dropped in.
     // Priority order moves only features between levels: plain notes have no priority control to undo it.
-    const writes = placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
+    const shown = previewOrder(section);
+    const writes = shown ? respace(shown) : placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
     for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
     for (const { id, patch } of writes) {
       const change = { ...patch, ...own.get(id) };
@@ -253,6 +256,7 @@
       // Notes move freely in and out of note groups and Pinned; a project or season band only takes its own.
       accepts: (/** @type {any} */ note) => Boolean(section.group) || section.key === 'pinned' || looseBand(note) === section.key,
       ondrop: (/** @type {any[]} */ notes, /** @type {number} */ index) => drop(section, notes, index),
+      unchanged: () => previewOrder(section)?.every((note, index) => section.notes[index]?.id === note.id),
     };
   }
 
@@ -286,6 +290,39 @@
       shortest.height += estimate(note) + GAP_PX;
     }
     return columns.map((column) => column.notes);
+  }
+
+  /**
+   * The order a section takes while a card is dragged over it, or null to use the plain slot. The other cards keep the
+   * columns they had and the carried ones open a gap beside the card under the pointer, in its column; the order is
+   * then interleaved so the shortest-column layout rebuilds exactly those columns, and saving it keeps them after the drop.
+   * Priority order is left to the plain slot: it re-sorts by level anyway.
+   * @param {{ key: string, notes: any[] }} section
+   */
+  function previewOrder(section) {
+    const anchor = drag.anchor;
+    if (drag.zone !== section.key || !anchor || ui.order === 'priority') return null;
+    const arranged = drag.arrange(section.notes, section.key);
+    const start = Math.min(drag.index, arranged.length - drag.taking);
+    const block = arranged.slice(start, start + drag.taking);
+    const moving = new Set(block.map((note) => note.id));
+    const columns = columnsFor(section.notes).map((column) => column.filter((note) => !moving.has(note.id)));
+    const column = columns.find((notes) => notes.some((note) => note.id === anchor.id));
+    if (!column) return null;
+    column.splice(column.findIndex((note) => note.id === anchor.id) + (anchor.below ? 1 : 0), 0, ...block);
+    // Replay the shortest-column rule, taking each column's next note; a column that runs out early hands its turn on.
+    const heights = columns.map(() => 0);
+    const order = [];
+    const shortest = (/** @type {number[]} */ list) => list.reduce((best, at) => (heights[at] < heights[best] ? at : best), list[0]);
+    while (columns.some((notes) => notes.length)) {
+      const all = columns.map((_, at) => at);
+      let at = shortest(all);
+      if (!columns[at].length) at = shortest(all.filter((index) => columns[index].length));
+      const note = columns[at].shift();
+      order.push(note);
+      heights[at] += estimate(note) + GAP_PX;
+    }
+    return order;
   }
 
 </script>
@@ -355,7 +392,7 @@
         {#if !section.group?.collapsed}
           <!-- A group's notes sit indented behind a rail in the group's color, set apart from ungrouped notes -->
           <div class="flex items-start gap-2 {section.group ? `${GROUP_INDENT} ${RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (section.group.color)] || RAIL_BORDER.default}` : ''}" transition:slide={{ duration: FOLD_MS }}>
-            {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
+            {#each columnsFor(previewOrder(section) ?? drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->

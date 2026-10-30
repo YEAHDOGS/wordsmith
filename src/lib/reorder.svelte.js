@@ -46,6 +46,7 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @property {(note: any) => number} [naturalIndex] where a note lands when the slot isn't chosen by hand
  * @property {string} [group] zones sharing a group are side by side (board columns): Alt+Left/Right hops between them
  * @property {string} [label] spoken after a keyboard move into this zone
+ * @property {() => boolean | undefined} [unchanged] whether the drop shown would leave the zone as it is (undefined: judge by index)
  */
 
 /**
@@ -183,6 +184,7 @@ function scrollParent(start, axis) {
  * @param {string} id the dragged note
  * @param {number} x
  * @param {number} y
+ * @returns {{ index: number, anchor: { id: string, below: boolean } | null }} the slot, and the card it sits above or below
  */
 function slotAt(zoneEl, ids, id, x, y) {
   let best = { id: '', below: false, score: Infinity };
@@ -196,7 +198,8 @@ function slotAt(zoneEl, ids, id, x, y) {
     if (score < best.score) best = { id: cardId, below: y > rect.top + rect.height / 2, score };
   }
   const at = ids.indexOf(best.id);
-  return at === -1 ? ids.length : at + (best.below ? 1 : 0);
+  if (at === -1) return { index: ids.length, anchor: null };
+  return { index: at + (best.below ? 1 : 0), anchor: { id: best.id, below: best.below } };
 }
 
 /** @type {HTMLElement | null} */
@@ -229,6 +232,8 @@ class Drag {
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
   index = $state(0);
+  /** The card the preview slot sits above or below, so a masonry can open the gap in that card's column. @type {{ id: string, below: boolean } | null} */
+  anchor = $state(null);
   /** Ghost card position (viewport px, top-left) and width. */
   x = $state(0);
   y = $state(0);
@@ -248,7 +253,7 @@ class Drag {
   #laneAt = 0;
   #frame = 0;
   #moved = false;
-  /** A slot the pointer is over but hasn't rested on long enough yet. @type {{ key: string, index: number, at: number } | null} */
+  /** A slot the pointer is over but hasn't rested on long enough yet. @type {{ key: string, slot: string, at: number } | null} */
   #pending = null;
   // Where the finger first touched. Its touchmoves keep coming there even after the card is rebuilt in another column,
   // when they no longer reach window; listening there keeps the page from scrolling (and cancelling the drag).
@@ -322,6 +327,7 @@ class Drag {
     this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
+    this.anchor = null;
     this.#pending = null;
     this.landing = false;
     this.#last = { x: event.clientX, y: event.clientY };
@@ -449,11 +455,12 @@ class Drag {
     }
     const taken = this.#takenBy(zone);
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
-    const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
+    const { index, anchor } = zone.sortable === false ? { index: zone.naturalIndex?.(this.note) ?? 0, anchor: null } : slotAt(zoneEl, ids, this.id, x, y);
+    const slot = `${index}:${anchor?.id ?? ''}:${anchor?.below ?? ''}`;
     const now = performance.now();
-    if (zone.key === this.zone && index === this.index) this.#pending = null;
+    if (zone.key === this.zone && slot === `${this.index}:${this.anchor?.id ?? ''}:${this.anchor?.below ?? ''}`) this.#pending = null;
     else if (!force && this.zone) {
-      if (this.#pending?.key !== zone.key || this.#pending.index !== index) this.#pending = { key: zone.key, index, at: now };
+      if (this.#pending?.key !== zone.key || this.#pending.slot !== slot) this.#pending = { key: zone.key, slot, at: now };
       if (now - this.#pending.at < SETTLE_MS) return;
     }
     this.#pending = null;
@@ -462,6 +469,7 @@ class Drag {
     this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
+    this.anchor = anchor;
   }
 
   #stop() {
@@ -486,7 +494,7 @@ class Drag {
     // Let go where it started (the block already sits together, in order, at this slot of this zone): nothing to save,
     // so the chosen sort isn't switched to manual either.
     const start = list.findIndex((entry) => entry.id === notes[0]?.id);
-    const inPlace = start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id);
+    const inPlace = zone?.unchanged?.() ?? (start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id));
     if (zone && !inPlace) zone.ondrop(notes, index);
     this.#land();
   };
