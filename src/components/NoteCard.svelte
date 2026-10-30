@@ -216,23 +216,20 @@
     </div>
   {/if}
   <div class="flex items-start gap-2">
-    {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
-    {#if note.created_by_type === 'agent'}
-      <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
-      <span class="mt-0.5 shrink-0 text-ink-faint tv:mt-1.5" role="img" aria-label="Created by agent {note.created_by}" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3.5 tv:size-5" /></span>
-    {/if}
     {#if note.title}
       <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
     {:else}
       <span class="flex-1"></span>
     {/if}
     {#if !inTrash}
-    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
-    <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+    <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
     {/if}
   </div>
+
+  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
 
   {#if note.body}
     <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
@@ -244,8 +241,9 @@
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
-    {#if inTrash && note.created_by_type === 'agent' && note.created_by}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><BotMessageSquare class="size-3" />{note.created_by}</span>
+    {#if note.created_by_type === 'agent' && note.created_by}
+      <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3" />{note.created_by}</span>
     {/if}
     {#each attachmentCounts as type (type.kind)}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
