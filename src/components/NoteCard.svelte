@@ -215,7 +215,7 @@
       <AttachmentMedia file={cover} class="spring size-full object-cover group-hover:scale-[1.02]" />
     </div>
   {/if}
-  <!-- Select and pin: hover-only on desktop; phones have no hover, so unless active they leave the row entirely -->
+  <!-- Pin and select: hover-only on desktop; phones have no hover, so they show only when active -->
   {#snippet selectButton()}
     {#if !inTrash}
     <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
@@ -229,25 +229,15 @@
     {/if}
   {/snippet}
 
-  {#if note.priority_level || note.difficulty}
-    <!-- Levels lead the card: pin, priority dots, then difficulty dots and select at the far right -->
-    <div class="flex items-center gap-3 tv:gap-5">
-      {@render pinButton()}
-      <div class="min-w-0 flex-1"><LevelDots priority={note.priority_level} difficulty={note.difficulty} /></div>
-      {@render selectButton()}
-    </div>
-    {#if note.title}<h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{/if}
-  {:else}
-    <div class="flex items-start gap-2">
-      {#if note.title}
-        <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
-      {:else}
-        <span class="flex-1"></span>
-      {/if}
-      {@render selectButton()}
-      {@render pinButton()}
-    </div>
-  {/if}
+  <!-- Top row, the same height on every card: priority dots stacked over difficulty dots on the left (when set),
+       pin and select at the far right; the title then gets the full width below -->
+  <div class="flex h-6 items-center gap-2 tv:h-9">
+    {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
+    <span class="flex-1"></span>
+    {@render pinButton()}
+    {@render selectButton()}
+  </div>
+  {#if note.title}<h3 class="line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{/if}
 
   {#if note.body}
     <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
