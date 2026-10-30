@@ -1,7 +1,7 @@
 <script>
   // Full editor for one note, opened from #...?note=<id>. Autosaves as you type. Features get state, status,
-  // priority, difficulty, assignee, pull requests and any agent analysis. The toolbar's top-right toggle swaps the whole
-  // body between the note and its timestamped timeline (with pull requests), at every size.
+  // priority, difficulty, assignee, pull requests and any agent analysis. Tablets and up show the timestamped timeline
+  // (with pull requests) to the right of the note; phones swap the whole body between the two with a top-right toggle.
   import X from '@lucide/svelte/icons/x';
   import Pin from '@lucide/svelte/icons/pin';
   import Archive from '@lucide/svelte/icons/archive';
@@ -17,6 +17,7 @@
   import History from '@lucide/svelte/icons/history';
   import FileText from '@lucide/svelte/icons/file-text';
   import { fly, fade, slide } from 'svelte/transition';
+  import { MediaQuery } from 'svelte/reactivity';
   import Timeline from './Timeline.svelte';
   import LabelPicker from './LabelPicker.svelte';
   import ColorPicker from './ColorPicker.svelte';
@@ -50,7 +51,9 @@
   // Priority and difficulty share the 0..5 scale.
   const LEVELS = PRIORITY_LABELS.map((_, level) => level);
   const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
-  // The note and timeline panes share one grid cell; the hidden one slides aside and fades, so nothing reflows.
+  // Tailwind's md breakpoint: from here up the note and timeline sit side by side and the toggle hides (md:hidden).
+  const SPLIT_SCREEN = '(min-width: 48rem)';
+  // Below it the note and timeline panes share one grid cell; the hidden one slides aside and fades, so nothing reflows.
   const PANE = 'col-start-1 row-start-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-4 tv:p-8 transition-[opacity,translate,visibility] duration-200 ease-(--ease-spring)';
   const PANE_HIDDEN = 'invisible opacity-0';
   // Feature-only blocks open and close their height (slide), so the rows below glide instead of jumping
@@ -75,6 +78,9 @@
   let preview = $state(false);
   let saved = $state(false);
   let showTimeline = $state(false);
+  const split = new MediaQuery(SPLIT_SCREEN);
+  const noteHidden = $derived(!split.current && showTimeline);
+  const timelineHidden = $derived(!split.current && !showTimeline);
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
@@ -251,10 +257,18 @@
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
           {/if}
         </div>
-        <!-- Swaps the whole body between the note and its timeline; the icon shows where a press goes -->
-        <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={() => (showTimeline = !showTimeline)} aria-pressed={showTimeline}
+        <!-- Phones: swaps the whole body between the note and its timeline; the icon shows where a press goes. Both icons and
+             both labels share one grid cell and crossfade, so the button and its row never change size. -->
+        <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3 md:hidden" onclick={() => (showTimeline = !showTimeline)} aria-pressed={showTimeline}
           aria-label={showTimeline ? 'Show note' : 'Show timeline'} title={showTimeline ? 'Note' : 'Timeline'}>
-          {#key showTimeline}<span class="icon-swap flex items-center gap-1.5">{#if showTimeline}<FileText class="size-4" /><span class="hidden sm:inline">Note</span>{:else}<History class="size-4" /><span class="hidden sm:inline">Timeline</span>{/if}</span>{/key}
+          <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+            <History class="size-4 {SWAP} {showTimeline ? 'scale-50 opacity-0' : ''}" />
+            <FileText class="size-4 {SWAP} {showTimeline ? '' : 'scale-50 opacity-0'}" />
+          </span>
+          <span class="hidden *:col-start-1 *:row-start-1 sm:grid" aria-hidden="true">
+            <span class="{SWAP} {showTimeline ? 'opacity-0' : ''}">Timeline</span>
+            <span class="{SWAP} {showTimeline ? '' : 'opacity-0'}">Note</span>
+          </span>
         </button>
         <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
         <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
@@ -279,9 +293,9 @@
       {/if}
 
       <!-- One column pinned to the dialog width (minmax 0), so no field can ever widen the page sideways; each pane scrolls itself -->
-      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden">
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)]">
         <!-- Note -->
-        <div class="{PANE} flex flex-col gap-3 tv:gap-5 {showTimeline ? `${PANE_HIDDEN} -translate-x-6` : ''}" inert={showTimeline}>
+        <div class="{PANE} flex flex-col gap-3 tv:gap-5 {noteHidden ? `${PANE_HIDDEN} -translate-x-6` : ''}" inert={noteHidden}>
           <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
 
           <div class="flex min-h-[12dvh] shrink-0 grow flex-col border-y border-line">
@@ -365,7 +379,7 @@
         </div>
 
         <!-- Timeline -->
-        <aside class="{PANE} {showTimeline ? '' : `${PANE_HIDDEN} translate-x-6`}" inert={!showTimeline} aria-label="Timeline and pull requests">
+        <aside class="{PANE} @container md:col-start-2 md:border-l md:border-line {timelineHidden ? `${PANE_HIDDEN} translate-x-6` : ''}" inert={timelineHidden} aria-label="Timeline and pull requests">
           <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
             <section class="mt-6 border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>

@@ -67,7 +67,7 @@
 </script>
 
 {#if note.kind === 'feature'}
-  <ol class="grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4" aria-label="Lifecycle" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
+  <ol class="grid grid-cols-2 gap-px border border-line bg-line @xl:grid-cols-4" aria-label="Lifecycle" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
     {#each milestones as step, index (step.label)}
       <li class="bg-app px-3 py-2 transition-opacity duration-300 {step.at ? '' : 'opacity-50'}">
         <p class="flex items-center gap-1.5 text-[0.6875rem] font-semibold {step.at ? step.tone.text : 'text-ink-faint'}">
