@@ -70,6 +70,11 @@
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
   const agent = $derived(note.created_by_type === 'agent' ? note.created_by : '');
+  // The card's bottom line names one agent: who it's assigned to, else the agent that filed it (the server stamps
+  // notes.created_by for agent tokens). A different filer, when both are set, stays in the meta row.
+  const credit = $derived(note.assignee ? { name: note.assignee, icon: Bot, title: `Assigned to ${note.assignee}` }
+    : agent ? { name: agent, icon: BotMessageSquare, title: `Created by agent ${agent}` } : null);
+  const filedBy = $derived(note.assignee && agent && agent !== note.assignee ? agent : '');
   const files = $derived(store.attachmentsFor(note.id));
   const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
     ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
@@ -260,8 +265,8 @@
         {/each}
       </span>
     {/if}
-    {#if note.assignee}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
+    {#if filedBy}
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="Created by agent {filedBy}"><BotMessageSquare class="size-3" />{filedBy}</span>
     {/if}
     {#each note.pull_requests as pr (pr.url)}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
@@ -283,13 +288,13 @@
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
 
-  <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the agent that made it
-       (the server stamps notes.created_by for agent tokens) centered between them, truncated to fit -->
-  {#if note.priority_level || note.difficulty || agent}
+  <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the credited agent
+       centered between them, truncated to fit -->
+  {#if note.priority_level || note.difficulty || credit}
     <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
-      {#if agent}
-        <span class="inline-flex min-w-0 items-center gap-1 font-mono text-[0.6875rem] tv:text-sm text-ink-muted" title="Created by agent {agent}">
-          <BotMessageSquare class="size-3 shrink-0 tv:size-4" /><span class="truncate">{agent}</span>
+      {#if credit}
+        <span class="inline-flex min-w-0 items-center gap-1 font-mono text-[0.6875rem] tv:text-sm text-ink-muted" title={credit.title}>
+          <credit.icon class="size-3 shrink-0 tv:size-4" /><span class="truncate">{credit.name}</span>
         </span>
       {/if}
     </LevelDots>
