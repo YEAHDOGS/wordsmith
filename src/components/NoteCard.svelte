@@ -229,14 +229,13 @@
     {/if}
   {/snippet}
 
-  <!-- Top row, the same height on every card: priority dots stacked over difficulty dots on the left (when set),
-       pin and select at the far right; the title then gets the full width below -->
-  <div class="flex h-6 items-center gap-2 tv:h-9">
-    {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
-    <span class="flex-1"></span>
+  <!-- Top row, the same height on every card: pin at the far left, select at the far right. Under it, when set,
+       priority dots start under the pin and difficulty dots end under select; the title then gets the full width -->
+  <div class="flex h-6 items-center justify-between tv:h-9">
     {@render pinButton()}
     {@render selectButton()}
   </div>
+  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
   {#if note.title}<h3 class="line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{/if}
 
   {#if note.body}
