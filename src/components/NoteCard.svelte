@@ -70,7 +70,6 @@
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
   const files = $derived(store.attachmentsFor(note.id));
-  const audioFiles = $derived(files.filter((file) => attachmentKind(file.type) === 'audio'));
   const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
     ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
   })).filter((type) => type.count));
@@ -242,13 +241,6 @@
   {#if isFeature && note.status}
     <p class="flex items-start gap-1.5 border-l-2 border-progress pl-2 text-xs text-ink"><span class="line-clamp-2">{note.status}</span></p>
   {/if}
-
-  {#each audioFiles as file (file.id)}
-    <div class="min-w-0">
-      <p class="truncate text-xs text-ink-muted" title={file.name}>{file.name}</p>
-      <AttachmentMedia {file} controls class="h-10 w-full min-w-0 max-w-full" />
-    </div>
-  {/each}
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
