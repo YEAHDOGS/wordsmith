@@ -19,6 +19,8 @@ const IDLE_AFTER_MS = 300_000;
 // A push skips its follow-up pull when the last pull is this fresh; focus only syncs when it's older than FOCUS_STALE_MS.
 const PULL_AFTER_PUSH_MS = 30_000;
 const FOCUS_STALE_MS = 15_000;
+const PURGE_SYNC_WAIT_MS = 30_000;
+const SYNC_WAIT_POLL_MS = 50;
 // The GitHub webhook makes merges instant; this re-check is the fallback for repos without it.
 const PR_REFRESH_MS = 600_000;
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
@@ -187,7 +189,16 @@ class Store {
    */
   async purge(rows) {
     const ids = Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
-    if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) await this.sync();
+    if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
+      const deadline = Date.now() + PURGE_SYNC_WAIT_MS;
+      while (this.syncing && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, SYNC_WAIT_POLL_MS));
+      if (this.syncing) throw new Error('Sync is taking too long. Try deleting forever again when it finishes.');
+      await this.sync();
+      while (this.syncing && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, SYNC_WAIT_POLL_MS));
+      if (this.syncing || ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
+        throw new Error('The deletion has not synced yet. Try deleting forever again when sync is complete.');
+      }
+    }
     for (let start = 0; start < ids.length; start += MAX_SYNC_BATCH) {
       /** @type {Record<string, string[]>} */
       const body = {};
