@@ -15,6 +15,8 @@ const FORBIDDEN = 403;
 const CONFLICT = 409;
 // Triage fields an agent can write, through PATCH or the analysis endpoint.
 const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
+// Text an agent may fill in while empty or add to (body_append, analysis_append), but never overwrite.
+const ADD_ONLY_TEXT = ['title', 'body', 'analysis'];
 // A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
 // name not '.' or '..'.
 const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
@@ -247,6 +249,19 @@ export async function createNote(env, userId, actor, input, kind) {
 }
 
 /**
+ * Agent tokens only add: they fill empty text, append, add labels and move work along, but never overwrite or remove
+ * what is there, archive, or delete. Anything destructive is the owner's call, made in the app.
+ * @param {Record<string, any>} before @param {Record<string, any>} input @param {string[] | undefined} ids new label ids
+ */
+function assertAdditive(before, input, ids) {
+  const overwritten = ADD_ONLY_TEXT.find((field) => input[field] !== undefined && String(before[field] ?? '').trim()
+    && String(input[field]).trim() !== String(before[field]).trim());
+  if (overwritten) throw new HttpError(FORBIDDEN, `API tokens cannot overwrite a note's ${overwritten}. ${overwritten === 'title' ? 'Leave renaming to the owner.' : `Add to it with ${overwritten}_append.`}`);
+  if (input.archived === true && !before.archived) throw new HttpError(FORBIDDEN, 'API tokens cannot archive notes');
+  if (ids && before.label_ids.some((/** @type {string} */ id) => !ids.includes(id))) throw new HttpError(FORBIDDEN, 'API tokens can add labels but not remove them: send every current label plus the new ones');
+}
+
+/**
  * Updates a note. Besides plain fields, agents can send pr_url (attach a PR), body_append and labels by name.
  * @param {Record<string, any>} env
  * @param {string} userId
@@ -277,6 +292,7 @@ export async function updateNote(env, userId, actor, id, input) {
     Object.assign(patch, { column_id: column.id, state: column.state });
   }
   const ids = labelIds(maps, input.labels);
+  if (actor.type === 'agent') assertAdditive(before, input, ids);
   if (ids) patch.label_ids = ids;
 
   let linkedPr = false;

@@ -1,5 +1,5 @@
 // GET /api/v1/notes/:id/analysis - an agent's triage of one note. POST - write it:
-// { difficulty? (0 unrated, 1 trivial to 5 epic), batch?, analysis? (replaces), analysis_append? (adds a paragraph) }.
+// { difficulty? (0 unrated, 1 trivial to 5 epic), batch?, analysis? (replaces; agent tokens only while empty), analysis_append? (adds a paragraph) }.
 // Stamps analyzed_at and logs an "analyzed" timeline event, so the next agent can see what was decided and when.
 import { getNote, updateNote } from '../../../../../lib/agent.js';
 import { json, readJson } from '../../../../../lib/http.js';

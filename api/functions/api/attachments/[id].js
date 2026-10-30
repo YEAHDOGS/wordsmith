@@ -1,5 +1,5 @@
 // GET /api/attachments/:id - streams the file (Range requests supported, so videos can seek).
-// DELETE /api/attachments/:id - removes it from R2 and tombstones the row.
+// DELETE /api/attachments/:id - removes it from R2 and tombstones the row. People only: agent tokens can't delete.
 // Files are immutable, so browsers cache them for a year and repeat views cost no requests.
 import { requireAuth } from '../../../lib/auth.js';
 import { bucket, release, reserve } from '../../../lib/attachments.js';
@@ -10,6 +10,7 @@ import { isId } from '../../../../src/lib/models.js';
 const CACHE_FOREVER = 'private, max-age=31536000, immutable';
 const PARTIAL_CONTENT = 206;
 const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
+const FORBIDDEN = 403;
 
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
 async function load(context) {
@@ -66,6 +67,7 @@ export async function onRequestDelete(context) {
   const { env } = context;
   const files = bucket(env);
   const { auth, row } = await load(context);
+  if (auth.via === 'token') throw new HttpError(FORBIDDEN, 'API tokens cannot delete attachments');
   await files.delete(row.r2_key);
   const now = Date.now();
   const actor = actorFor(auth);
