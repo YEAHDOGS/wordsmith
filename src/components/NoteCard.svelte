@@ -226,11 +226,11 @@
   {#snippet pinButton()}
     {#if !inTrash}
     <button class="spring press -mx-1 flex h-[1.375em] items-center px-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
-      aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-3 tv:size-4" /></button>
+      aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
     {/if}
   {/snippet}
 
-  <!-- Title at the top, taking all the width it can; pin (small) over select in one column in the top-right corner.
+  <!-- Title at the top, taking all the width it can; pin over select in one column in the top-right corner.
        The column shares the title's type, so the pin's box is one title line tall (leading-snug: 1.375em) and centers on it. -->
   <div class="flex items-start gap-2">
     {#if note.title}<h3 class="min-w-0 flex-1 line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{:else}<span class="flex-1"></span>{/if}

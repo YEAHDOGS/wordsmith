@@ -7,7 +7,7 @@
 // Order is stored in notes.position (REAL, lower first) with fractional indexing: a moved note takes the midpoint of
 // its new neighbours, so a drop writes one row. Notes never placed by hand sort by a key implied by their age.
 import { tick } from 'svelte';
-import { MAX_PRIORITY } from './models.js';
+import { MAX_DIFFICULTY, MAX_PRIORITY } from './models.js';
 import { buzz } from './press.js';
 import { store } from './store.svelte.js';
 import { ui } from './ui.svelte.js';
@@ -58,6 +58,10 @@ export function orderKey(note) {
   return note.position ?? (note.kind === 'feature' ? note.created_at : -note.created_at);
 }
 
+// Level fields a zone can sort by, with each one's top level. `true` for byLevel means priority (the feature board).
+const LEVEL_MAX = { priority_level: MAX_PRIORITY, difficulty: MAX_DIFFICULTY };
+const DEFAULT_LEVEL = 'priority_level';
+
 /** Position for a new note: one step ahead of every note's key, so it lands first in manual order, board and claim queue. */
 export function topPosition() {
   const keys = store.notes.filter((note) => !note.deleted_at).map(orderKey);
@@ -65,22 +69,25 @@ export function topPosition() {
 }
 
 /**
- * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byPriority the list runs
- * highest priority first: the note keeps its priority when that fits between its neighbours, else takes the nearest
- * one that does, then gets a position among the notes of that priority. When the doubles between two neighbours have
- * run out (or they share a key), the whole zone is respaced in its new order (rare; see respace).
+ * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byLevel (a level field, or
+ * true for priority) the list runs highest level first: the note keeps its level when that fits between its
+ * neighbours, else takes the nearest one that does, then gets a position among the notes of that level. When the
+ * doubles between two neighbours have run out (or they share a key), the whole zone is respaced in its new order
+ * (rare; see respace).
  * @param {any[]} list
  * @param {any} note
  * @param {number} index
- * @param {boolean} [byPriority]
+ * @param {boolean | 'priority_level' | 'difficulty'} [byLevel]
  * @returns {{ id: string, patch: Record<string, any> }[]}
  */
-export function placeNote(list, note, index, byPriority = false) {
+export function placeNote(list, note, index, byLevel = false) {
   const before = list[index - 1] ?? null;
   const after = list[index] ?? null;
-  const priority = byPriority ? Math.min(Math.max(note.priority_level, after?.priority_level ?? 0), before?.priority_level ?? MAX_PRIORITY) : note.priority_level;
-  // A neighbour bounds the position only when it sorts in the same run (same priority, when sorting by priority).
-  const bounds = (/** @type {any} */ neighbour) => neighbour && (!byPriority || neighbour.priority_level === priority);
+  const field = byLevel === true ? DEFAULT_LEVEL : byLevel || null;
+  const levelOf = (/** @type {any} */ entry) => (field ? entry[field] ?? 0 : 0);
+  const level = field ? Math.min(Math.max(levelOf(note), after ? levelOf(after) : 0), before ? levelOf(before) : LEVEL_MAX[field]) : 0;
+  // A neighbour bounds the position only when it sorts in the same run (same level, when sorting by one).
+  const bounds = (/** @type {any} */ neighbour) => neighbour && (!field || levelOf(neighbour) === level);
   const low = bounds(before) ? orderKey(before) : null;
   const high = bounds(after) ? orderKey(after) : null;
   /** @type {number | null} */
@@ -93,7 +100,7 @@ export function placeNote(list, note, index, byPriority = false) {
   } else if (high !== null) {
     position = high - POSITION_STEP;
   }
-  const extra = byPriority && priority !== note.priority_level ? { priority_level: priority } : {};
+  const extra = field && level !== levelOf(note) ? { [field]: level } : {};
   if (position !== null) return [{ id: note.id, patch: { ...extra, position } }];
   const writes = respace([...list.slice(0, index), note, ...list.slice(index)]);
   const own = writes.find((write) => write.id === note.id);
@@ -104,20 +111,21 @@ export function placeNote(list, note, index, byPriority = false) {
 
 /**
  * The writes for dropping several notes as one block at `index` of `list` (the zone's order without any of them), in
- * the order given. Without priority sorting the block is spaced evenly between its two neighbours in one pass (halving
+ * the order given. Without level sorting the block is spaced evenly between its two neighbours in one pass (halving
  * the gap note by note would run out of room and respace the zone over and over), with one respace of the zone as the
- * fallback. With priority sorting (byPriority true, or true for a given note) each note is placed after the one before,
- * since each may take a different priority level.
+ * fallback. With level sorting (byLevel a field or true, or one for a given note) each note is placed after the one
+ * before, since each may take a different level.
+ * @typedef {boolean | 'priority_level' | 'difficulty'} LevelSort
  * @param {any[]} list
  * @param {any[]} notes
  * @param {number} index
- * @param {boolean | ((note: any) => boolean)} [byPriority]
+ * @param {LevelSort | ((note: any) => LevelSort)} [byLevel]
  * @returns {{ id: string, patch: Record<string, any> }[]}
  */
-export function placeNotes(list, notes, index, byPriority = false) {
-  const sortsByPriority = (/** @type {any} */ note) => (typeof byPriority === 'function' ? byPriority(note) : byPriority);
-  if (notes.length === 1) return placeNote(list, notes[0], index, sortsByPriority(notes[0]));
-  if (!notes.some(sortsByPriority)) {
+export function placeNotes(list, notes, index, byLevel = false) {
+  const levelSort = (/** @type {any} */ note) => (typeof byLevel === 'function' ? byLevel(note) : byLevel);
+  if (notes.length === 1) return placeNote(list, notes[0], index, levelSort(notes[0]));
+  if (!notes.some(levelSort)) {
     const before = list[index - 1] ?? null;
     const after = list[index] ?? null;
     const low = before ? orderKey(before) : null;
@@ -136,7 +144,7 @@ export function placeNotes(list, notes, index, byPriority = false) {
   const writes = new Map();
   notes.forEach((note, offset) => {
     const at = index + offset;
-    for (const { id, patch } of placeNote(placed, note, at, sortsByPriority(note))) writes.set(id, { ...writes.get(id), ...patch });
+    for (const { id, patch } of placeNote(placed, note, at, levelSort(note))) writes.set(id, { ...writes.get(id), ...patch });
     placed = placed.map((entry) => (writes.has(entry.id) ? { ...entry, ...writes.get(entry.id) } : entry));
     placed.splice(at, 0, { ...note, ...writes.get(note.id) });
   });
