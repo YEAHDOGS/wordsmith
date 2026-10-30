@@ -4,6 +4,8 @@
   // to a row), click a row to jump there, or use the arrow keys, Page Up/Down, Home and End (keyboards and TV remotes).
   // A mouse wheel moves one level per notch: native wheel scrolling covers about three rows a notch, so the wheel is
   // taken over and trackpad deltas add up until they reach one notch.
+  // Changes animate: the list glides to the new row (the first placement, when the editor opens, is instant) and the
+  // chosen row grows while the others shrink and fade. Reduced motion skips the glide.
   // Loud levels (from `loud` up) turn the accent when chosen. No scrollend event: Safari 15.4 lacks it, so a short
   // pause after the last scroll settles the choice.
   import { LOUD_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
@@ -18,6 +20,7 @@
   // deltaMode 1 (lines, Firefox) and 2 (pages) in pixels
   const LINE_PX = 16;
   const PAGE_PX = 400;
+  const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
   /** Key -> how far the choice moves; Home and End jump to the ends. */
   const KEY_STEPS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, PageDown: 2, PageUp: -2 };
 
@@ -28,6 +31,8 @@
   let scrolling = false;
   let positioning = false;
   let wheelTravel = 0;
+  // Set once the wheel has been put on its first row; every later move glides
+  let placed = false;
 
   const index = $derived(Math.max(0, levels.indexOf(value)));
   const rowHeight = () => /** @type {HTMLElement | undefined} */ (list?.firstElementChild)?.offsetHeight || 1;
@@ -40,11 +45,13 @@
     // A dialog's contents have no layout until showModal(). Never select from a hidden wheel's zero-height position.
     if (height <= 1) return;
     const top = index * height;
+    const glide = placed && !REDUCED_MOTION.matches;
+    placed = true;
     if (Math.abs(list.scrollTop - top) <= 1) return;
     // The initial/programmatic scroll positions the control; it is not a user choice.
     positioning = true;
     clearTimeout(settle);
-    list.scrollTo({ top, behavior: 'auto' });
+    list.scrollTo({ top, behavior: glide ? 'smooth' : 'auto' });
     settle = setTimeout(() => { positioning = false; }, SETTLE_MS);
   });
 
@@ -69,7 +76,7 @@
     positioning = false;
     const next = levels[Math.min(levels.length - 1, Math.max(0, at))];
     if (next !== value) onselect(next);
-    list?.scrollTo({ top: levels.indexOf(next) * rowHeight(), behavior: 'smooth' });
+    list?.scrollTo({ top: levels.indexOf(next) * rowHeight(), behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth' });
   }
 
   /** @param {KeyboardEvent} event */
@@ -123,7 +130,7 @@
       {#each levels as level, slot (level)}
         {@const on = slot === index}
         <button type="button" tabindex="-1" onclick={() => choose(slot)}
-          class="spring flex h-8 w-full snap-center items-center justify-center gap-1.5 px-2 text-xs tv:h-12 tv:text-lg {on ? `font-semibold ${level >= loud ? 'text-accent' : 'text-ink'}` : 'text-ink-faint hover:text-ink-muted'}">
+          class="spring flex h-8 w-full snap-center items-center justify-center gap-1.5 px-2 text-xs tv:h-12 tv:text-lg {on ? `scale-110 font-semibold ${level >= loud ? 'text-accent' : 'text-ink'}` : 'scale-90 text-ink-faint opacity-70 hover:text-ink-muted hover:opacity-100'}">
           <span class="font-mono text-[0.625rem] tv:text-sm">{level || '–'}</span><span class="truncate">{labels[level]}</span>
         </button>
       {/each}
