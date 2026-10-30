@@ -1,6 +1,6 @@
 <script>
   // Images, video, audio and documents on a note: pick, drop or paste files in; thumbnails (file tiles for audio and documents) with
-  // upload progress; click to view full size, or a document's preview and its open / download link.
+  // upload progress; click to view full size, play video or audio, or see a document's preview and its open / download link.
   // The full-size view can copy an image to the clipboard where the browser supports writing images.
   import Paperclip from '@lucide/svelte/icons/paperclip';
   import Play from '@lucide/svelte/icons/play';
@@ -13,6 +13,7 @@
   import AttachmentMedia from './AttachmentMedia.svelte';
   import DocumentPreview from './DocumentPreview.svelte';
   import DocumentTile from './DocumentTile.svelte';
+  import AudioTile from './AudioTile.svelte';
   import { store } from '../lib/store.svelte.js';
   import { mediaUrl } from '../lib/api.js';
   import { ACCEPT_ATTACHMENTS, MAX_ATTACHMENTS_PER_NOTE, attachmentKind, uploadType } from '../lib/models.js';
@@ -118,16 +119,17 @@
   {#if files.length || uploads.length}
     <!-- Phones: an even three-column grid of square tiles. Wider screens: fixed-size tiles that wrap. -->
     <div class="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap" transition:fade={{ duration: 150 }}>
-      {#each files.filter((file) => attachmentKind(file.type) !== 'audio') as file (file.id)}
+      {#each files as file (file.id)}
         <div class="group relative aspect-square overflow-hidden border border-line bg-app sm:size-28 tv:size-40" animate:flip={{ duration: 200 }} in:scale={{ start: 0.9, duration: 150 }} out:fade={{ duration: 120 }}>
           <button class="block size-full" onclick={() => view(file)} aria-label="View {file.name}">
             {#if attachmentKind(file.type) === 'document'}
               <DocumentTile {file} class="size-full" />
-
+            {:else if attachmentKind(file.type) === 'audio'}
+              <AudioTile {file} class="size-full" playable />
             {:else}
               <AttachmentMedia {file} class="size-full object-cover" />
             {/if}
-            {#if file.type.startsWith('video/')}
+            {#if attachmentKind(file.type) === 'video'}
               <span class="absolute inset-0 flex items-center justify-center"><span class="flex size-9 items-center justify-center rounded-full bg-scrim text-ink"><Play class="size-4" /></span></span>
             {/if}
           </button>
@@ -151,15 +153,6 @@
       {/each}
     </div>
   {/if}
-  {#each files.filter((file) => attachmentKind(file.type) === 'audio') as file (file.id)}
-    <div class="mt-2 flex min-w-0 items-center gap-2 border border-line p-2">
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-xs text-ink-muted" title={file.name}>{file.name}</p>
-        <AttachmentMedia {file} controls class="h-10 w-full min-w-0 max-w-full" />
-      </div>
-      <button class="spring press shrink-0 p-2 text-ink-muted hover:text-accent" aria-label="Delete {file.name}" onclick={() => remove(file)}><Trash class="size-3.5" /></button>
-    </div>
-  {/each}
   {#if error}<p class="mt-1 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{error}</p>{/if}
 </section>
 
@@ -176,6 +169,12 @@
       <div class="relative flex min-h-0 max-w-full" in:scale={{ start: 0.95, duration: 200 }}>
         {#if attachmentKind(viewing.type) === 'document'}
           <DocumentPreview file={viewing} />
+        {:else if attachmentKind(viewing.type) === 'audio'}
+          <!-- Audio plays like a video: the tile stands in for the picture, the player sits under it -->
+          <div class="flex w-[min(calc(100vw-2rem),28rem)] flex-col gap-3">
+            <AudioTile file={viewing} class="aspect-square max-h-[calc(100dvh-12rem)] w-full border border-line" />
+            <AttachmentMedia file={viewing} controls class="w-full" />
+          </div>
         {:else}
           <AttachmentMedia file={viewing} controls class="max-w-full object-contain {canCopyViewing ? 'max-h-[calc(100dvh-9rem)]' : 'max-h-[calc(100dvh-6rem)]'}" />
         {/if}
