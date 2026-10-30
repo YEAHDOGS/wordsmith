@@ -1,7 +1,6 @@
-// Page changes in the Shell. Pages in the sidebar list (All notes, Features, projects, labels, Archive) sit side by
-// side like a carousel: going down the list slides the boards left, going up slides them right. The old and new page
-// move together as one strip, crossing at most MAX_BOARDS board widths (a longer jump starts as if it were only two
-// away), and land with a little overshoot. Other pages (settings) rise in while the old one fades out.
+// Project pages in the Shell sit side by side like a carousel: moving between projects slides the boards horizontally.
+// The old and new page move together as one strip, crossing at most MAX_BOARDS board widths. Other route changes keep
+// the original vertical entrance and fade-out.
 // Transform and opacity only; both pages are absolutely positioned in a clipped box, so nothing shifts or scrolls.
 import { fade, fly } from 'svelte/transition';
 import { cubicIn, quintOut } from 'svelte/easing';
@@ -9,15 +8,10 @@ import { navOrder } from '../lib/nav-order.js';
 
 const CAROUSEL_MS = 220;
 const MAX_BOARDS = 2;
-// backOut's overshoot constant: 0.8 peaks about 2% past the target, a small bounce rather than a wobble.
-const OVERSHOOT = 0.8;
 const PAGE_IN = { y: 10, duration: 260, delay: 60, easing: quintOut };
 const PAGE_OUT = { duration: 120, easing: cubicIn };
 const REDUCED_FADE_MS = 120;
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
-
-/** Back-out easing with a gentle overshoot. @param {number} t */
-const settle = (t) => (t - 1) * (t - 1) * ((OVERSHOOT + 1) * (t - 1) + OVERSHOOT) + 1;
 
 /** The current move: how many board widths the strip travels, signed (+ = down the list). 0 = not a carousel move. */
 const move = { boards: 0 };
@@ -33,7 +27,9 @@ export function pageChange(key, store) {
   const from = order.indexOf(shown);
   const to = order.indexOf(key);
   shown = key;
-  if (from < 0 || to < 0 || from === to) {
+  const fromProject = from >= 0 && order[from].startsWith('project/');
+  const toProject = to >= 0 && order[to].startsWith('project/');
+  if (!fromProject || !toProject || from === to) {
     move.boards = 0;
     return;
   }
@@ -47,7 +43,7 @@ export function pageChange(key, store) {
  */
 const slide = (boards) => ({
   duration: CAROUSEL_MS,
-  easing: settle,
+  easing: quintOut,
   css: (/** @type {number} */ _t, /** @type {number} */ u) => `transform: translateX(${(boards * u * 100).toFixed(3)}%)`,
 });
 
