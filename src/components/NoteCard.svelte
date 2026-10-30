@@ -245,11 +245,16 @@
       <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3" />{note.created_by}</span>
     {/if}
-    {#each attachmentCounts as type (type.kind)}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
-        <type.icon class="size-3" />{type.count}
+    {#if attachmentCounts.length}
+      <!-- Attachment counts stay together on one line, never split across the wrap -->
+      <span class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+        {#each attachmentCounts as type (type.kind)}
+          <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
+            <type.icon class="size-3" />{type.count}
+          </span>
+        {/each}
       </span>
-    {/each}
+    {/if}
     {#if note.assignee}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
     {/if}
