@@ -1,5 +1,5 @@
 <script>
-  // One line of dots under a note card's pin and select: priority at the far left in the accent red, difficulty at the
+  // One line of dots along a note card's bottom edge: priority at the far left in the accent red, difficulty at the
   // far right in its level's color (DIFFICULTY_DOT). Each group fills from the left, one dot per level; unlit dots stay faint.
   import { DIFFICULTY_DOT } from '../lib/colors.js';
   import { DIFFICULTY_LABELS, MAX_DIFFICULTY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';

@@ -225,18 +225,18 @@
   {#snippet pinButton()}
     {#if !inTrash}
     <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
-      aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
+      aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-3 tv:size-4" /></button>
     {/if}
   {/snippet}
 
-  <!-- Top row, the same height on every card: pin at the far left, select at the far right. Under it, when set,
-       priority dots start under the pin and difficulty dots end under select; the title then gets the full width -->
-  <div class="flex h-6 items-center justify-between tv:h-9">
-    {@render pinButton()}
-    {@render selectButton()}
+  <!-- Title at the top, taking all the width it can; pin (small) over select in one column in the top-right corner -->
+  <div class="flex items-start gap-2">
+    {#if note.title}<h3 class="min-w-0 flex-1 line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{:else}<span class="flex-1"></span>{/if}
+    <div class="flex shrink-0 flex-col items-center gap-1">
+      {@render pinButton()}
+      {@render selectButton()}
+    </div>
   </div>
-  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
-  {#if note.title}<h3 class="line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{/if}
 
   {#if note.body}
     <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
@@ -284,6 +284,9 @@
   <p class="font-mono text-[0.625rem] tv:text-sm text-ink-faint" title={fullTime(stamp.at)}>
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
+
+  <!-- Levels close the card: priority at the far left, difficulty at the far right -->
+  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
 
   <!-- Hold menu: dims the card in place (absolute, so nothing moves) and floats the actions over it -->
   {#if menuOpen && !inTrash}
