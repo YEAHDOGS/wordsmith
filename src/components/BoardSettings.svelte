@@ -162,7 +162,7 @@
               class="min-h-40 flex-1 resize-y bg-transparent px-3 py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
           {/if}
           <div class="flex justify-end border-t border-line">
-            <MarkdownToolbar textarea={missionField} bind:preview={missionPreview} showPreview class="-mr-1 py-0.5" />
+            <MarkdownToolbar textarea={missionField} bind:preview={missionPreview} showPreview class="py-0.5" />
           </div>
         </div>
       </section>

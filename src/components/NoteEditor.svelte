@@ -285,7 +285,7 @@
             {/if}
             <!-- Formatting lives in the box's bottom-right corner -->
             <div class="flex justify-end border-t border-line">
-              <MarkdownToolbar textarea={bodyField} bind:preview showPreview class="-mr-1 py-0.5" />
+              <MarkdownToolbar textarea={bodyField} bind:preview showPreview class="py-0.5" />
             </div>
           </div>
 

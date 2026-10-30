@@ -1,7 +1,7 @@
 <script>
   // Small Markdown formatting buttons for a textarea: bold, italic, text size, code and lists.
-  // Wide screens show every button in one row. Phones show two: text style (bold, italic, heading, code) and lists,
-  // each opening its options in a small row above it, so the toolbar never wraps into a second line.
+  // Every screen shows two buttons: text style (bold, italic, heading) and blocks (lists, code),
+  // each opening its options in a small row above it, so the toolbar stays narrow and the Preview switch always fits.
   // Buttons keep the textarea's focus and selection (mousedown is cancelled), so a tap formats what you selected.
   // With `preview` bound, an extra toggle switches the field to its rendered view.
   import Bold from '@lucide/svelte/icons/bold';
@@ -32,19 +32,19 @@
         { label: `Bold (${MOD}B)`, icon: Bold, run: (/** @type {HTMLTextAreaElement} */ area) => applyEdit(area, wrap(area, MARKERS.bold)) },
         { label: `Italic (${MOD}I)`, icon: Italic, run: (/** @type {HTMLTextAreaElement} */ area) => applyEdit(area, wrap(area, MARKERS.italic)) },
         { label: 'Text size: heading 1, 2, 3, normal', icon: Heading, run: cycleHeading },
-        { label: 'Code', icon: Code, run: (/** @type {HTMLTextAreaElement} */ area) => applyEdit(area, wrap(area, MARKERS.code)) },
       ],
     },
     {
-      key: 'lists', label: 'Lists', icon: List, actions: [
+      key: 'lists', label: 'Lists and code', icon: List, actions: [
         { label: 'Bulleted list', icon: List, run: (/** @type {HTMLTextAreaElement} */ area) => toggleList(area, 'bullet') },
         { label: 'Numbered list', icon: ListOrdered, run: (/** @type {HTMLTextAreaElement} */ area) => toggleList(area, 'number') },
         { label: 'Checklist', icon: ListTodo, run: (/** @type {HTMLTextAreaElement} */ area) => toggleList(area, 'check') },
+        { label: 'Code', icon: Code, run: (/** @type {HTMLTextAreaElement} */ area) => applyEdit(area, wrap(area, MARKERS.code)) },
       ],
     },
   ];
 
-  /** The phone menu that is open: 'text', 'lists' or ''. */
+  /** The menu that is open: 'text', 'lists' or ''. */
   let open = $state('');
   /** @type {HTMLElement | undefined} */
   let root = $state();
@@ -71,15 +71,9 @@
 {/snippet}
 
 <div bind:this={root} class="flex min-w-0 items-center justify-end gap-0.5 {className}" role="toolbar" aria-label="Formatting">
-  <!-- Wide: every button in one row -->
-  <div class="hidden items-center gap-0.5 sm:flex">
-    {#each GROUPS as group (group.key)}
-      {#each group.actions as action (action.label)}{@render button(action)}{/each}
-    {/each}
-  </div>
-  <!-- Phones: two buttons, each opening its options in a row above it -->
+  <!-- Two buttons, each opening its options in a row above it -->
   {#each GROUPS as group (group.key)}
-    <div class="relative sm:hidden">
+    <div class="relative shrink-0">
       <button type="button" class="{BUTTON} {open === group.key ? 'bg-surface-raised text-ink' : ''}" title={group.label} aria-label={group.label} aria-haspopup="true"
         aria-expanded={open === group.key} disabled={preview || !textarea} onmousedown={(event) => event.preventDefault()} onclick={() => (open = open === group.key ? '' : group.key)}>
         <group.icon class="size-4" />
@@ -94,9 +88,9 @@
   {/each}
   {#if showPreview}
     <span class="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
-    <button type="button" class="{BUTTON} w-auto shrink-0 gap-1 px-1.5 text-xs sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
+    <button type="button" class="{BUTTON} w-auto shrink-0 gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
       title={preview ? 'Back to editing' : 'Preview formatting'}>
-      {#if preview}<Pencil class="size-4 shrink-0" /><span class="hidden sm:inline">Edit</span>{:else}<Eye class="size-4 shrink-0" /><span class="hidden sm:inline">Preview</span>{/if}
+      {#if preview}<Pencil class="size-4 shrink-0" /><span>Edit</span>{:else}<Eye class="size-4 shrink-0" /><span>Preview</span>{/if}
     </button>
   {/if}
 </div>

@@ -208,7 +208,7 @@
       <span class="mt-0.5 shrink-0 text-ink-faint tv:mt-1.5" role="img" aria-label="Created by agent {note.created_by}" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3.5 tv:size-5" /></span>
     {/if}
     {#if note.title}
-      <h3 class="min-w-0 flex-1 text-fluid-sm font-semibold leading-snug text-ink">{note.title}</h3>
+      <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
     {:else}
       <span class="flex-1"></span>
     {/if}
