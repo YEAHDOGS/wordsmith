@@ -8,7 +8,6 @@ const FLIP_ANIMATION = 'flip';
 const MOVE_MS = 240;
 const ENTER_MS = 150;
 const EXIT_MS = 150;
-const ENTER_SCALE = 0.96;
 const EXIT_SCALE = 0.92;
 const MIN_SHIFT_PX = 0.5;
 // Mirrors --ease-out-soft in src/styles/theme.css (Web Animations can't read CSS variables).
@@ -38,7 +37,7 @@ export function play(root, before) {
     const card = /** @type {HTMLElement} */ (node);
     const from = before.get(card.dataset.flipId ?? '');
     if (!from) {
-      if (!card.classList.contains(REVEAL) || card.classList.contains(REVEALED)) card.animate([{ opacity: 0, transform: `scale(${ENTER_SCALE})` }, { opacity: 1, transform: 'none' }], { duration: ENTER_MS, easing: EASE_OUT_SOFT });
+      if (!card.classList.contains(REVEAL) || card.classList.contains(REVEALED)) card.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ENTER_MS, easing: EASE_OUT_SOFT });
       continue;
     }
     for (const animation of card.getAnimations()) if (animation.id === FLIP_ANIMATION) animation.cancel();

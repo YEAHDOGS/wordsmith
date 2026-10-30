@@ -279,6 +279,7 @@ class Store {
       }
       const result = await api('/api/sync', { method: 'POST', body });
       const saved = [];
+      let rejection = '';
       for (const table of SYNCED) {
         for (const row of result.saved[table] || []) {
           const key = `${table}:${row.id}`;
@@ -291,14 +292,22 @@ class Store {
         }
       }
       for (const { id, table: refusedTable, error, current, code } of result.rejected) {
-        for (const table of SYNCED) this.#outbox.delete(`${table}:${id}`);
-        this.error = `A change was rejected: ${error}`;
-        if (refusedTable === 'projects') await this.#settleProject(id, current, code);
+        for (const [key, version] of batch) {
+          const [table, sentId] = key.split(':');
+          if (sentId !== id || (refusedTable && refusedTable !== table) || this.#outbox.get(key) !== version) continue;
+          if (refusedTable === 'projects') {
+            this.#outbox.delete(key);
+            await this.#settleProject(id, current, code);
+          } else {
+            rejection = `A change was rejected: ${error}`;
+          }
+        }
       }
-      // Anything left from this batch that the server didn't mention would loop forever; drop it.
-      for (const [key, version] of batch) if (this.#outbox.get(key) === version) this.#outbox.delete(key);
+      // Unacknowledged writes must remain pending. Dropping them lets the next pull restore stale server data.
+      for (const [key, version] of batch) if (this.#outbox.get(key) === version) rejection ||= 'The server did not save a pending change. Retry sync.';
       for (const table of SYNCED) await this.#db?.put(table, saved.filter(([name]) => name === table).map(([, row]) => row));
       this.#persistOutbox();
+      if (rejection) throw new Error(rejection);
     }
     return sent;
   }

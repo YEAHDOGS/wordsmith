@@ -353,7 +353,7 @@
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-                  <div class="overflow-hidden rounded-ui border bg-app spring {drag.carries(note.id) ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+                  <div class="overflow-hidden rounded-ui border bg-app transition-colors duration-150 ease-out {drag.carries(note.id) ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
                     data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
                     <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
                     <div class="spring h-full {drag.carries(note.id) ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>
