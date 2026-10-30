@@ -11,6 +11,7 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
+  import Save from '@lucide/svelte/icons/save';
   import Bot from '@lucide/svelte/icons/bot';
   import { fly, fade, slide } from 'svelte/transition';
   import Timeline from './Timeline.svelte';
@@ -19,21 +20,26 @@
   import Attachments from './Attachments.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
+  import NoteTitle from './NoteTitle.svelte';
   import LevelWheel from './LevelWheel.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
-  import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, parsePullRequestUrl } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
   import { copyText, noteMarkdown } from '../lib/export.js';
   import { renderMarkdown } from '../lib/markdown.js';
   import { markdownKeys } from '../lib/markdown-input.js';
+  import { LINE_BREAKS, autosize } from '../lib/autosize.js';
 
   /** @type {{ id: string }} */
   let { id } = $props();
 
   const SAVE_DEBOUNCE_MS = 400;
   const COPIED_MS = 1200;
+  // How long the Save button shows its "Saved" check before the editor closes
+  const SAVED_MS = 360;
+  const SAVE_KEY = 's';
   const FIELD = 'w-full border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none';
   const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
   // Crossfade for icons and labels that swap in place (copy -> copied)
@@ -49,6 +55,7 @@
 
   /** @type {HTMLDialogElement | undefined} */
   let dialog = $state();
+  let dialogOpen = $state(false);
   /** @type {Attachments | undefined} */
   let attachments = $state();
   let dropping = $state(false);
@@ -60,6 +67,9 @@
   let copied = $state(false);
   let copiedNote = $state(false);
   let preview = $state(false);
+  let saved = $state(false);
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
   let bodyField = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -79,6 +89,7 @@
     if (!dialog) return;
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', '');
+    dialogOpen = true;
   });
 
   function flush() {
@@ -103,17 +114,42 @@
     router.closeNote();
   }
 
+  /** Save is the X button with a confirmation: commit the fields now, flash "Saved", then close (which syncs). */
+  function save() {
+    if (saved) return;
+    flush();
+    // Typing stops here, so "Saved" describes everything that's saved.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    saved = true;
+    savedTimer = setTimeout(close, SAVED_MS);
+  }
+
+  /** Ctrl/Cmd+S saves instead of opening the browser's save-page dialog. @param {KeyboardEvent} event */
+  function onSaveKey(event) {
+    if (!note || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== SAVE_KEY) return;
+    event.preventDefault();
+    save();
+  }
+
   // However the editor closes (button, Escape, back-swipe, another note opening), it syncs right away, and a note left completely empty is
   // discarded: no title, body or status, and no files, uploads or pull requests. Mostly blank notes from the "+" button.
   $effect(() => () => {
-    flush();
-    const current = store.find('notes', id);
-    if (!current || current.deleted_at) return;
-    const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
-    const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
-    if (!hasContent && !hasFiles) store.remove('notes', id);
-    // Sync as soon as a note closes (push and pull), instead of waiting for the typing pause or the next poll.
-    store.sync(true);
+    clearTimeout(savedTimer);
+    clearTimeout(timer);
+    // Teardown can read Svelte's previous reactive snapshot. Sync after that snapshot is released,
+    // otherwise the queued deletion is sent with the note's old deleted_at: null.
+    queueMicrotask(() => {
+      flush();
+      const current = store.find('notes', id);
+      if (!current) return;
+      if (!current.deleted_at) {
+        const hasContent = [current.title, current.body, current.status].some((text) => text.trim()) || current.pull_requests.length;
+        const hasFiles = store.attachmentsFor(id).length || store.uploads.some((upload) => upload.noteId === id);
+        if (!hasContent && !hasFiles) store.remove('notes', id);
+      }
+      // Push and pull after closing, including when the note was deleted.
+      store.sync(true);
+    });
   });
 
   function addPr() {
@@ -182,6 +218,8 @@
   </button>
 {/snippet}
 
+<svelte:window onkeydown={onSaveKey} />
+
 {#if note}
   <dialog bind:this={dialog} aria-label={note.title || 'Note'} onclose={close} {oncancel} ondblclick={onBackdrop}
     class="m-0 h-dvh max-h-none w-full max-w-none bg-transparent p-0 text-ink backdrop:bg-scrim sm:m-auto sm:h-[min(92dvh,56rem)] sm:w-[min(96vw,72rem)] tv:w-[min(90vw,96rem)]">
@@ -201,19 +239,40 @@
             {@render copyNoteButton(TOOL)}
             <ShareMenu {note} class={TOOL} />
           </div>
+          {#if !note.deleted_at}
           <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden sm:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
+          {/if}
         </div>
+        <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
+        <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
+          onclick={save} title="Save and close (Ctrl+S)" aria-keyshortcuts="Control+S Meta+S">
+          <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+            <Save class="size-4 {SWAP} {saved ? 'scale-50 opacity-0' : ''}" />
+            <Check class="size-4 {SWAP} {saved ? '' : 'scale-50 opacity-0'}" />
+          </span>
+          <span class="sr-only grid *:col-start-1 *:row-start-1 min-[360px]:not-sr-only">
+            <span class="{SWAP} {saved ? 'opacity-0' : ''}" aria-hidden={saved}>Save</span>
+            <span class="{SWAP} {saved ? '' : 'opacity-0'}" aria-hidden={!saved} aria-live="polite">Saved</span>
+          </span>
+        </button>
         <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={close} aria-label="Close"><X class="size-5" /></button>
       </div>
 
-      <div class="grid min-h-0 flex-1 grid-rows-[auto_auto] overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
-        <!-- Content -->
-        <div class="flex flex-col gap-3 p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
-          <input bind:value={title} oninput={queueSave} maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
-            class="w-full bg-transparent text-fluid-xl font-bold tracking-tight text-ink placeholder:text-ink-faint focus:outline-none" />
+      {#if note.deleted_at}
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2 text-sm text-ink-muted">
+          <span>In trash · deleted {fullTime(note.deleted_at)}</span>
+          <button class="{TOOL} text-ink" onclick={() => { set({ deleted_at: null }); store.sync(true); }}>Restore note</button>
+        </div>
+      {/if}
 
-          <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
+      <!-- One column on phones, pinned to the screen width (minmax 0), so no field can ever widen the page sideways -->
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
+        <!-- Content -->
+        <div class="flex min-w-0 flex-col gap-3 overflow-x-hidden p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
+          <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
+
+          <div class="flex min-h-[12dvh] flex-1 flex-col border-y border-line">
             {#if preview}
               <!-- Rendered by src/lib/markdown.js, which escapes all input -->
               <div class="markdown selectable min-h-0 flex-1 overflow-y-auto py-2 text-fluid-sm text-ink" in:fade={{ duration: 120 }}>
@@ -222,16 +281,16 @@
             {:else}
               <textarea bind:this={bodyField} bind:value={body} oninput={queueSave} use:markdownKeys maxlength={MAX_BODY} aria-label="Body" in:fade={{ duration: 120 }}
                 placeholder="Write anything. Agents read it verbatim. Markdown works: **bold**, _italic_, # headings, - lists"
-                class="min-h-32 flex-1 resize-none bg-transparent py-2 lg:min-h-48 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+                class="min-h-0 flex-1 resize-none overflow-x-hidden overflow-y-auto bg-transparent py-2 text-fluid-sm leading-relaxed text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
             {/if}
             <!-- Formatting lives in the box's bottom-right corner -->
             <div class="flex justify-end border-t border-line">
-              <MarkdownToolbar textarea={bodyField} bind:preview showPreview class="-mr-1 py-0.5" />
+              <MarkdownToolbar textarea={bodyField} bind:preview showPreview class="py-0.5" />
             </div>
           </div>
 
           <!-- Details: project, feature fields and labels, as tidy wrapping rows under the body (every note is a feature) -->
-          <section class="flex flex-col gap-2 tv:gap-3" aria-label="Details">
+          <section class="flex shrink-0 flex-col gap-2 tv:gap-3" aria-label="Details">
             <div class="flex flex-wrap gap-2">
               <select class="spring min-w-0 flex-1 basis-40 border border-line bg-surface px-2 py-2 text-xs text-ink hover:border-line-strong focus:border-accent focus:outline-none sm:max-w-64 sm:flex-none" aria-label="Project"
                 value={note.project_id ?? ''} onchange={(event) => set({ project_id: event.currentTarget.value || null })}>
@@ -252,11 +311,13 @@
                 </div>
                 <!-- Priority and difficulty 0-5 as two scroll wheels side by side -->
                 <div class="grid grid-cols-2 gap-2">
-                  <LevelWheel value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} />
-                  <LevelWheel value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
+                  <LevelWheel active={dialogOpen} value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} />
+                  <LevelWheel active={dialogOpen} value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
                 </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
-                  <input bind:value={status} oninput={queueSave} maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status" class={FIELD} />
+                  <textarea bind:value={status} use:autosize={status} rows="1" maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status"
+                    oninput={() => { status = status.replace(LINE_BREAKS, ' '); queueSave(); }} onkeydown={(event) => event.key === 'Enter' && event.preventDefault()}
+                    class="{FIELD} block resize-none overflow-hidden"></textarea>
                   <input value={note.assignee} maxlength={MAX_NAME} placeholder="Assignee" aria-label="Assignee" class="{FIELD} sm:w-40"
                     onchange={(event) => set({ assignee: event.currentTarget.value.trim() })} />
                 </div>
@@ -273,22 +334,7 @@
 
           <Attachments bind:this={attachments} noteId={id} />
 
-            <section class="border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
-              <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
-              {#each note.pull_requests as pr (pr.url)}
-                <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
-                  {#if pr.state === 'merged'}<GitMerge class="size-4 {PR_STYLE.merged}" />{:else}<GitPullRequest class="size-4 {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" />{/if}
-                  <span class="min-w-0 flex-1 truncate">{pr.title || `${pr.repo}#${pr.number}`}</span>
-                  <span class="font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
-                  <ExternalLink class="size-3.5 text-ink-faint" />
-                </a>
-              {/each}
-              <form class="flex" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
-                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} border-0" />
-                <button class="spring press border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
-              </form>
-              {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
-            </section>
+
 
           <!-- What an agent decided when it triaged this (POST /api/v1/notes/:id/analysis): read-only here -->
           {#if note.analysis || note.batch}
@@ -307,16 +353,32 @@
         </div>
 
         <!-- Timeline -->
-        <aside class="border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline">
+        <aside class="min-w-0 overflow-x-hidden border-t border-line p-4 tv:p-8 lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l" aria-label="Timeline and pull requests">
           <h3 class="mb-3 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Timeline</h3>
           <Timeline {note} />
-          <dl class="mt-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
+            <section class="mt-6 border border-line" aria-label="Pull requests" transition:slide={{ duration: BLOCK_MS }}>
+              <h3 class="border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint">Pull requests</h3>
+              {#each note.pull_requests as pr (pr.url)}
+                <a href={pr.url} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-2 border-b border-line px-3 py-2 text-sm hover:bg-surface-raised" transition:fade={{ duration: 150 }}>
+                  {#if pr.state === 'merged'}<GitMerge class="size-4 {PR_STYLE.merged}" />{:else}<GitPullRequest class="size-4 {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" />{/if}
+                  <span class="min-w-0 flex-1 truncate">{pr.title || `${pr.repo}#${pr.number}`}</span>
+                  <span class="font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}">{pr.state}{pr.merged_at ? ` ${fullTime(pr.merged_at)}` : ''}</span>
+                  <ExternalLink class="size-3.5 text-ink-faint" />
+                </a>
+              {/each}
+              <form class="flex min-w-0" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
+                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} min-w-0 flex-1 border-0" />
+                <button class="spring press shrink-0 border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
+              </form>
+              {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
+            </section>
+          <dl class="mt-6 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-line pt-3 font-mono text-[0.6875rem] text-ink-faint">
             <dt>created</dt><dd class="selectable text-ink-muted">{fullTime(note.created_at)}</dd>
             <dt>updated</dt><dd class="selectable text-ink-muted">{fullTime(note.updated_at)}</dd>
             <dt>id</dt>
-            <dd class="flex items-center gap-1">
-              <span class="selectable truncate text-ink-muted">{id}</span>
-              <button class="spring press p-0.5 hover:text-accent" onclick={copyId} aria-label="Copy id for agents" title="Copy id"><Copy class="size-3" /></button>
+            <dd class="flex min-w-0 items-center gap-1">
+              <span class="selectable min-w-0 truncate text-ink-muted">{id}</span>
+              <button class="spring press shrink-0 p-0.5 hover:text-accent" onclick={copyId} aria-label="Copy id for agents" title="Copy id"><Copy class="size-3" /></button>
               {#if copied}<span class="text-complete" transition:fade={{ duration: 100 }}>copied</span>{/if}
             </dd>
           </dl>

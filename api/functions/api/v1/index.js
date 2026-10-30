@@ -1,6 +1,6 @@
 // GET /api/v1 - self-describing index so an agent handed just a token and this URL can find its way.
 import { json } from '../../../lib/http.js';
-import { COLORS, DIFFICULTY_LABELS, FEATURE_STATES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, SMALL_DIFFICULTY } from '../../../../src/lib/models.js';
+import { AUDIO_TYPES, COLORS, DIFFICULTY_LABELS, FEATURE_STATES, MAX_AUDIO_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, SMALL_DIFFICULTY } from '../../../../src/lib/models.js';
 
 const BYTES_PER_MB = 1024 * 1024;
 
@@ -19,8 +19,8 @@ const ENDPOINTS = [
   ['GET', '/api/v1/notes/:id/analysis', 'The triage of one note: difficulty, batch, analysis notes, analyzed_at. Read it before you start.'],
   ['POST', '/api/v1/notes/:id/analysis', 'Triage a note: { difficulty (1 trivial to 5 epic), batch, analysis (replaces) or analysis_append }. Write scope, files to touch, plan, blockers and work done.'],
   ['GET', '/api/v1/batches', 'Notes grouped by batch: what ships together, how much is open, which PRs carry it.'],
-  ['POST', '/api/notes/:id/attachments', `Attach an image or video: raw file as the body, Content-Type set to its type, X-File-Name header. Images up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB (shrink them first), videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB.`],
-  ['GET', '/api/attachments/:attachment_id', 'Download an attachment listed on a note (same bearer token). Look at screenshots before you start.'],
+  ['POST', '/api/notes/:id/attachments', `Attach an image, video, audio file, or document: raw file as the body, Content-Type set to its type, X-File-Name header. Images up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB (shrink them first), videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, audio (${Object.entries(AUDIO_TYPES).map(([type, extensions]) => `${extensions.join('/')} ${type}`).join(', ')}) up to ${MAX_AUDIO_BYTES / BYTES_PER_MB} MB, and documents (.pdf application/pdf, .docx application/vnd.openxmlformats-officedocument.wordprocessingml.document, .md text/markdown, .txt text/plain; name and type must match) up to ${MAX_DOCUMENT_BYTES / BYTES_PER_MB} MB.`],
+  ['GET', '/api/attachments/:attachment_id', 'Download an attachment listed on a note (same bearer token). Look at screenshots and read attached documents before you start.'],
   ['GET', '/api/v1/notes?q=&label=&project=', 'Plain notes and features together, with search.'],
   ['POST', '/api/v1/notes', 'Capture a plain note: { title, body, project?, labels? }.'],
 ];
@@ -39,6 +39,7 @@ export function onRequestGet({ data }) {
       'GET /api/v1/batches shows what earlier agents grouped and shipped.',
     ],
     workflow: [
+      'Send an X-Agent-Session header (letters, digits, . _ -, up to 32) naming your session, so sessions sharing a token show apart on claims and timelines.',
       'POST /api/v1/features/next to claim work (state becomes in_progress, started_at is stamped).',
       'PATCH status as you go so the human can follow along.',
       'PATCH pr_url once your pull request is open.',

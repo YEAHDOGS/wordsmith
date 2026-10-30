@@ -7,6 +7,7 @@
   import ProviderIcon from './ProviderIcon.svelte';
   import { auth } from '../lib/auth.svelte.js';
   import { PROVIDERS } from '../lib/models.js';
+  import { PRIVACY_PATH, privacy } from './privacy-route.svelte.js';
   import TEXT from './login.json';
 
   /** @type {{ notice?: { kind: 'device_confirm' | 'device_done', device?: string, provider?: string, code?: string } | null, message?: string }} */
@@ -135,7 +136,10 @@
   </section>
 
   <footer class="relative z-10 flex items-center justify-between border-t border-line bg-app px-4 py-2 sm:px-8">
-    <span class="text-xs tracking-wider text-ink-faint">&copy; {new Date().getFullYear()} DOGS.</span>
+    <span class="flex items-center gap-3 text-xs tracking-wider text-ink-faint">
+      &copy; {new Date().getFullYear()} DOGS.
+      <a href={PRIVACY_PATH} class="spring underline-offset-4 hover:text-accent hover:underline" onclick={(event) => privacy.show(event)}>{TEXT.privacy}</a>
+    </span>
     <a href={WEAREDOGS_URL} target="_blank" rel="noopener noreferrer" class="spring opacity-70 hover:opacity-100">
       <img src={madeByDogs} alt={TEXT.madeBy} width="480" height="159" class="h-6 w-auto short:h-5 tv:h-10" />
     </a>

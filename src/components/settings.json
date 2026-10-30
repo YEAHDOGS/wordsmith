@@ -16,6 +16,7 @@
   "lastUsed": "last used",
   "never": "never used",
   "noTokens": "No tokens yet.",
+  "tokenColor": "Note color for {name}: every note it creates takes this color",
   "connect": "Connect an agent",
   "connectHint": "wordsmith works with T3 Code, Claude Code, Codex or any agent that can make HTTP requests. Set up once, then review one pull request a day.",
   "connectSteps": [
@@ -63,6 +64,7 @@
   "iosNote": "iPhone and iPad can't install from GitHub. wordsmith is coming to TestFlight and the App Store; until then, open it in Safari and use Share → Add to Home Screen.",
   "platforms": { "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
   "version": "Version",
+  "privacy": "Privacy Policy",
   "latestPr": "Latest change",
   "updated": "updated",
   "providers": { "github": "GitHub", "google": "Google", "apple": "Apple" }

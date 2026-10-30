@@ -4,16 +4,17 @@ const MAX_JSON_BYTES = 2_000_000;
 // Origins of the shipped Tauri WebViews: macOS, iOS and Linux use tauri://localhost; Windows and Android use http(s)://tauri.localhost.
 const NATIVE_ORIGINS = ['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost'];
 const CORS_METHODS = 'GET, POST, PATCH, DELETE, OPTIONS';
-const CORS_HEADERS = 'Authorization, Content-Type';
+const CORS_HEADERS = 'Authorization, Content-Type, X-Agent-Session, X-File-Name';
 const CORS_MAX_AGE = '86400';
 const NO_STORE = 'private, no-store';
 
-/** Error that becomes a JSON response with its status. */
+/** Error that becomes a JSON response with its status, and a code the app can act on (src/lib/models.js). */
 export class HttpError extends Error {
-  /** @param {number} status @param {string} message */
-  constructor(status, message) {
+  /** @param {number} status @param {string} message @param {string} [code] */
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 

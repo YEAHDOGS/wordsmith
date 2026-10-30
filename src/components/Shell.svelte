@@ -17,16 +17,17 @@
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
   import SelectionBar from './SelectionBar.svelte';
+  import Trash from './Trash.svelte';
+  import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { FEATURES_SCOPE } from '../lib/models.js';
+  import { topPosition } from '../lib/reorder.svelte.js';
+  import { FEATURES_SCOPE, TRASH_DAYS } from '../lib/models.js';
+  import { pageChange, pageIn, pageOut } from './page-carousel.js';
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
-  // Page changes: the old page fades out while the new one rises in, stacked in the same box so nothing shifts.
-  const PAGE_IN = { y: 10, duration: 260, delay: 60, easing: quintOut };
-  const PAGE_OUT = { duration: 120, easing: cubicIn };
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
@@ -34,6 +35,7 @@
 
   let projectTab = $state('board');
   const route = $derived(router.route);
+  const pageKey = $derived(route.id ? `${route.view}/${route.id}` : route.view);
   const live = $derived(store.notes.filter((note) => !note.deleted_at));
   const project = $derived(route.view === 'project' || route.view === 'project-settings' ? store.find('projects', route.id) : null);
   const label = $derived(route.view === 'label' ? store.find('labels', route.id) : null);
@@ -59,6 +61,7 @@
       }
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
+      case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
       case 'project-settings': return { title: project?.name || 'Project', subtitle: 'Project settings' };
@@ -66,8 +69,14 @@
     }
   });
 
-  // The gear next to the title opens the board's settings; on those pages it isn't shown.
-  const openSettings = $derived(route.view === 'features' ? () => router.go('features-settings') : project && route.view === 'project' ? () => router.go('project-settings', project.id) : null);
+  // The board gear toggles between a board and its settings without stacking a duplicate history entry.
+  const openSettings = $derived.by(() => {
+    if (route.view === 'features') return () => router.go('features-settings');
+    if (route.view === 'features-settings') return () => router.replace('features');
+    if (project && route.view === 'project') return () => router.go('project-settings', project.id);
+    if (project && route.view === 'project-settings') return () => router.replace('project', project.id);
+    return null;
+  });
 
   /** The cards on screen right now: what "select all" picks. */
   const visible = $derived.by(() => {
@@ -94,6 +103,7 @@
     const note = store.create('notes', {
       project_id: route.view === 'project' ? route.id : null,
       label_ids: route.view === 'label' ? [route.id] : [],
+      position: topPosition(),
     });
     router.openNote(note.id);
   }
@@ -105,6 +115,12 @@
     projectTab;
     // untrack: clearing reads the set, which would make every new selection clear itself.
     untrack(() => ui.selected.clear());
+  });
+
+  // Page changes slide like a carousel in sidebar order (page-carousel.js); pre, so the move is set before the swap.
+  $effect.pre(() => {
+    const key = pageKey;
+    untrack(() => pageChange(key, store));
   });
 
   // Leaving a project resets its tab.
@@ -129,10 +145,12 @@
     </div>
 
     <main class="relative min-h-0 flex-1 overflow-hidden">
-      {#key route.view + route.id}
-        <div class="absolute inset-0 flex flex-col" in:fly={PAGE_IN} out:fade={PAGE_OUT}>
+      {#key pageKey}
+        <div class="absolute inset-0 flex flex-col" in:pageIn out:pageOut>
           {#if route.view === 'settings'}
             <Settings />
+          {:else if route.view === 'trash'}
+            <Trash />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}

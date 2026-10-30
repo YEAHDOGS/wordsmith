@@ -1,8 +1,8 @@
 <script>
-  // A project's Media tab: every image and video attached to its notes, as a grid of tiles. Filter by the note's state
+  // A project's Media tab: every image, video, and audio attachment on its notes, as a grid of tiles. Filter by state
   // (All, Requested, In progress, Complete) and sort newest or oldest first; a tile opens its note. Attachments sync to
   // every device already (store.attachments), so this costs no extra requests beyond the files themselves, which the
-  // browser caches for good. Only the grid scrolls; the controls stay put.
+  // browser caches for good. Only the grid scrolls; the controls stay put. Documents are left out on purpose.
   import Play from '@lucide/svelte/icons/play';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import ArrowUpNarrowWide from '@lucide/svelte/icons/arrow-up-narrow-wide';
@@ -12,7 +12,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
-  import { FEATURE_STATES } from '../lib/models.js';
+  import { FEATURE_STATES, attachmentKind } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
 
   /** @type {{ notes: any[] }} */
@@ -27,13 +27,13 @@
   let newestFirst = $state(true);
 
   const byId = $derived(new Map(notes.map((note) => [note.id, note])));
-  const tiles = $derived(store.attachments
-    .filter((file) => !file.deleted_at && byId.has(file.note_id))
+  const media = $derived(store.attachments.filter((file) => !file.deleted_at && byId.has(file.note_id) && attachmentKind(file.type) !== 'document'));
+  const tiles = $derived(media
     .map((file) => ({ file, note: byId.get(file.note_id) }))
     .filter(({ note }) => filter === ALL || note.state === filter)
     .sort((a, b) => (newestFirst ? b.file.created_at - a.file.created_at : a.file.created_at - b.file.created_at)));
-  const counts = $derived(Object.fromEntries(FILTERS.map((state) => [state, store.attachments
-    .filter((file) => !file.deleted_at && byId.has(file.note_id) && (state === ALL || byId.get(file.note_id).state === state)).length])));
+  const counts = $derived(Object.fromEntries(FILTERS.map((state) => [state, media
+    .filter((file) => state === ALL || byId.get(file.note_id).state === state).length])));
 
   /**
    * Tiles show media whole (object-contain) scaled up by --cover to fill the square; hover or focus drops the scale
@@ -93,7 +93,7 @@
         {/each}
       </ul>
     {:else}
-      <p class="px-4 py-12 text-center text-sm text-ink-muted" in:fade={MOTION}>{counts[ALL] ? 'No media on notes in this state.' : 'No pictures or videos on this project’s notes yet. Attach them to a note and they show up here.'}</p>
+      <p class="px-4 py-12 text-center text-sm text-ink-muted" in:fade={MOTION}>{counts[ALL] ? 'No media on notes in this state.' : 'No pictures, videos, or audio on this project’s notes yet. Attach them to a note and they show up here.'}</p>
     {/if}
   </div>
 </div>

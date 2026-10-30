@@ -15,7 +15,7 @@ export async function onRequest({ request, env, next }) {
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
     if (status === 500) console.error(error);
-    response = json({ error: status === 500 ? 'Something went wrong' : /** @type {Error} */ (error).message }, status);
+    response = json({ error: status === 500 ? 'Something went wrong' : /** @type {Error} */ (error).message, code: error instanceof HttpError ? error.code : undefined }, status);
   }
   if (!Object.keys(cors).length) return response;
   const withCors = new Response(response.body, response);

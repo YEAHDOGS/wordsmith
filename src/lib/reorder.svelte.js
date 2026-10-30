@@ -22,8 +22,12 @@ const EDGE_PX = 64;
 const MAX_SCROLL_PX = 18;
 // Phone board lanes snap, so near a side edge the board jumps one lane, then waits before the next jump.
 const LANE_JUMP_MS = 700;
-// Pointer travel needed before the preview slot is worked out again; stops the slot flickering between two cards.
+// Pointer travel since the last slot change needed before the slot is worked out again. Cards sliding under a still
+// pointer never move the slot, so the preview can't flick between two slots on its own.
 const RETARGET_PX = 4;
+// The pointer rests on a new slot this long before the preview moves there, so cards don't flick back and forth
+// while it passes over them (letting go commits the slot under the pointer at once).
+const SETTLE_MS = 160;
 // Horizontal distance weighs this much more than vertical when picking the card under the pointer (stay in the column).
 const COLUMN_WEIGHT = 1000;
 const LAND_MS = 160;
@@ -42,6 +46,7 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @property {(note: any) => number} [naturalIndex] where a note lands when the slot isn't chosen by hand
  * @property {string} [group] zones sharing a group are side by side (board columns): Alt+Left/Right hops between them
  * @property {string} [label] spoken after a keyboard move into this zone
+ * @property {() => boolean | undefined} [unchanged] whether the drop shown would leave the zone as it is (undefined: judge by index)
  */
 
 /**
@@ -51,6 +56,12 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  */
 export function orderKey(note) {
   return note.position ?? (note.kind === 'feature' ? note.created_at : -note.created_at);
+}
+
+/** Position for a new note: one step ahead of every note's key, so it lands first in manual order, board and claim queue. */
+export function topPosition() {
+  const keys = store.notes.filter((note) => !note.deleted_at).map(orderKey);
+  return (keys.length ? Math.min(...keys) : Date.now()) - POSITION_STEP;
 }
 
 /**
@@ -173,20 +184,26 @@ function scrollParent(start, axis) {
  * @param {string} id the dragged note
  * @param {number} x
  * @param {number} y
+ * @param {Map<string, any>} targets stable card bounds relative to the zone
+ * @returns {{ index: number, anchor: { id: string, below: boolean } | null }} the slot, and the card it sits above or below
  */
-function slotAt(zoneEl, ids, id, x, y) {
+function slotAt(zoneEl, ids, id, x, y, targets) {
   let best = { id: '', below: false, score: Infinity };
-  for (const node of zoneEl.querySelectorAll(CARD_SELECTOR)) {
-    const cardId = /** @type {HTMLElement} */ (node).dataset.flipId ?? '';
+  const origin = zoneEl.getBoundingClientRect();
+  for (const [cardId, target] of targets) {
     if (cardId === id || !ids.includes(cardId)) continue;
-    const rect = node.getBoundingClientRect();
+    const rect = {
+      left: origin.left + target.left, right: origin.left + target.right,
+      top: origin.top + target.top, bottom: origin.top + target.bottom, height: target.height,
+    };
     const dx = Math.max(rect.left - x, 0, x - rect.right);
     const dy = Math.max(rect.top - y, 0, y - rect.bottom);
     const score = dx * COLUMN_WEIGHT + dy;
     if (score < best.score) best = { id: cardId, below: y > rect.top + rect.height / 2, score };
   }
   const at = ids.indexOf(best.id);
-  return at === -1 ? ids.length : at + (best.below ? 1 : 0);
+  if (at === -1) return { index: ids.length, anchor: null };
+  return { index: at + (best.below ? 1 : 0), anchor: { id: best.id, below: best.below } };
 }
 
 /** @type {HTMLElement | null} */
@@ -219,6 +236,8 @@ class Drag {
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
   index = $state(0);
+  /** The card the preview slot sits above or below, so a masonry can open the gap in that card's column. @type {{ id: string, below: boolean } | null} */
+  anchor = $state(null);
   /** Ghost card position (viewport px, top-left) and width. */
   x = $state(0);
   y = $state(0);
@@ -228,6 +247,8 @@ class Drag {
 
   /** @type {Map<Element, Zone>} */
   #zones = new Map();
+  /** Geometry captured before preview layouts can move the hit targets. @type {Map<Element, Map<string, any>>} */
+  #targets = new Map();
   #grab = { x: 0, y: 0 };
   #pointer = { x: 0, y: 0 };
   #last = { x: -Infinity, y: -Infinity };
@@ -238,6 +259,12 @@ class Drag {
   #laneAt = 0;
   #frame = 0;
   #moved = false;
+  /** A slot the pointer is over but hasn't rested on long enough yet. @type {{ key: string, slot: string, at: number } | null} */
+  #pending = null;
+  // Where the finger first touched. Its touchmoves keep coming there even after the card is rebuilt in another column,
+  // when they no longer reach window; listening there keeps the page from scrolling (and cancelling the drag).
+  /** @type {EventTarget | null} */
+  #touchTarget = null;
 
   get id() {
     return this.note?.id ?? '';
@@ -290,6 +317,19 @@ class Drag {
     const zoneEl = card.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (this.note || !zoneEl || !zone) return;
+    this.#targets.clear();
+    for (const element of this.#zones.keys()) {
+      const origin = element.getBoundingClientRect();
+      const targets = new Map();
+      for (const node of element.querySelectorAll(CARD_SELECTOR)) {
+        const bounds = node.getBoundingClientRect();
+        targets.set(/** @type {HTMLElement} */ (node).dataset.flipId ?? '', {
+          left: bounds.left - origin.left, right: bounds.right - origin.left,
+          top: bounds.top - origin.top, bottom: bounds.bottom - origin.top, height: bounds.height,
+        });
+      }
+      this.#targets.set(element, targets);
+    }
     const rect = card.getBoundingClientRect();
     this.#grab = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     this.width = rect.width;
@@ -306,6 +346,8 @@ class Drag {
     this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
+    this.anchor = null;
+    this.#pending = null;
     this.landing = false;
     this.#last = { x: event.clientX, y: event.clientY };
     this.#follow(event);
@@ -315,7 +357,8 @@ class Drag {
     addEventListener('pointerup', this.#ondrop);
     addEventListener('pointercancel', this.#oncancel);
     addEventListener('keydown', this.#onkey, true);
-    addEventListener('touchmove', this.#holdScroll, { passive: false });
+    this.#touchTarget = event.target;
+    this.#touchTarget?.addEventListener('touchmove', this.#holdScroll, { passive: false });
     this.#frame = requestAnimationFrame(this.#loop);
   }
 
@@ -387,7 +430,7 @@ class Drag {
 
   #loop = () => {
     const scrolled = this.#autoscroll();
-    if (this.#moved || scrolled) this.#locate(scrolled);
+    if (this.#moved || scrolled || this.#pending) this.#locate(scrolled);
     this.#moved = false;
     this.#frame = requestAnimationFrame(this.#loop);
   };
@@ -419,18 +462,33 @@ class Drag {
   /** Works out the zone and slot under the pointer. Outside every zone the last preview stays. @param {boolean} force */
   #locate(force) {
     const { x, y } = this.#pointer;
-    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) return;
+    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) {
+      this.#pending = null;
+      return;
+    }
     const zoneEl = document.elementFromPoint(x, y)?.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
-    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) return;
-    this.#last = { x, y };
+    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) {
+      this.#pending = null;
+      return;
+    }
     const taken = this.#takenBy(zone);
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
-    const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
+    const { index, anchor } = zone.sortable === false ? { index: zone.naturalIndex?.(this.note) ?? 0, anchor: null } : slotAt(zoneEl, ids, this.id, x, y, this.#targets.get(zoneEl) ?? new Map());
+    const slot = `${index}:${anchor?.id ?? ''}:${anchor?.below ?? ''}`;
+    const now = performance.now();
+    if (zone.key === this.zone && slot === `${this.index}:${this.anchor?.id ?? ''}:${this.anchor?.below ?? ''}`) this.#pending = null;
+    else if (!force && this.zone) {
+      if (this.#pending?.key !== zone.key || this.#pending.slot !== slot) this.#pending = { key: zone.key, slot, at: now };
+      if (now - this.#pending.at < SETTLE_MS) return;
+    }
+    this.#pending = null;
+    this.#last = { x, y };
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
+    this.anchor = anchor;
   }
 
   #stop() {
@@ -439,12 +497,14 @@ class Drag {
     removeEventListener('pointerup', this.#ondrop);
     removeEventListener('pointercancel', this.#oncancel);
     removeEventListener('keydown', this.#onkey, true);
-    removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget?.removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget = null;
+    this.#targets.clear();
   }
 
   #ondrop = () => {
-    // A quick flick can end before the next frame has worked out the slot.
-    if (this.#moved) this.#locate(true);
+    // Commit the visible preview, even when another target is still settling.
+    if (!this.zone) this.#locate(true);
     const zone = [...this.#zones.values()].find((entry) => entry.key === this.zone);
     const { note, index } = this;
     this.#stop();
@@ -453,8 +513,11 @@ class Drag {
     // Let go where it started (the block already sits together, in order, at this slot of this zone): nothing to save,
     // so the chosen sort isn't switched to manual either.
     const start = list.findIndex((entry) => entry.id === notes[0]?.id);
-    const inPlace = start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id);
+    const inPlace = zone?.unchanged?.() ?? (start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id));
     if (zone && !inPlace) zone.ondrop(notes, index);
+    // The saved order now owns the layout. Applying the preview again moves the block twice.
+    this.zone = '';
+    this.anchor = null;
     this.#land();
   };
 

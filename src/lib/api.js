@@ -8,12 +8,13 @@ const NO_CONTENT = 204;
 
 export const IS_NATIVE = isTauri();
 
-/** API error with the HTTP status attached. */
+/** API error with the HTTP status, and the server's code when it sent one (src/lib/models.js). */
 export class ApiError extends Error {
-  /** @param {number} status @param {string} message */
-  constructor(status, message) {
+  /** @param {number} status @param {string} message @param {string} [code] */
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -43,7 +44,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   });
   if (response.status === NO_CONTENT) return null;
   const data = await response.json().catch(() => ({}));
-  if (!response.ok && response.status !== 202) throw new ApiError(response.status, data.error || `Request failed (${response.status})`);
+  if (!response.ok && response.status !== 202) throw new ApiError(response.status, data.error || `Request failed (${response.status})`, data.code);
   return data;
 }
 

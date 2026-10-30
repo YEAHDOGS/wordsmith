@@ -15,7 +15,7 @@ const CREATE_WINDOW_MS = 3_600_000;
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { results } = await context.env.DB.prepare(
-    'SELECT id, name, prefix, created_at, last_used_at FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC',
+    'SELECT id, name, prefix, color, created_at, last_used_at FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC',
   ).bind(user.id).all();
   return json({ tokens: results });
 }
@@ -32,7 +32,7 @@ export async function onRequestPost(context) {
   if (Number(count?.n) >= MAX_TOKENS) throw new HttpError(400, `Revoke a token first (limit ${MAX_TOKENS})`);
 
   const token = randomToken(API_TOKEN_PREFIX);
-  const row = { id: crypto.randomUUID(), name: cleanName, prefix: token.slice(0, PREFIX_LENGTH), created_at: Date.now(), last_used_at: null };
+  const row = { id: crypto.randomUUID(), name: cleanName, prefix: token.slice(0, PREFIX_LENGTH), color: 'default', created_at: Date.now(), last_used_at: null };
   await env.DB.prepare('INSERT INTO api_tokens (id, user_id, name, token_hash, prefix, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(row.id, user.id, row.name, await sha256(token), row.prefix, row.created_at).run();
   return json({ token: row, secret: token }, 201);

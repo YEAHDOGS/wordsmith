@@ -1,5 +1,6 @@
 <script>
-  // Images and videos on a note: pick, drop or paste files in; thumbnails with upload progress; click to view full size.
+  // Images, video, audio and documents on a note: pick, drop or paste files in; thumbnails (file tiles for audio and documents) with
+  // upload progress; click to view full size, or a document's preview and its open / download link.
   // The full-size view can copy an image to the clipboard where the browser supports writing images.
   import Paperclip from '@lucide/svelte/icons/paperclip';
   import Play from '@lucide/svelte/icons/play';
@@ -10,16 +11,16 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import AttachmentMedia from './AttachmentMedia.svelte';
+  import DocumentPreview from './DocumentPreview.svelte';
+  import DocumentTile from './DocumentTile.svelte';
   import { store } from '../lib/store.svelte.js';
   import { mediaUrl } from '../lib/api.js';
-  import { IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, VIDEO_TYPES } from '../lib/models.js';
+  import { ACCEPT_ATTACHMENTS, MAX_ATTACHMENTS_PER_NOTE, attachmentKind, uploadType } from '../lib/models.js';
+  import { fileSize } from '../lib/documents.js';
 
   /** @type {{ noteId: string }} */
   let { noteId } = $props();
 
-  const ACCEPT = [...IMAGE_TYPES, ...VIDEO_TYPES].join(',');
-  const KB = 1024;
-  const MB = KB * KB;
   const PNG = 'image/png';
   const COPIED_MS = 1400;
   // Crossfade for the copy button's icon and label, so the swap to "Copied" never changes its size
@@ -45,8 +46,8 @@
   /** Called by the editor too, for drops and pastes anywhere on the note. @param {File[]} list */
   export function add(list) {
     error = '';
-    const allowed = list.filter((file) => IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type));
-    if (allowed.length < list.length) error = 'Only images and videos can be attached.';
+    const allowed = list.filter((file) => uploadType(file));
+    if (allowed.length < list.length) error = 'Choose a supported image, video, audio file, or document.';
     if (!allowed.length) return;
     if (!navigator.onLine) {
       error = 'Attachments need a connection. Try again when you are back online.';
@@ -108,19 +109,24 @@
   <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
     <button class="spring press inline-flex w-full items-center justify-center gap-1.5 border border-dashed border-line-strong px-3 py-2.5 text-xs text-ink-muted hover:border-accent hover:text-ink sm:w-auto sm:justify-start sm:border-solid sm:border-line sm:px-2.5 sm:py-1.5"
       onclick={() => picker?.click()}>
-      <Paperclip class="size-3.5" />Attach image or video
+      <Paperclip class="size-3.5" />Attach a file
     </button>
     <span class="hidden font-mono text-[0.6875rem] text-ink-faint sm:inline">or drop / paste onto the note</span>
-    <input bind:this={picker} type="file" accept={ACCEPT} multiple class="hidden" onchange={(event) => { add([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
+    <input bind:this={picker} type="file" accept={ACCEPT_ATTACHMENTS} multiple class="hidden" onchange={(event) => { add([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
   </div>
 
   {#if files.length || uploads.length}
     <!-- Phones: an even three-column grid of square tiles. Wider screens: fixed-size tiles that wrap. -->
     <div class="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap" transition:fade={{ duration: 150 }}>
-      {#each files as file (file.id)}
+      {#each files.filter((file) => attachmentKind(file.type) !== 'audio') as file (file.id)}
         <div class="group relative aspect-square overflow-hidden border border-line bg-app sm:size-28 tv:size-40" animate:flip={{ duration: 200 }} in:scale={{ start: 0.9, duration: 150 }} out:fade={{ duration: 120 }}>
           <button class="block size-full" onclick={() => view(file)} aria-label="View {file.name}">
-            <AttachmentMedia {file} class="size-full object-cover" />
+            {#if attachmentKind(file.type) === 'document'}
+              <DocumentTile {file} class="size-full" />
+
+            {:else}
+              <AttachmentMedia {file} class="size-full object-cover" />
+            {/if}
             {#if file.type.startsWith('video/')}
               <span class="absolute inset-0 flex items-center justify-center"><span class="flex size-9 items-center justify-center rounded-full bg-scrim text-ink"><Play class="size-4" /></span></span>
             {/if}
@@ -145,6 +151,15 @@
       {/each}
     </div>
   {/if}
+  {#each files.filter((file) => attachmentKind(file.type) === 'audio') as file (file.id)}
+    <div class="mt-2 flex min-w-0 items-center gap-2 border border-line p-2">
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-xs text-ink-muted" title={file.name}>{file.name}</p>
+        <AttachmentMedia {file} controls class="h-10 w-full min-w-0 max-w-full" />
+      </div>
+      <button class="spring press shrink-0 p-2 text-ink-muted hover:text-accent" aria-label="Delete {file.name}" onclick={() => remove(file)}><Trash class="size-3.5" /></button>
+    </div>
+  {/each}
   {#if error}<p class="mt-1 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{error}</p>{/if}
 </section>
 
@@ -153,13 +168,17 @@
   <div data-lightbox class="fixed inset-0 z-50 flex flex-col bg-scrim" transition:fade={{ duration: 150 }} role="dialog" aria-modal="true" aria-label={viewing.name}>
     <div class="flex items-center gap-3 bg-app px-4 py-2">
       <p class="min-w-0 flex-1 truncate text-sm">{viewing.name}</p>
-      <span class="font-mono text-[0.6875rem] text-ink-faint">{viewing.size < MB ? `${Math.ceil(viewing.size / KB)} KB` : `${(viewing.size / MB).toFixed(1)} MB`}</span>
+      <span class="font-mono text-[0.6875rem] text-ink-faint">{fileSize(viewing.size)}</span>
       <button class="spring press p-1 text-ink-muted hover:text-ink" aria-label="Close" onclick={() => (viewing = null)}><X class="size-5" /></button>
     </div>
     <div class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4">
       <button class="absolute inset-0 cursor-default" aria-label="Close" tabindex="-1" ondblclick={() => (viewing = null)}></button>
       <div class="relative flex min-h-0 max-w-full" in:scale={{ start: 0.95, duration: 200 }}>
-        <AttachmentMedia file={viewing} controls class="max-w-full object-contain {canCopyViewing ? 'max-h-[calc(100dvh-9rem)]' : 'max-h-[calc(100dvh-6rem)]'}" />
+        {#if attachmentKind(viewing.type) === 'document'}
+          <DocumentPreview file={viewing} />
+        {:else}
+          <AttachmentMedia file={viewing} controls class="max-w-full object-contain {canCopyViewing ? 'max-h-[calc(100dvh-9rem)]' : 'max-h-[calc(100dvh-6rem)]'}" />
+        {/if}
       </div>
       {#if canCopyViewing}
         <!-- Both labels share one grid cell, so the button keeps its width as the label changes -->

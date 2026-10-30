@@ -6,6 +6,7 @@ import * as apiMiddleware from './functions/api/_middleware.js';
 import * as v1Middleware from './functions/api/v1/_middleware.js';
 import * as health from './functions/api/health.js';
 import * as sync from './functions/api/sync.js';
+import * as trash from './functions/api/trash.js';
 import * as authSession from './functions/api/auth/session.js';
 import * as authDev from './functions/api/auth/dev.js';
 import * as authPreview from './functions/api/auth/preview.js';
@@ -50,6 +51,7 @@ const METHOD_EXPORTS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onR
 const ROUTES = [
   ['/api/health', health, false],
   ['/api/sync', sync, false],
+  ['/api/trash', trash, false],
   ['/api/auth/session', authSession, false],
   ['/api/auth/dev', authDev, false],
   ['/api/auth/preview', authPreview, false],

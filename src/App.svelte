@@ -5,6 +5,8 @@
   import { cubicIn } from 'svelte/easing';
   import Login from './components/Login.svelte';
   import Shell from './components/Shell.svelte';
+  import Privacy from './components/Privacy.svelte';
+  import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
 
@@ -39,9 +41,12 @@
   });
 </script>
 
-<!-- Splash, sign-in and app share one grid cell: the leaving screen fades out on top of the arriving one, never below it -->
+<!-- Splash, sign-in, app and the Privacy Policy share one grid cell: the leaving screen fades out on top of the arriving one, never below it.
+     The policy comes first so /privacy reads the same signed in or out. -->
 <div class="grid h-dvh w-full overflow-hidden bg-app">
-  {#if auth.status === 'loading'}
+  {#if privacy.open}
+    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Privacy /></div>
+  {:else if auth.status === 'loading'}
     <div class="col-start-1 row-start-1 flex min-h-0 items-center justify-center" out:fade={SCREEN_OUT}>
       <span class="text-fluid-xl font-black tracking-tight text-ink">word<span class="text-accent">smith</span></span>
     </div>

@@ -8,7 +8,6 @@ const FLIP_ANIMATION = 'flip';
 const MOVE_MS = 240;
 const ENTER_MS = 150;
 const EXIT_MS = 150;
-const ENTER_SCALE = 0.96;
 const EXIT_SCALE = 0.92;
 const MIN_SHIFT_PX = 0.5;
 // Mirrors --ease-out-soft in src/styles/theme.css (Web Animations can't read CSS variables).
@@ -31,14 +30,15 @@ export function measure(root) {
  * Slides every card from its measured spot to its new one.
  * @param {HTMLElement | undefined} root
  * @param {Map<string, DOMRect>} before from measure()
+ * @param {number} [duration] slide length in ms
  */
-export function play(root, before) {
+export function play(root, before, duration = MOVE_MS) {
   if (!root || reducedMotion.matches) return;
   for (const node of root.querySelectorAll(FLIP_SELECTOR)) {
     const card = /** @type {HTMLElement} */ (node);
     const from = before.get(card.dataset.flipId ?? '');
     if (!from) {
-      if (!card.classList.contains(REVEAL) || card.classList.contains(REVEALED)) card.animate([{ opacity: 0, transform: `scale(${ENTER_SCALE})` }, { opacity: 1, transform: 'none' }], { duration: ENTER_MS, easing: EASE_OUT_SOFT });
+      if (!card.classList.contains(REVEAL) || card.classList.contains(REVEALED)) card.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ENTER_MS, easing: EASE_OUT_SOFT });
       continue;
     }
     for (const animation of card.getAnimations()) if (animation.id === FLIP_ANIMATION) animation.cancel();
@@ -48,7 +48,7 @@ export function play(root, before) {
     if (Math.abs(dx) < MIN_SHIFT_PX && Math.abs(dy) < MIN_SHIFT_PX) continue;
     // A card rebuilt in another column has been seen already: skip its first-reveal fade.
     card.classList.remove(REVEAL);
-    const animation = card.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: MOVE_MS, easing: EASE_OUT_SOFT });
+    const animation = card.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration, easing: EASE_OUT_SOFT });
     animation.id = FLIP_ANIMATION;
   }
 }

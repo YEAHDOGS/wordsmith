@@ -6,8 +6,8 @@
   // pause after the last scroll settles the choice.
   import { LOUD_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
 
-  /** @type {{ value: number, levels: number[], onselect: (level: number) => void, labels?: string[], name?: string, loud?: number, class?: string }} */
-  let { value, levels, onselect, labels = PRIORITY_LABELS, name = 'Priority', loud = LOUD_PRIORITY, class: className = '' } = $props();
+  /** @type {{ value: number, levels: number[], onselect: (level: number) => void, labels?: string[], name?: string, loud?: number, class?: string, active?: boolean }} */
+  let { value, levels, onselect, labels = PRIORITY_LABELS, name = 'Priority', loud = LOUD_PRIORITY, class: className = '', active = true } = $props();
 
   const SETTLE_MS = 120;
   /** Key -> how far the choice moves; Home and End jump to the ends. */
@@ -18,6 +18,7 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let settle;
   let scrolling = false;
+  let positioning = false;
 
   const index = $derived(Math.max(0, levels.indexOf(value)));
   const rowHeight = () => /** @type {HTMLElement | undefined} */ (list?.firstElementChild)?.offsetHeight || 1;
@@ -25,12 +26,25 @@
   // Keep the wheel on the chosen row when the value changes from outside (sync, another control), unless the user is
   // turning it right now.
   $effect(() => {
-    if (!list || scrolling) return;
-    const top = index * rowHeight();
-    if (Math.abs(list.scrollTop - top) > 1) list.scrollTo({ top, behavior: list.scrollTop ? 'smooth' : 'auto' });
+    if (!list || !active || scrolling) return;
+    const height = rowHeight();
+    // A dialog's contents have no layout until showModal(). Never select from a hidden wheel's zero-height position.
+    if (height <= 1) return;
+    const top = index * height;
+    if (Math.abs(list.scrollTop - top) <= 1) return;
+    // The initial/programmatic scroll positions the control; it is not a user choice.
+    positioning = true;
+    clearTimeout(settle);
+    list.scrollTo({ top, behavior: 'auto' });
+    settle = setTimeout(() => { positioning = false; }, SETTLE_MS);
   });
 
   function onscroll() {
+    if (!active || positioning) {
+      clearTimeout(settle);
+      settle = setTimeout(() => { positioning = false; }, SETTLE_MS);
+      return;
+    }
     scrolling = true;
     clearTimeout(settle);
     settle = setTimeout(() => {
@@ -43,6 +57,7 @@
 
   /** @param {number} at */
   function choose(at) {
+    positioning = false;
     const next = levels[Math.min(levels.length - 1, Math.max(0, at))];
     if (next !== value) onselect(next);
     list?.scrollTo({ top: levels.indexOf(next) * rowHeight(), behavior: 'smooth' });
@@ -50,6 +65,7 @@
 
   /** @param {KeyboardEvent} event */
   function onkeydown(event) {
+    positioning = false;
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
       choose(event.key === 'Home' ? 0 : levels.length - 1);
@@ -60,6 +76,10 @@
     event.preventDefault();
     choose(index + step);
   }
+
+  function onuserinput() {
+    positioning = false;
+  }
 </script>
 
 <div class="relative min-w-0 {className}">
@@ -67,7 +87,7 @@
   <!-- The band marks the middle row; the list scrolls under it. Padding of one row above and below lets the ends reach it. -->
   <div class="relative h-24 overflow-hidden rounded-ui-sm border border-line bg-surface focus-within:border-accent tv:h-36">
     <span class="pointer-events-none absolute inset-x-0 top-8 h-8 border-y border-line-strong bg-surface-raised tv:top-12 tv:h-12" aria-hidden="true"></span>
-    <div bind:this={list} {onscroll} {onkeydown} tabindex="0" role="slider" aria-label={name} aria-valuemin={levels[0]} aria-valuemax={levels.at(-1)}
+    <div bind:this={list} {onscroll} {onkeydown} onwheel={onuserinput} onpointerdown={onuserinput} ontouchstart={onuserinput} tabindex="0" role="slider" aria-label={name} aria-valuemin={levels[0]} aria-valuemax={levels.at(-1)}
       aria-valuenow={value} aria-valuetext={labels[value]}
       class="relative h-full snap-y snap-mandatory overflow-y-auto overscroll-contain py-8 scrollbar-none focus:outline-none tv:py-12">
       {#each levels as level, slot (level)}

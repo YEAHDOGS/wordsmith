@@ -2,7 +2,10 @@
 
 const DB_PREFIX = 'wordsmith-';
 // v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards, v4 note_groups.
-const DB_VERSION = 4;
+// v5 adds nothing: it re-pulls once on devices that skipped note groups while their older build didn't know the table.
+const DB_VERSION = 5;
+// Every upgrade forgets the sync cursor, so rows of tables the old build ignored come down on the next pull.
+const CURSOR_KEY = 'cursor';
 export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'events', 'attachments', 'meta'];
 
 /** @param {IDBRequest} request @returns {Promise<any>} */
@@ -33,10 +36,11 @@ export class LocalDb {
     /** @type {Promise<IDBDatabase>} */
     this.ready = new Promise((resolve, reject) => {
       const request = indexedDB.open(this.name, DB_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         for (const store of STORES) {
           if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: store === 'meta' ? 'key' : 'id' });
         }
+        if (event.oldVersion) request.transaction?.objectStore('meta').delete(CURSOR_KEY);
       };
       // The upgrade resumes by itself once the other tab closes or reloads.
       request.onblocked = onblocked;

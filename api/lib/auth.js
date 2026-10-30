@@ -14,7 +14,7 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 const MAX_USER_AGENT = 200;
 
 /** @typedef {{ id: string, email: string | null, name: string | null, avatar_url: string | null }} User */
-/** @typedef {{ user: User, via: 'cookie' | 'bearer' | 'token', tokenHash: string, tokenName?: string }} Auth */
+/** @typedef {{ user: User, via: 'cookie' | 'bearer' | 'token', tokenHash: string, tokenName?: string, tokenColor?: string }} Auth */
 
 /** @param {Request} request @param {string} name */
 export function readCookie(request, name) {
@@ -71,14 +71,14 @@ export async function getAuth(request, env) {
 
   if (token.startsWith(API_TOKEN_PREFIX)) {
     const row = await env.DB.prepare(
-      `SELECT t.last_used_at, t.name AS token_name, u.id, u.email, u.name, u.avatar_url FROM api_tokens t JOIN users u ON u.id = t.user_id
+      `SELECT t.last_used_at, t.name AS token_name, t.color AS token_color, u.id, u.email, u.name, u.avatar_url FROM api_tokens t JOIN users u ON u.id = t.user_id
        WHERE t.token_hash = ? AND t.revoked_at IS NULL`,
     ).bind(tokenHash).first();
     if (!row) return null;
     if (!row.last_used_at || now - Number(row.last_used_at) > TOKEN_TOUCH_MS) {
       await env.DB.prepare('UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?').bind(now, tokenHash).run();
     }
-    return { user: pickUser(row), via: 'token', tokenHash, tokenName: String(row.token_name || '') };
+    return { user: pickUser(row), via: 'token', tokenHash, tokenName: String(row.token_name || ''), tokenColor: String(row.token_color || 'default') };
   }
 
   const row = await env.DB.prepare(

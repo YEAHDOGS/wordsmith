@@ -28,6 +28,9 @@ export const DOT_BG = {
   pink: 'bg-dot-pink',
 };
 
+/** Lit difficulty dots on note cards (LevelDots), one color per level: 1 trivial green up to 5 epic red. */
+export const DIFFICULTY_DOT = ['', 'bg-dot-green', 'bg-dot-blue', 'bg-dot-orange', 'bg-dot-purple', 'bg-dot-red'];
+
 /** Text in a project's color: the project chip on note cards. Default projects keep muted ink. */
 export const DOT_TEXT = {
   default: 'text-ink-muted',

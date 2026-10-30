@@ -20,7 +20,8 @@
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { IS_NATIVE, api, apiUrl } from '../lib/api.js';
-  import { MAX_NAME, PROVIDERS } from '../lib/models.js';
+  import { COLORS, MAX_NAME, PROVIDERS } from '../lib/models.js';
+  import { DOT_BG, DOT_TEXT } from '../lib/colors.js';
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
   import { githubProfileUrl } from './settings-data.js';
@@ -37,6 +38,8 @@
   const WIDE_SCREEN = '(min-width: 1024px)';
 
   /** @type {any[]} */
+  // The token whose color dots are open, if any.
+  let pickingColor = $state('');
   let tokens = $state([]);
   let tokenName = $state('');
   let secret = $state('');
@@ -92,6 +95,18 @@
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
     }
+  }
+
+  /** Every note the token creates takes this color (the server stamps it). @param {any} token @param {string} color */
+  async function setTokenColor(token, color) {
+    const before = token.color;
+    token.color = color;
+    pickingColor = '';
+    tokenCache.tokens = $state.snapshot(tokens);
+    await api(`/api/tokens/${token.id}`, { method: 'PATCH', body: { color } }).catch((failure) => {
+      token.color = before;
+      error = failure.message;
+    });
   }
 
   /** @param {string} id */
@@ -187,13 +202,25 @@
       <div class="relative min-h-40 flex-1">
         <ul class="absolute inset-0 divide-y divide-line overflow-y-auto overscroll-contain {BOX}">
           {#each tokens as token (token.id)}
-            <li class="flex items-center gap-3 px-3 py-2" transition:slide={SWAP}>
-              <KeyRound class="size-4 shrink-0 text-ink-faint" />
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-semibold">{token.name}</p>
-                <p class="truncate font-mono text-[0.6875rem] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
+            <li class="px-3 py-2" transition:slide={SWAP}>
+              <div class="flex items-center gap-3">
+                <button class="spring press -m-1 shrink-0 p-1 {DOT_TEXT[token.color] || DOT_TEXT.default}" aria-expanded={pickingColor === token.id}
+                  aria-label={TEXT.tokenColor.replace('{name}', token.name)} title={TEXT.tokenColor.replace('{name}', token.name)}
+                  onclick={() => (pickingColor = pickingColor === token.id ? '' : token.id)}><KeyRound class="size-4" /></button>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-semibold">{token.name}</p>
+                  <p class="truncate font-mono text-[0.6875rem] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
+                </div>
+                <button class="spring press shrink-0 px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
               </div>
-              <button class="spring press shrink-0 px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
+              {#if pickingColor === token.id}
+                <div class="flex flex-wrap gap-2 pt-2 pl-7" role="group" aria-label={TEXT.tokenColor.replace('{name}', token.name)} transition:slide={SWAP}>
+                  {#each COLORS as color (color)}
+                    <button class="spring press size-5 rounded-full {DOT_BG[color]} {token.color === color ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : 'hover:scale-110'}"
+                      aria-label={color} aria-pressed={token.color === color} title={color} onclick={() => setTokenColor(token, color)}></button>
+                  {/each}
+                </div>
+              {/if}
             </li>
           {:else}
             <li class="px-3 py-4 text-center text-xs text-ink-faint" in:fade={SWAP}>{TEXT.noTokens}</li>

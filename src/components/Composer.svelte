@@ -1,6 +1,6 @@
 <script>
   // Quick capture, Google Keep style. Collapsed it is one line; focus expands it. Enter in the title saves,
-  // Shift+Enter adds a line. Images and videos can be picked, dropped or pasted in: they wait as thumbnails and
+  // Shift+Enter adds a line. Images, video, audio and documents can be picked, dropped or pasted in: they wait as thumbnails and
   // upload once the note is saved (a note has to reach the server before files can hang off it).
   // Every note is a feature (on the board, in the agent queue), so there is no Note / Feature toggle. The lightbulb
   // Feature button beside the paperclip unfolds the feature details: priority, difficulty, project, a pull request and
@@ -12,9 +12,12 @@
   import { fade, scale, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { store } from '../lib/store.svelte.js';
-  import { DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, parsePullRequestUrl } from '../lib/models.js';
+  import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_AUDIO_BYTES, MAX_BODY, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadType } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
+  import { topPosition } from '../lib/reorder.svelte.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
+  import DocumentTile from './DocumentTile.svelte';
+  import AudioTile from './AudioTile.svelte';
   import LevelWheel from './LevelWheel.svelte';
 
   /** @type {{ projectId?: string | null, labelId?: string | null }} */
@@ -23,7 +26,6 @@
   const FLASH_MS = 400;
   const PANEL_MS = 150;
   const THUMB_MS = 150;
-  const ACCEPT = [...IMAGE_TYPES, ...VIDEO_TYPES].join(',');
   // Waiting for a just-saved note to reach the server before uploading: retries back off from the first delay up to
   // the cap, for as long as the note is still unsynced (a sync in flight may not carry it, or the server is unreachable).
   const SYNC_RETRY_MS = 500;
@@ -31,14 +33,15 @@
   // Priority and difficulty share the 0..5 scale; 0 is None / Unrated.
   const LEVELS = PRIORITY_LABELS.map((_, level) => level);
   const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
-  const ERROR_TYPE = 'Only images and videos can be attached.';
+  const ERROR_TYPE = 'Choose a supported image, video, audio file, or document.';
   const BYTES_PER_MB = 1024 * 1024;
   const GIF = 'image/gif';
-  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
-  // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs and videos
-  // can't be shrunk, so their real limit applies.
+  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, audio up to ${MAX_AUDIO_BYTES / BYTES_PER_MB} MB, documents up to ${MAX_DOCUMENT_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
+  // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs, video,
+  // audio and documents can't be shrunk, so their real limit applies.
   /** @param {File} file */
-  const sizeLimit = (file) => (file.type === GIF ? MAX_IMAGE_BYTES : IMAGE_TYPES.includes(file.type) ? MAX_SOURCE_IMAGE_BYTES : MAX_VIDEO_BYTES);
+  const sizeLimit = (file) => (file.type === GIF ? MAX_IMAGE_BYTES : IMAGE_TYPES.includes(file.type) ? MAX_SOURCE_IMAGE_BYTES
+    : VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_BYTES : attachmentKind(uploadType(file)) === 'audio' ? MAX_AUDIO_BYTES : MAX_DOCUMENT_BYTES);
   const ERROR_COUNT = `A note holds up to ${MAX_ATTACHMENTS_PER_NOTE} files.`;
   const ERROR_PR = 'That pull request link should look like https://github.com/owner/repo/pull/123';
   const FIELD = 'h-9 min-w-0 border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
@@ -78,10 +81,10 @@
   const uploads = $derived(store.uploads.filter((upload) => sentNoteIds.includes(upload.noteId)));
   const failedUploads = $derived(uploads.filter((upload) => upload.error));
 
-  /** Queues picked, dropped or pasted files, keeping only images and videos under the size limits. @param {File[]} list */
+  /** Queues picked, dropped or pasted files, keeping only attachable ones under the size limits. @param {File[]} list */
   function addFiles(list) {
     fileError = '';
-    const media = list.filter((file) => IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type));
+    const media = list.filter((file) => uploadType(file));
     if (media.length < list.length) fileError = ERROR_TYPE;
     const fitting = media.filter((file) => file.size <= sizeLimit(file));
     if (fitting.length < media.length) fileError = ERROR_SIZE;
@@ -135,6 +138,7 @@
       difficulty,
       status: status.trim(),
       pull_requests: pr ? [{ ...pr, title: '', state: 'open', merged_at: null }] : [],
+      position: topPosition(),
     });
     if (queued.length) {
       sentNoteIds = [...sentNoteIds, note.id];
@@ -209,7 +213,11 @@
         <ul class="flex flex-wrap gap-2 border-t border-line px-4 py-2" aria-label="Files to attach" transition:slide={{ duration: PANEL_MS }}>
           {#each queued as item (item.id)}
             <li class="group relative size-16 overflow-hidden border border-line bg-app sm:size-20 tv:size-32" animate:flip={{ duration: THUMB_MS }} transition:scale={{ start: 0.85, duration: THUMB_MS }}>
-              {#if item.file.type.startsWith('video/')}
+              {#if attachmentKind(uploadType(item.file)) === 'document'}
+                <DocumentTile file={item.file} compact class="size-full" />
+              {:else if attachmentKind(uploadType(item.file)) === 'audio'}
+                <AudioTile file={item.file} compact class="size-full" />
+              {:else if item.file.type.startsWith('video/')}
                 <!-- Local preview of a recording the user just picked; there are no captions to show -->
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <video src={item.url} class="size-full object-cover" preload="metadata" playsinline muted></video>
@@ -227,14 +235,14 @@
       {#if fileError}<p class="border-t border-line px-4 py-1.5 text-xs text-accent" role="alert" transition:slide={{ duration: PANEL_MS }}>{fileError}</p>{/if}
 
       <div class="flex items-center gap-1 border-t border-line px-1 py-1">
-        <button bind:this={attachButton} class="spring press flex size-7 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink sm:size-8 tv:size-11" title="Attach image or video" aria-label="Attach image or video"
+        <button bind:this={attachButton} class="spring press flex size-7 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink sm:size-8 tv:size-11" title="Attach a file" aria-label="Attach a file"
           onclick={() => picker?.click()}><Paperclip class="size-4" /></button>
         <!-- Feature details: priority, difficulty, project, PR, status. The bulb lights while they are open -->
         <button class="spring press flex h-7 shrink-0 items-center gap-1.5 px-2 text-xs sm:h-8 tv:h-11 tv:text-base {detailsOpen ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}"
           aria-expanded={detailsOpen} aria-controls="feature-details-{projectId ?? labelId ?? 'all'}" onclick={() => (detailsOpen = !detailsOpen)}>
           <Lightbulb class="spring size-4 {detailsOpen ? 'scale-110' : ''}" /><span>Feature</span>
         </button>
-        <input bind:this={picker} type="file" accept={ACCEPT} multiple class="hidden" tabindex="-1" onchange={(event) => { addFiles([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
+        <input bind:this={picker} type="file" accept={ACCEPT_ATTACHMENTS} multiple class="hidden" tabindex="-1" onchange={(event) => { addFiles([...(event.currentTarget.files || [])]); event.currentTarget.value = ''; }} />
         <span class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
         <!-- Formatting sits in the bottom-right corner, beside Save -->
         <MarkdownToolbar textarea={details} class="ml-auto" />

@@ -8,6 +8,7 @@
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
   import Archive from '@lucide/svelte/icons/archive';
+  import Trash from '@lucide/svelte/icons/trash';
   import Group from '@lucide/svelte/icons/group';
   import GroupDialog from './GroupDialog.svelte';
   import { fly } from 'svelte/transition';
@@ -44,6 +45,11 @@
     ui.selected.clear();
   }
 
+  function trash() {
+    for (const note of picked) store.remove('notes', note.id);
+    ui.selected.clear();
+  }
+
   /** @param {KeyboardEvent} event */
   function onkeydown(event) {
     if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
@@ -65,6 +71,9 @@
   </button>
   <button class={TOOL} onclick={archive} title={archiveView ? 'Unarchive selected' : 'Archive selected'}>
     <Archive class="size-4" /><span class="hidden md:inline">{archiveView ? 'Unarchive' : 'Archive'}</span>
+  </button>
+  <button class="{TOOL} hover:text-accent" onclick={trash} title="Move selected notes to trash" aria-label="Move selected notes to trash">
+    <Trash class="size-4" /><span class="hidden md:inline">Trash</span>
   </button>
   {#if projectId && !archiveView}
     <button class={TOOL} onclick={() => (grouping = true)} title="Group the selected notes under a name and color you can fold away">

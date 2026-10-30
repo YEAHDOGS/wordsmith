@@ -19,6 +19,8 @@ const IDLE_AFTER_MS = 300_000;
 // A push skips its follow-up pull when the last pull is this fresh; focus only syncs when it's older than FOCUS_STALE_MS.
 const PULL_AFTER_PUSH_MS = 30_000;
 const FOCUS_STALE_MS = 15_000;
+const PURGE_SYNC_WAIT_MS = 30_000;
+const SYNC_WAIT_POLL_MS = 50;
 // The GitHub webhook makes merges instant; this re-check is the fallback for repos without it.
 const PR_REFRESH_MS = 600_000;
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown'];
@@ -176,7 +178,41 @@ class Store {
 
   /** Tombstones a row; every device drops it on its next sync. @param {Table} table @param {string} id */
   remove(table, id) {
-    return this.update(table, id, { deleted_at: Date.now() });
+    const removed = this.update(table, id, { deleted_at: Date.now() });
+    if (removed) this.sync();
+    return removed;
+  }
+
+  /**
+   * Deletes trashed rows for good on the server ("Delete forever", "Empty trash"), in batches the server accepts.
+   * Needs a connection: purging removes attachment files, which only the server can do. Deletes still waiting in the
+   * outbox are pushed first, since the server only purges rows it knows are deleted.
+   * @param {Partial<Record<Table, string[]>>} rows
+   */
+  async purge(rows) {
+    const ids = Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
+    if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
+      const deadline = Date.now() + PURGE_SYNC_WAIT_MS;
+      while (this.syncing && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, SYNC_WAIT_POLL_MS));
+      if (this.syncing) throw new Error('Sync is taking too long. Try deleting forever again when it finishes.');
+      await this.sync();
+      while (this.syncing && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, SYNC_WAIT_POLL_MS));
+      if (this.syncing || ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
+        throw new Error('The deletion has not synced yet. Try deleting forever again when sync is complete.');
+      }
+    }
+    for (let start = 0; start < ids.length; start += MAX_SYNC_BATCH) {
+      /** @type {Record<string, string[]>} */
+      const body = {};
+      for (const [table, id] of ids.slice(start, start + MAX_SYNC_BATCH)) (body[table] ||= []).push(id);
+      const result = await api('/api/trash', { method: 'POST', body });
+      for (const table of SYNCED) {
+        const saved = result.saved[table] || [];
+        for (const row of saved) this.#upsertLocal(table, row);
+        await this.#db?.put(table, saved);
+      }
+    }
+    this.sync();
   }
 
   #persistOutbox() {
@@ -243,6 +279,7 @@ class Store {
       }
       const result = await api('/api/sync', { method: 'POST', body });
       const saved = [];
+      let rejection = '';
       for (const table of SYNCED) {
         for (const row of result.saved[table] || []) {
           const key = `${table}:${row.id}`;
@@ -255,14 +292,22 @@ class Store {
         }
       }
       for (const { id, table: refusedTable, error, current, code } of result.rejected) {
-        for (const table of SYNCED) this.#outbox.delete(`${table}:${id}`);
-        this.error = `A change was rejected: ${error}`;
-        if (refusedTable === 'projects') await this.#settleProject(id, current, code);
+        for (const [key, version] of batch) {
+          const [table, sentId] = key.split(':');
+          if (sentId !== id || (refusedTable && refusedTable !== table) || this.#outbox.get(key) !== version) continue;
+          if (refusedTable === 'projects') {
+            this.#outbox.delete(key);
+            await this.#settleProject(id, current, code);
+          } else {
+            rejection = `A change was rejected: ${error}`;
+          }
+        }
       }
-      // Anything left from this batch that the server didn't mention would loop forever; drop it.
-      for (const [key, version] of batch) if (this.#outbox.get(key) === version) this.#outbox.delete(key);
+      // Unacknowledged writes must remain pending. Dropping them lets the next pull restore stale server data.
+      for (const [key, version] of batch) if (this.#outbox.get(key) === version) rejection ||= 'The server did not save a pending change. Retry sync.';
       for (const table of SYNCED) await this.#db?.put(table, saved.filter(([name]) => name === table).map(([, row]) => row));
       this.#persistOutbox();
+      if (rejection) throw new Error(rejection);
     }
     return sent;
   }

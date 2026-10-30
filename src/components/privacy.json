@@ -1,0 +1,255 @@
+{
+  "title": "Privacy Policy",
+  "kicker": "wordsmith by DOGS",
+  "effective": "2026-10-28",
+  "effectiveLabel": "Effective",
+  "back": "Back",
+  "contents": "On this page",
+  "intro": "This is everything wordsmith stores about you: what it is, where it lives, why we keep it and for how long. wordsmith is made by DOGS. We only keep what the app needs to work, and the rest of this page shows exactly what that is.",
+  "promises": [
+    { "title": "No ads", "body": "wordsmith shows no ads and carries no ad, analytics or tracking scripts." },
+    { "title": "Never sold", "body": "We don't sell, rent or trade your data, and we don't use it to train AI models." },
+    { "title": "Yours to take", "body": "Copy any note as Markdown, or read notes and features as JSON through the agent API." },
+    { "title": "Yours to delete", "body": "Delete anything at any time. Deleted items are purged for good after 30 days in Trash." }
+  ],
+  "inventoryTitle": "Everything we store",
+  "inventoryHint": "Each item lists where it lives: our database (Cloudflare D1), our file storage (Cloudflare R2), Cloudflare's network, or your own device.",
+  "fields": { "what": "What", "where": "Where", "why": "Why", "kept": "How long" },
+  "places": { "d1": "Database (D1)", "r2": "Files (R2)", "edge": "Cloudflare", "device": "Your device" },
+  "groups": [
+    {
+      "id": "account",
+      "title": "Your account and sign-in",
+      "items": [
+        {
+          "name": "Your account",
+          "what": "Your email address, display name and profile picture link from the provider you sign in with, an account id we generate, and when the account was created.",
+          "where": "d1",
+          "why": "To know who you are, show your name in the app, and link sign-ins that share a verified email address to one account.",
+          "kept": "Until you delete your account."
+        },
+        {
+          "name": "Linked sign-in providers",
+          "what": "Which providers you use (GitHub, Google, Apple), the id each provider gives you, the email it reports, and when you linked it.",
+          "where": "d1",
+          "why": "So you can sign in with any linked provider and land in the same account.",
+          "kept": "Until you delete your account."
+        },
+        {
+          "name": "GitHub access token",
+          "what": "Only if you sign in with GitHub: the access token GitHub issues, encrypted (AES-GCM) with a key only our server holds. It reads your profile, email addresses and organizations, and repositories where repository access is turned on. We never keep Google or Apple tokens.",
+          "where": "d1",
+          "why": "To list your repositories in the repo picker, show a project's pull requests, and mark features complete when their pull request merges.",
+          "kept": "Until you delete your account. It is replaced each time you sign in with GitHub, and you can revoke it any time in GitHub under Settings, Applications."
+        },
+        {
+          "name": "Sign-in sessions",
+          "what": "A SHA-256 hash of each session token (never the token itself), your browser or app name as it reports itself (up to 200 characters), and when the session started and expires. On the web the token lives in an HttpOnly cookie named ws_session.",
+          "where": "d1",
+          "why": "To keep you signed in on each device.",
+          "kept": "Until you sign out on that device, which deletes it. A session stops working after 90 days."
+        },
+        {
+          "name": "Sign-ins in progress",
+          "what": "A random state value and a PKCE code verifier, the provider, and for app sign-ins a hash of the app's device secret. A short-lived cookie named ws_oauth ties the browser to it.",
+          "where": "d1",
+          "why": "To protect sign-in against forged requests and to hand the finished sign-in to the app that asked for it.",
+          "kept": "Deleted when the sign-in finishes. It stops working after 10 minutes either way."
+        },
+        {
+          "name": "Agent API tokens",
+          "what": "The name you give each token, a SHA-256 hash of it (never the token itself), its first few characters so you can tell tokens apart, and when it was created, last used (updated at most once an hour) and revoked.",
+          "where": "d1",
+          "why": "So your AI agents can read and update your notes, and so you can see which tokens are in use.",
+          "kept": "Until you delete your account. Revoking a token stops it working immediately; the revoked entry stays in your token list as a record."
+        }
+      ]
+    },
+    {
+      "id": "work",
+      "title": "Your notes and work",
+      "items": [
+        {
+          "name": "Notes and features",
+          "what": "Everything you or your agents write in a note: title, body, color, labels, pinned and archived flags, state, status line, priority, difficulty, agent analysis and batch, assignee, board column, group, order, linked pull requests, whether it is shared publicly, and when it was created, changed, started and completed.",
+          "where": "d1",
+          "why": "This is the app: so your notes are on every device you sign in on, and your agents can work through them.",
+          "kept": "Until you delete it. Deleted items wait 30 days in Trash, where you can restore them. Then every field is erased, along with the note's history and attachments; only a blank marker with its id and dates stays, so your other devices learn it's gone."
+        },
+        {
+          "name": "Projects, labels, boards and groups",
+          "what": "Project names, descriptions, colors and linked GitHub repository names; label names and colors; board column names and order; note group names, colors and whether they are folded.",
+          "where": "d1",
+          "why": "To organize your notes the same way on every device.",
+          "kept": "Until you delete them. Deleted projects, labels and groups wait 30 days in Trash, then every field is erased; only a blank marker with its id and dates stays. Board columns are kept until you change them."
+        },
+        {
+          "name": "Note history",
+          "what": "A timeline of what happened to each note: created, edited, moved, claimed, linked to a pull request, merged, archived, deleted or restored, with who did it (you, an agent by its token name, or GitHub) and when.",
+          "where": "d1",
+          "why": "So you and your agents can see how a feature moved from idea to merged.",
+          "kept": "As long as the note it belongs to, and erased with it when the note is purged from Trash."
+        },
+        {
+          "name": "Attachments",
+          "what": "Files you attach to notes: images, videos, audio, and documents (PDF, Word .docx, Markdown and plain text). The file itself sits in a private bucket; its name, type, size and note are in the database. Images are compressed on your device before upload.",
+          "where": "r2",
+          "why": "To show and play your attachments on every device. Files are only ever served to your signed-in account, never on public share pages.",
+          "kept": "Until you remove it, which deletes the file right away, or until its note is purged from Trash after 30 days."
+        },
+        {
+          "name": "Shared notes",
+          "what": "If you share a note publicly, anyone with its link can read its title, body, state, status and dates, along with your display name and profile picture. Attachments are never included. Cloudflare caches the page for up to 60 seconds.",
+          "where": "edge",
+          "why": "So you can show a note to people who don't use wordsmith.",
+          "kept": "Public until you make the note private or delete it. A cached copy can linger for up to a minute."
+        }
+      ]
+    },
+    {
+      "id": "github",
+      "title": "GitHub data",
+      "items": [
+        {
+          "name": "Linked pull requests",
+          "what": "For each pull request linked to a feature: its URL, repository, number, title, state and merge time, and when we last checked it.",
+          "where": "d1",
+          "why": "To show progress on the board and complete a feature when its pull request merges. Updates come from GitHub webhooks you set up or from checking GitHub with your token.",
+          "kept": "As long as the note it belongs to."
+        },
+        {
+          "name": "Repository and pull request lists",
+          "what": "The repositories and pull requests GitHub returns for you, fetched live with your token.",
+          "where": "edge",
+          "why": "For the repo picker and a project's pull request tab. They are never written to our database.",
+          "kept": "Cached on Cloudflare's network, separately for each account, for 1 to 5 minutes."
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "title": "Keeping the service running",
+      "items": [
+        {
+          "name": "Rate-limit counters",
+          "what": "A counter and time window keyed by your IP address (for sign-in attempts) or your account id (for uploads, new tokens, agent writes and GitHub lookups).",
+          "where": "d1",
+          "why": "To stop abuse and keep wordsmith inside its free hosting limits.",
+          "kept": "Counters older than a day are cleared out regularly."
+        },
+        {
+          "name": "Storage totals",
+          "what": "One app-wide total of stored bytes and this month's file reads and writes. Nothing about you.",
+          "where": "d1",
+          "why": "So file storage can never grow past its hard limit.",
+          "kept": "Running totals, updated as files come and go."
+        },
+        {
+          "name": "Request logs",
+          "what": "Cloudflare records requests to our API (time, address, status and timing) and any server errors. Loading the app's pages and files is not logged by us.",
+          "where": "edge",
+          "why": "To find and fix bugs and outages.",
+          "kept": "A few days, then Cloudflare deletes them."
+        },
+        {
+          "name": "Database history",
+          "what": "Cloudflare D1 Time Travel keeps a rolling history of our database so it can be restored after a mistake or outage.",
+          "where": "d1",
+          "why": "Disaster recovery. We only use it to restore the service, never to look up deleted data.",
+          "kept": "30 days. Anything deleted from the database ages out of this history 30 days later."
+        }
+      ]
+    },
+    {
+      "id": "device",
+      "title": "On your device",
+      "items": [
+        {
+          "name": "Offline copy",
+          "what": "A copy of your projects, labels, notes, boards, groups, note history and attachment details, plus any changes not yet synced, in your browser's or app's IndexedDB (one database per account).",
+          "where": "device",
+          "why": "So wordsmith opens instantly, works offline, and makes as few requests as possible.",
+          "kept": "Until you sign out in Settings, which wipes it, or clear the site's data."
+        },
+        {
+          "name": "Cached attachments",
+          "what": "Attachments you have opened, in the browser's private cache.",
+          "where": "device",
+          "why": "So repeat views cost no download.",
+          "kept": "Up to a year, or until you clear the browser cache."
+        },
+        {
+          "name": "Preferences and small caches",
+          "what": "Your theme, sort, grouping, filter and appearance choices; a copy of your name, email and profile picture link for a fast start; the latest app release and your public GitHub profile link (fetched by your browser straight from GitHub); and in the native apps, your session token.",
+          "where": "device",
+          "why": "To remember your choices and start quickly.",
+          "kept": "Until you clear the site's data. Signing out removes your profile copy and session token."
+        }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "third-parties",
+      "title": "Who else is involved",
+      "links": [
+        { "label": "Cloudflare Privacy Policy", "url": "https://www.cloudflare.com/privacypolicy/" },
+        { "label": "Google Privacy Policy", "url": "https://policies.google.com/privacy" },
+        { "label": "GitHub Privacy Statement", "url": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" }
+      ],
+      "paragraphs": [
+        "Cloudflare hosts wordsmith: the app, the API, the database (D1), file storage (R2) and logs all run on Cloudflare's network, and it handles your data only to provide that service.",
+        "GitHub, Google and Apple handle sign-in when you choose them. GitHub also answers the repository and pull request lookups made with your token, and sends pull request updates to wordsmith if you set up a webhook. Each of them has its own privacy policy.",
+        "Google Fonts serves the app's typefaces, so your browser contacts Google's font servers when the app loads.",
+        "Your AI agents read and write your notes with the API tokens you create. What an agent, or the AI service behind it, does with that data is between you and that service. Revoke a token in Settings to cut it off."
+      ]
+    },
+    {
+      "id": "not-collected",
+      "title": "What we don't collect",
+      "paragraphs": [
+        "No analytics, ad or tracking cookies, no fingerprinting, no location, no contacts. The only cookies are the sign-in ones described above.",
+        "We don't read your notes except when you ask us to help with a problem, or when the law requires it."
+      ]
+    },
+    {
+      "id": "export-delete",
+      "title": "Exporting and deleting",
+      "paragraphs": [
+        "Export: select notes and copy them as Markdown. The agent API can also read notes and features as JSON.",
+        "Delete: delete any note, project, label or group in the app. It waits 30 days in Trash, then is erased along with its attachments and history. Delete forever in Trash erases it right away.",
+        "Your account: to delete your whole account and everything in it, contact us at dogs.red. We delete it within 30 days, and it ages out of database history 30 days after that.",
+        "Signing out in Settings wipes this device's offline copy. You can also revoke your GitHub access in GitHub's settings at any time."
+      ]
+    },
+    {
+      "id": "security",
+      "title": "How it's protected",
+      "paragraphs": [
+        "Everything travels over HTTPS. Session and API tokens are stored only as hashes, your GitHub token is encrypted, the attachment bucket is private, and every request is checked against your account before any data is returned."
+      ]
+    },
+    {
+      "id": "children",
+      "title": "Children",
+      "paragraphs": [
+        "wordsmith is a tool for developers and is not meant for children under 13. We don't knowingly keep their data."
+      ]
+    },
+    {
+      "id": "changes",
+      "title": "Changes to this policy",
+      "paragraphs": [
+        "When what we store changes, this page changes with it and the effective date above moves. Big changes will be pointed out in the app."
+      ]
+    },
+    {
+      "id": "contact",
+      "title": "Contact",
+      "paragraphs": [
+        "Questions, export help or deletion requests: reach DOGS at dogs.red."
+      ]
+    }
+  ],
+  "contactLabel": "Contact DOGS at dogs.red"
+}

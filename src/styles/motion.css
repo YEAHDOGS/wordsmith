@@ -58,6 +58,22 @@
   animation: spin-once 900ms linear infinite;
 }
 
+/* Sync staleness ring (SyncStatus): the arc sweeps clockwise from empty to full over --stale-ms. The component sets a
+   negative animation-delay of the time already elapsed since the last sync, so a re-render picks up mid-sweep. */
+@keyframes stale-sweep {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.stale-sweep {
+  stroke-dasharray: 1;
+  animation: stale-sweep var(--stale-ms) linear forwards;
+}
+
 /* Icon swap: when one icon replaces another in the same button (pencil -> check, search -> close), the new one
    springs in with a quarter turn instead of popping. Wrap the icon in {#key} and give it .icon-swap. */
 @keyframes icon-in {
@@ -120,5 +136,11 @@
 
   .reveal {
     transform: none;
+  }
+
+  /* The staleness ring is a clock, not decoration: keep its length, but fill in a few discrete steps */
+  .stale-sweep {
+    animation-duration: var(--stale-ms) !important;
+    animation-timing-function: steps(8, end) !important;
   }
 }

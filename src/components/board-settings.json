@@ -28,7 +28,7 @@
   "newColumn": "New column",
   "reset": "Reset to Requested, In progress, Complete",
   "danger": "Delete project",
-  "dangerHint": "The project goes; its notes and features stay, without a project.",
+  "dangerHint": "The project goes to the trash; its notes and features stay, without a project.",
   "delete": "Delete project",
   "confirmDelete": "Delete it",
   "keep": "Keep"

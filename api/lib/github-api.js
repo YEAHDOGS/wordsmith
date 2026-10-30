@@ -3,6 +3,7 @@
 // REST for public repos otherwise. Responses are cached at the edge so repeat views don't spend GitHub's rate limit.
 import { HttpError } from './http.js';
 import { USER_AGENT } from './oauth.js';
+import { GITHUB_RECONNECT } from '../../src/lib/models.js';
 
 const GITHUB_API = 'https://api.github.com';
 const GRAPHQL_URL = 'https://api.github.com/graphql';
@@ -34,6 +35,10 @@ const WANTED_SCOPES = { 'read:org': ['read:org', 'write:org', 'admin:org'], repo
 // Org owners can block OAuth apps; members grant or request access on the app's connection page.
 const APP_CONNECTION_URL = 'https://github.com/settings/connections/applications/';
 const APPLICATIONS_URL = 'https://github.com/settings/applications';
+// GitHub answers 401 to a revoked or expired token. Usually that's the stored sign-in token, which signing in with GitHub
+// again replaces; if that doesn't help, the Worker's GITHUB_TOKEN fallback (used when the sign-in token can't be read) expired.
+const UNAUTHORIZED = 401;
+const RECONNECT_MESSAGE = 'GitHub rejected wordsmith\'s credentials. Sign out and sign back in with GitHub to reconnect.';
 
 const PULLS_QUERY = `query($owner: String!, $name: String!, $open: Int!, $merged: Int!) {
   repository(owner: $owner, name: $name) {
@@ -60,6 +65,7 @@ function headers(token) {
 /** Throws a readable error for a failed GitHub response. @param {Response} response */
 async function fail(response) {
   const data = await response.json().catch(() => ({}));
+  if (response.status === UNAUTHORIZED) throw new HttpError(502, RECONNECT_MESSAGE, GITHUB_RECONNECT);
   if (response.status === 404) throw new HttpError(404, 'GitHub repo not found, or it is private and wordsmith has no access to it');
   if (response.status === 403 || response.status === 429) throw new HttpError(429, 'GitHub rate limit reached. Sign in with GitHub or set GITHUB_TOKEN for higher limits');
   throw new HttpError(502, `GitHub error: ${data.message || response.status}`);

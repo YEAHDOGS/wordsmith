@@ -27,7 +27,7 @@
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNotes } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, orderKey, placeNotes, respace } from '../lib/reorder.svelte.js';
 
   /** @type {{ notes: any[], showProject?: boolean, empty?: string, projectId?: string | null }} */
   let { notes, showProject = true, empty = 'Nothing here yet.', projectId = null } = $props();
@@ -42,6 +42,10 @@
   const TITLE_LINE_PX = 22;
   const BODY_LINE_PX = 21;
   const BODY_MAX_LINES = 10;
+  // Card titles clamp at this many lines (NoteCard's line-clamp-4).
+  const TITLE_MAX_LINES = 4;
+  // While a card is dragged the others glide slower, so the preview reads as calm rather than twitchy.
+  const DRAG_MOVE_MS = 400;
   const CARD_CHROME_PX = 64;
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
@@ -64,8 +68,9 @@
   // Month index (0 = January) -> season. Winter runs December through February.
   const SEASONS = ['Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Fall', 'Fall', 'Fall', 'Winter'];
   const DECEMBER = 11;
-  // Toolbar toggles: equal columns at one height on phones (labels truncate), natural width from sm up.
-  const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:justify-start sm:px-2.5 tv:h-11 tv:text-base';
+  // Toolbar toggles: equal columns at one height. Phones split the row (labels truncate); from sm up every toggle takes
+  // the width of the widest one's longest label, so cycling a label never resizes it or its neighbours.
+  const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:px-2.5 tv:h-11 tv:text-base';
   const NO_PROJECT = 'No project';
   const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
   const FILTERED_EMPTY = 'No features in this state.';
@@ -184,13 +189,15 @@
     columnCount;
     drag.zone;
     drag.index;
+    drag.anchor;
     if (!width) return;
     if (!mounted) {
       mounted = true;
       return;
     }
     const before = measure(root);
-    tick().then(() => play(root, before));
+    const duration = drag.id ? DRAG_MOVE_MS : undefined;
+    tick().then(() => play(root, before, duration));
   });
 
   /**
@@ -227,8 +234,10 @@
       });
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
+    // A masonry drop saves the whole order the preview showed, so the note stays in the column it was dropped in.
     // Priority order moves only features between levels: plain notes have no priority control to undo it.
-    const writes = placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
+    const shown = previewOrder(section);
+    const writes = shown ? respace(shown) : placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
     for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
     for (const { id, patch } of writes) {
       const change = { ...patch, ...own.get(id) };
@@ -247,6 +256,7 @@
       // Notes move freely in and out of note groups and Pinned; a project or season band only takes its own.
       accepts: (/** @type {any} */ note) => Boolean(section.group) || section.key === 'pinned' || looseBand(note) === section.key,
       ondrop: (/** @type {any[]} */ notes, /** @type {number} */ index) => drop(section, notes, index),
+      unchanged: () => previewOrder(section)?.every((note, index) => section.notes[index]?.id === note.id),
     };
   }
 
@@ -260,12 +270,13 @@
   function estimate(note) {
     const chars = Math.max(12, columnWidth / CHAR_PX);
     let height = CARD_CHROME_PX;
-    if (note.title) height += TITLE_LINE_PX * Math.ceil(note.title.length / chars);
+    if (note.title) height += TITLE_LINE_PX * Math.min(TITLE_MAX_LINES, Math.ceil(note.title.length / chars));
     if (note.body) {
       const lines = note.body.split('\n').reduce((/** @type {number} */ total, /** @type {string} */ line) => total + Math.max(1, Math.ceil(line.length / chars)), 0);
       height += BODY_LINE_PX * Math.min(BODY_MAX_LINES, lines);
     }
-    if (store.attachmentsFor(note.id).length) height += columnWidth * COVER_RATIO;
+    const attachments = store.attachmentsFor(note.id);
+    if (attachments.some((file) => file.type.startsWith('image/') || file.type.startsWith('video/'))) height += columnWidth * COVER_RATIO;
     if (note.kind === 'feature' || note.label_ids.length || (showProject && note.project_id)) height += META_ROW_PX;
     if (note.kind === 'feature' && note.status) height += BODY_LINE_PX;
     return Math.max(CARD_MIN_PX, height);
@@ -281,6 +292,40 @@
     }
     return columns.map((column) => column.notes);
   }
+
+  /**
+   * The order a section takes while a card is dragged over it, or null to use the plain slot. The other cards keep the
+   * columns they had and the carried ones open a gap beside the card under the pointer, in its column; the order is
+   * then interleaved so the shortest-column layout rebuilds exactly those columns, and saving it keeps them after the drop.
+   * Priority order is left to the plain slot: it re-sorts by level anyway.
+   * @param {{ key: string, notes: any[] }} section
+   */
+  function previewOrder(section) {
+    const anchor = drag.anchor;
+    if (drag.zone !== section.key || !anchor || ui.order === 'priority') return null;
+    const arranged = drag.arrange(section.notes, section.key);
+    const start = Math.min(drag.index, arranged.length - drag.taking);
+    const block = arranged.slice(start, start + drag.taking);
+    const moving = new Set(block.map((note) => note.id));
+    const columns = columnsFor(section.notes).map((column) => column.filter((note) => !moving.has(note.id)));
+    const column = columns.find((notes) => notes.some((note) => note.id === anchor.id));
+    if (!column) return null;
+    column.splice(column.findIndex((note) => note.id === anchor.id) + (anchor.below ? 1 : 0), 0, ...block);
+    // Replay the shortest-column rule, taking each column's next note; a column that runs out early hands its turn on.
+    const heights = columns.map(() => 0);
+    const order = [];
+    const shortest = (/** @type {number[]} */ list) => list.reduce((best, at) => (heights[at] < heights[best] ? at : best), list[0]);
+    while (columns.some((notes) => notes.length)) {
+      const all = columns.map((_, at) => at);
+      let at = shortest(all);
+      if (!columns[at].length) at = shortest(all.filter((index) => columns[index].length));
+      const note = columns[at].shift();
+      order.push(note);
+      heights[at] += estimate(note) + GAP_PX;
+    }
+    return order;
+  }
+
 </script>
 
 <div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
@@ -291,7 +336,7 @@
         onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together" aria-label="Select all">
         <CheckCheck class="size-3.5 shrink-0" /><span class="hidden sm:inline">Select all</span>
       </button>
-      <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex sm:flex-none" role="group" aria-label="Sort notes">
+      <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex-none" role="group" aria-label="Sort notes">
         <!-- Every label sits in one grid cell, so the button keeps the width of its longest label and never jumps -->
         <button class="{TOGGLE}" onclick={() => ui.setOrder(ORDERS[(ORDERS.indexOf(ui.order) + 1) % ORDERS.length])}
           title="{ORDER_HINTS[ui.order]}. Tap to cycle {ORDERS.map((option) => ORDER_LABELS[option]).join(', ')}" aria-label="Order: {ORDER_HINTS[ui.order]}">
@@ -348,11 +393,11 @@
         {#if !section.group?.collapsed}
           <!-- A group's notes sit indented behind a rail in the group's color, set apart from ungrouped notes -->
           <div class="flex items-start gap-2 {section.group ? `${GROUP_INDENT} ${RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (section.group.color)] || RAIL_BORDER.default}` : ''}" transition:slide={{ duration: FOLD_MS }}>
-            {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
+            {#each columnsFor(previewOrder(section) ?? drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
-                  <div class="overflow-hidden rounded-ui border bg-app spring {drag.carries(note.id) ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
+                  <div class="overflow-hidden rounded-ui border bg-app transition-colors duration-150 ease-out {drag.carries(note.id) ? 'border-dashed border-accent' : 'border-line hover:border-line-strong'}"
                     data-flip-id={note.id} use:reveal={index * columnCount + columnIndex}>
                     <!-- Dimmed on an inner layer: the reveal styles own the wrapper's opacity -->
                     <div class="spring h-full {drag.carries(note.id) ? 'opacity-40' : ''}"><NoteCard {note} {showProject} /></div>

@@ -10,15 +10,24 @@ const GITHUB_ACTOR = /** @type {const} */ ({ type: 'github', name: 'github' });
 const RECHECK_MS = 120_000;
 const MAX_NOTES_PER_REFRESH = 10;
 
-/** The signed-in user's GitHub OAuth token, else the shared GITHUB_TOKEN secret, else none (public repos only). @param {Record<string, any>} env @param {string} userId */
-export async function githubToken(env, userId) {
+/**
+ * The GitHub credential for a user and where it came from: their own sign-in token ('sign-in'), else the Worker's shared
+ * GITHUB_TOKEN secret ('shared'), else none (public repos only). A stored sign-in token that can't be decrypted
+ * (TOKEN_ENCRYPTION_KEY changed or missing) falls back to the shared one, and says so in the Worker logs.
+ * @param {Record<string, any>} env @param {string} userId
+ * @returns {Promise<{ token: string | null, source: 'sign-in' | 'shared' | 'none' }>}
+ */
+export async function githubCredential(env, userId) {
   const row = await env.DB.prepare("SELECT access_token FROM identities WHERE user_id = ? AND provider = 'github' AND access_token IS NOT NULL").bind(userId).first();
-  if (row?.access_token && env.TOKEN_ENCRYPTION_KEY) {
+  if (row?.access_token) {
     try {
-      return await decryptText(String(row.access_token), env.TOKEN_ENCRYPTION_KEY);
-    } catch { /* key rotated: fall through */ }
+      if (!env.TOKEN_ENCRYPTION_KEY) throw new Error('TOKEN_ENCRYPTION_KEY is not set');
+      return { token: await decryptText(String(row.access_token), env.TOKEN_ENCRYPTION_KEY), source: 'sign-in' };
+    } catch (error) {
+      console.warn(`GitHub sign-in token for user ${userId} could not be decrypted (${/** @type {Error} */ (error).message}); using GITHUB_TOKEN`);
+    }
   }
-  return env.GITHUB_TOKEN || null;
+  return env.GITHUB_TOKEN ? { token: env.GITHUB_TOKEN, source: 'shared' } : { token: null, source: 'none' };
 }
 
 /**
@@ -54,7 +63,7 @@ export async function refreshPullRequests(env, userId, noteIds) {
   const { results } = await query.all();
   if (!results.length) return [];
 
-  const token = await githubToken(env, userId);
+  const { token } = await githubCredential(env, userId);
   const changes = [];
   /** @type {string[]} */
   const unchanged = [];
