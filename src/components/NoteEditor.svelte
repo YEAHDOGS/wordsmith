@@ -20,11 +20,12 @@
   import Attachments from './Attachments.svelte';
   import ShareMenu from './ShareMenu.svelte';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
+  import NoteTitle from './NoteTitle.svelte';
   import LevelWheel from './LevelWheel.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { PR_STYLE, STATE_STYLE } from '../lib/colors.js';
-  import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, MAX_TITLE, parsePullRequestUrl } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, FEATURE_STATES, MAX_BODY, MAX_NAME, MAX_STATUS, PRIORITY_LABELS, parsePullRequestUrl } from '../lib/models.js';
   import { fullTime } from '../lib/time.js';
   import { copyText, noteMarkdown } from '../lib/export.js';
   import { renderMarkdown } from '../lib/markdown.js';
@@ -70,8 +71,6 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let savedTimer;
   /** @type {HTMLTextAreaElement | undefined} */
-  let titleField = $state();
-  /** @type {HTMLTextAreaElement | undefined} */
   let bodyField = $state();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -91,25 +90,6 @@
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', '');
     dialogOpen = true;
-  });
-
-  // Measure after showModal and after the bound title reaches the textarea. A closed dialog reports one-line dimensions.
-  $effect(() => {
-    title;
-    if (!dialogOpen || !titleField) return;
-    const fitTitle = () => {
-      titleField.style.height = 'auto';
-      titleField.style.height = `${titleField.scrollHeight}px`;
-    };
-    fitTitle();
-    let width = titleField.clientWidth;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.width === width) return;
-      width = entry.contentRect.width;
-      fitTitle();
-    });
-    observer.observe(titleField);
-    return () => observer.disconnect();
   });
 
   function flush() {
@@ -281,11 +261,7 @@
       <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">
         <!-- Content -->
         <div class="flex min-w-0 flex-col gap-3 overflow-x-hidden p-4 tv:gap-5 tv:p-8 lg:min-h-0 lg:overflow-y-auto">
-          <!-- A one-line field that wraps: long titles stay readable on phones. Enter moves on to the body. -->
-          <textarea bind:this={titleField} bind:value={title} rows="1" maxlength={MAX_TITLE} placeholder="Title" aria-label="Title"
-            oninput={() => { title = title.replace(LINE_BREAKS, ' '); queueSave(); }}
-            onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); bodyField?.focus(); } }}
-            class="block max-h-[20dvh] w-full shrink-0 resize-none overflow-x-hidden overflow-y-auto bg-transparent text-fluid-xl font-bold leading-tight tracking-tight text-ink placeholder:text-ink-faint focus:outline-none"></textarea>
+          <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
 
           <div class="flex min-h-32 flex-1 flex-col border-y border-line lg:min-h-48">
             {#if preview}

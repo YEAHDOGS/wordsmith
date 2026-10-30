@@ -5,10 +5,17 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { saveNotes } from '../api/lib/notes.js';
 import { purgeRows } from '../api/lib/trash.js';
 import { toApi } from '../api/lib/rows.js';
+import { cleanRow, MAX_TITLE } from '../src/lib/models.js';
 
 const MIGRATIONS = new URL('../api/migrations/', import.meta.url);
 const OWNER = 'test-owner';
 const ACTOR = { type: 'user', name: 'test' };
+
+test('title validation accepts the editor limit and rejects overflow without truncating', () => {
+  const title = 'x'.repeat(MAX_TITLE);
+  assert.equal(cleanRow('notes', { title }).title, title);
+  assert.throws(() => cleanRow('notes', { title: title + 'x' }), /longer than/);
+});
 
 test('notes survive edit, archive, trash and restore; purged notes cannot be resurrected', async () => {
   const db = new DatabaseSync(':memory:');

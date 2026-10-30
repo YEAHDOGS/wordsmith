@@ -84,7 +84,7 @@ export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
 
-export const MAX_TITLE = 300;
+export const MAX_TITLE = 2_000;
 export const MAX_BODY = 100_000;
 export const MAX_NAME = 80;
 const MAX_ID = 64;
