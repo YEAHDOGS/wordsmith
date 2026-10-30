@@ -46,16 +46,28 @@ export async function onRequestPost(context) {
   const now = Date.now();
   const row = { id, user_id: auth.user.id, note_id: params.id, r2_key: key, name, type, size, created_at: now, updated_at: now, deleted_at: null };
   const actor = actorFor(auth);
-  const [saved] = await env.DB.batch([
-    env.DB.prepare(`INSERT INTO attachments (id, user_id, note_id, r2_key, name, type, size, created_at, updated_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL)`)
-      .bind(id, auth.user.id, params.id, key, name, type, size, now, now, params.id, auth.user.id),
-    env.DB.prepare(`INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL)`)
-      .bind(crypto.randomUUID(), auth.user.id, params.id, 'attached', actor.type, actor.name, JSON.stringify({ attachment_id: id, name, type, size }), now, params.id, auth.user.id),
-  ]);
+  let saved;
+  try {
+    [saved] = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO attachments (id, user_id, note_id, r2_key, name, type, size, created_at, updated_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL)`)
+        .bind(id, auth.user.id, params.id, key, name, type, size, now, now, params.id, auth.user.id),
+      env.DB.prepare(`INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL)`)
+        .bind(crypto.randomUUID(), auth.user.id, params.id, 'attached', actor.type, actor.name, JSON.stringify({ attachment_id: id, name, type, size }), now, params.id, auth.user.id),
+    ]);
+  } catch (error) {
+    // D1 batches are transactional: if metadata or its event cannot be saved, don't leave an unlisted R2 object.
+    try {
+      await files.delete(key);
+      await release(env, size);
+    } catch (cleanupError) {
+      console.error('attachment upload cleanup failed', cleanupError);
+    }
+    throw error;
+  }
   if (!saved.meta.changes) {
     await files.delete(key);
     await release(env, size);
