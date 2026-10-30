@@ -215,21 +215,33 @@
       <AttachmentMedia file={cover} class="spring size-full object-cover group-hover:scale-[1.02]" />
     </div>
   {/if}
-  <div class="flex items-start gap-2">
-    {#if note.title}
-      <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
-    {:else}
-      <span class="flex-1"></span>
-    {/if}
+  <!-- Select and pin: hover-only on desktop; phones have no hover, so unless active they leave the row entirely -->
+  {#snippet actions()}
     {#if !inTrash}
     <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
     <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
     {/if}
-  </div>
+  {/snippet}
 
-  {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
+  {#if note.priority_level || note.difficulty}
+    <!-- Levels lead the card: priority at the far left, difficulty at the right, then select and pin on the same line -->
+    <div class="flex items-center gap-3 tv:gap-5">
+      <div class="min-w-0 flex-1"><LevelDots priority={note.priority_level} difficulty={note.difficulty} /></div>
+      {@render actions()}
+    </div>
+    {#if note.title}<h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{/if}
+  {:else}
+    <div class="flex items-start gap-2">
+      {#if note.title}
+        <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
+      {:else}
+        <span class="flex-1"></span>
+      {/if}
+      {@render actions()}
+    </div>
+  {/if}
 
   {#if note.body}
     <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
