@@ -1,5 +1,5 @@
 <script>
-  // One line of dots under a note card's title: priority on the left in the accent red, difficulty on the right in
+  // One line of dots under a note card's title: priority at the far left in the accent red, difficulty at the far right in
   // its level's color (DIFFICULTY_DOT). Each group fills from the left, one dot per level; unlit dots stay faint.
   import { DIFFICULTY_DOT } from '../lib/colors.js';
   import { DIFFICULTY_LABELS, MAX_DIFFICULTY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
@@ -17,7 +17,7 @@
   const label = $derived([priority ? `${PRIORITY_LABELS[priority]} priority` : '', difficulty ? `${DIFFICULTY_LABELS[difficulty]} difficulty` : ''].filter(Boolean).join(', '));
 </script>
 
-<span class="flex items-center gap-3 tv:gap-5" role="img" aria-label={label} title={label}>
+<span class="flex items-center justify-between gap-3 tv:gap-5" role="img" aria-label={label} title={label}>
   <span class={GROUP}>
     {#each PRIORITY_DOTS as dot (dot)}<span class="{DOT} {dot <= priority ? 'bg-accent' : UNLIT}"></span>{/each}
   </span>
