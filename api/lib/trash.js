@@ -13,11 +13,25 @@ const PURGE_CHECK_MS = 6 * 3_600_000;
 const MAX_TRACKED_USERS = 10_000;
 // R2's delete() takes at most this many keys per call.
 const R2_DELETE_MAX = 1000;
+// Server-owned note data is erased too; it isn't in MODELS because clients cannot write it.
+const PURGED_SERVER_FIELDS = {
+  notes: {
+    started_at: null,
+    completed_at: null,
+    prs_checked_at: null,
+    analyzed_at: null,
+    created_by: null,
+    created_by_type: null,
+  },
+};
 // What a purged row keeps: nothing anyone wrote. Every writable field goes back to its MODELS default, so only the
 // id, the owner and the timestamps remain (plus a project's name_key, cleared below).
 /** @type {Record<string, Record<string, any>>} */
 const PURGED_FIELDS = Object.fromEntries(TRASH_TABLES.map((table) =>
-  [table, Object.fromEntries(Object.entries(MODELS[table]).map(([column, rule]) => [column, rule.default]))]));
+  [table, {
+    ...Object.fromEntries(Object.entries(MODELS[table]).map(([column, rule]) => [column, rule.default])),
+    ...(PURGED_SERVER_FIELDS[/** @type {keyof typeof PURGED_SERVER_FIELDS} */ (table)] || {}),
+  }]));
 // Same as PURGED_FIELDS, as D1 stores it, for the purge UPDATE: "column = ?" pairs and their bound values.
 /** @type {Record<string, { set: string, values: any[] }>} */
 const PURGE_SET = Object.fromEntries(Object.entries(PURGED_FIELDS).map(([table, fields]) => [table, {
@@ -77,29 +91,27 @@ export async function purgeRows(env, userId, table, ids) {
 }
 
 /**
- * Deletes every live attachment on these notes: R2 objects, then the rows (tombstoned, so devices drop them), then the
- * storage they reserved.
+ * Deletes every live attachment on these notes: R2 objects, then blanks the metadata on all attachment tombstones for
+ * these notes and gives back the storage reserved by live files.
  * @param {Record<string, any>} env @param {string} userId @param {string[]} noteIds @param {number} now
  */
 async function purgeAttachments(env, userId, noteIds, now) {
   const { results } = await env.DB.prepare(
     `SELECT id, r2_key, size FROM attachments WHERE user_id = ? AND deleted_at IS NULL AND note_id IN (${noteIds.map(() => '?').join(', ')})`,
   ).bind(userId, ...noteIds).all();
-  if (!results.length) return;
   const keys = results.map((/** @type {any} */ file) => file.r2_key);
   for (let start = 0; env.ATTACHMENTS && start < keys.length; start += R2_DELETE_MAX) await env.ATTACHMENTS.delete(keys.slice(start, start + R2_DELETE_MAX));
-  const ids = results.map((/** @type {any} */ file) => file.id);
-  const chunkSize = MAX_BIND_PARAMS - 2;
-  const updates = [];
-  for (let start = 0; start < ids.length; start += chunkSize) {
-    const chunk = ids.slice(start, start + chunkSize);
-    const list = chunk.map(() => '?').join(', ');
-    // One batch (a transaction): give back the storage of the files still live, then tombstone them. A file the
-    // person deleted meanwhile was already released, so it's counted once (the same storage_usage row as release()).
-    updates.push(env.DB.prepare(`UPDATE storage_usage SET bytes = MAX(0, bytes - (SELECT COALESCE(SUM(size), 0) FROM attachments WHERE deleted_at IS NULL AND id IN (${list}))) WHERE id = 1`).bind(...chunk));
-    updates.push(env.DB.prepare(`UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND id IN (${list})`).bind(now, now, ...chunk));
-  }
-  await env.DB.batch(updates);
+  const list = noteIds.map(() => '?').join(', ');
+  // One batch (a transaction): release only files still live, then scrub live and previously deleted file metadata.
+  // Clearing note_id after the first statement means a racing regular delete or a later retry cannot release twice.
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE storage_usage SET bytes = MAX(0, bytes - (
+      SELECT COALESCE(SUM(size), 0) FROM attachments WHERE user_id = ? AND deleted_at IS NULL AND note_id IN (${list})
+    )) WHERE id = 1`).bind(userId, ...noteIds),
+    env.DB.prepare(`UPDATE attachments SET note_id = '', r2_key = '', name = '', type = '', size = 0,
+      deleted_at = COALESCE(deleted_at, ?), updated_at = ?
+      WHERE user_id = ? AND note_id IN (${list})`).bind(now, now, userId, ...noteIds),
+  ]);
 }
 
 /**
@@ -118,7 +130,7 @@ export async function purgeBefore(env, userId, cutoff) {
   // Files of notes purged in an earlier pass whose R2 delete failed.
   const { results: orphaned } = await env.DB.prepare(
     `SELECT DISTINCT a.note_id FROM attachments a JOIN notes n ON n.id = a.note_id AND n.user_id = a.user_id
-     WHERE a.user_id = ? AND a.deleted_at IS NULL AND n.purged_at IS NOT NULL AND n.deleted_at IS NOT NULL LIMIT ?`,
+     WHERE a.user_id = ? AND a.note_id != '' AND n.purged_at IS NOT NULL AND n.deleted_at IS NOT NULL LIMIT ?`,
   ).bind(userId, PURGE_BATCH).all();
   if (orphaned.length) await purgeAttachments(env, userId, orphaned.map((/** @type {any} */ row) => String(row.note_id)), Date.now());
   for (const [index, table] of TRASH_TABLES.entries()) {

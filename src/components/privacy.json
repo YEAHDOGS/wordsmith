@@ -9,7 +9,7 @@
   "promises": [
     { "title": "No ads", "body": "wordsmith shows no ads and carries no ad, analytics or tracking scripts." },
     { "title": "Never sold", "body": "We don't sell, rent or trade your data, and we don't use it to train AI models." },
-    { "title": "Yours to take", "body": "Copy any note as Markdown, or pull everything as JSON through the agent API." },
+    { "title": "Yours to take", "body": "Copy any note as Markdown, or read notes and features as JSON through the agent API." },
     { "title": "Yours to delete", "body": "Delete anything at any time. Deleted items are purged for good after 30 days in Trash." }
   ],
   "inventoryTitle": "Everything we store",
@@ -211,7 +211,7 @@
       "id": "export-delete",
       "title": "Exporting and deleting",
       "paragraphs": [
-        "Export: select notes and copy them as Markdown, or create an API token in Settings and fetch everything as JSON from /api/v1.",
+        "Export: select notes and copy them as Markdown. The agent API can also read notes and features as JSON.",
         "Delete: delete any note, project, label or group in the app. It waits 30 days in Trash, then is erased along with its attachments and history. Delete forever in Trash erases it right away.",
         "Your account: to delete your whole account and everything in it, contact us at dogs.red. We delete it within 30 days, and it ages out of database history 30 days after that.",
         "Signing out in Settings wipes this device's offline copy. You can also revoke your GitHub access in GitHub's settings at any time."

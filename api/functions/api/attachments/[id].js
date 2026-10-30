@@ -81,12 +81,16 @@ export async function onRequestDelete(context) {
   await files.delete(row.r2_key);
   const now = Date.now();
   const actor = actorFor(auth);
-  const deleted = await env.DB.prepare('UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id')
+  const deleted = await env.DB.prepare(`UPDATE attachments
+    SET note_id = '', r2_key = '', name = '', type = '', size = 0, deleted_at = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id`)
     .bind(now, now, row.id, auth.user.id).first();
-  // A trash purge or another delete may have won after load(); only the winner releases the reservation.
+  // A trash purge or another delete may have won after load(); only the winner erases metadata and releases storage.
   if (!deleted) return json({ ok: true });
-  await env.DB.prepare('INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), auth.user.id, row.note_id, 'detached', actor.type, actor.name, JSON.stringify({ attachment_id: row.id, name: row.name }), now).run();
+  await env.DB.prepare(`INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND purged_at IS NULL)`)
+    .bind(crypto.randomUUID(), auth.user.id, row.note_id, 'detached', actor.type, actor.name, JSON.stringify({ attachment_id: row.id, name: row.name }), now, row.note_id, auth.user.id).run();
   await release(env, Number(row.size));
   return json({ ok: true });
 }
