@@ -187,7 +187,14 @@
 
   /** Escape closes the attachment viewer or share panel first, not the whole note. @param {Event} event */
   function oncancel(event) {
-    if (document.querySelector('[data-lightbox], [data-popover]')) event.preventDefault();
+    if (document.querySelector('[data-lightbox], [data-popover]')) {
+      event.preventDefault();
+      return;
+    }
+    // Android's system back gesture cancels a modal dialog. Keep it on the app's close path so pending text is flushed
+    // to local storage before the router removes this editor.
+    event.preventDefault();
+    close();
   }
 
   /** Double-clicking the backdrop closes; a single stray click outside the note does nothing. @param {MouseEvent} event */
