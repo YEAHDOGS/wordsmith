@@ -179,6 +179,7 @@ function scrollParent(start, axis) {
  * @param {string} id the dragged note
  * @param {number} x
  * @param {number} y
+ * @returns {{ index: number, anchor: { id: string, below: boolean } | null }} the slot, and the card it sits above or below
  */
 function slotAt(zoneEl, ids, id, x, y) {
   let best = { id: '', below: false, score: Infinity };
@@ -192,7 +193,8 @@ function slotAt(zoneEl, ids, id, x, y) {
     if (score < best.score) best = { id: cardId, below: y > rect.top + rect.height / 2, score };
   }
   const at = ids.indexOf(best.id);
-  return at === -1 ? ids.length : at + (best.below ? 1 : 0);
+  if (at === -1) return { index: ids.length, anchor: null };
+  return { index: at + (best.below ? 1 : 0), anchor: { id: best.id, below: best.below } };
 }
 
 /** @type {HTMLElement | null} */
@@ -225,6 +227,8 @@ class Drag {
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
   index = $state(0);
+  /** The card the preview slot sits above or below, so a masonry can open the gap in that card's column. @type {{ id: string, below: boolean } | null} */
+  anchor = $state(null);
   /** Ghost card position (viewport px, top-left) and width. */
   x = $state(0);
   y = $state(0);
@@ -316,6 +320,7 @@ class Drag {
     this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
+    this.anchor = null;
     this.landing = false;
     this.#last = { x: event.clientX, y: event.clientY };
     this.#follow(event);
@@ -437,11 +442,12 @@ class Drag {
     this.#last = { x, y };
     const taken = this.#takenBy(zone);
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
-    const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
+    const { index, anchor } = zone.sortable === false ? { index: zone.naturalIndex?.(this.note) ?? 0, anchor: null } : slotAt(zoneEl, ids, this.id, x, y);
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
+    this.anchor = anchor;
   }
 
   #stop() {

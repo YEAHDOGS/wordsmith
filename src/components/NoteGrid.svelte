@@ -42,6 +42,10 @@
   const TITLE_LINE_PX = 22;
   const BODY_LINE_PX = 21;
   const BODY_MAX_LINES = 10;
+  // Card titles clamp at this many lines (NoteCard's line-clamp-4).
+  const TITLE_MAX_LINES = 4;
+  // While a card is dragged the others glide slower, so the preview reads as calm rather than twitchy.
+  const DRAG_MOVE_MS = 520;
   const CARD_CHROME_PX = 64;
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
@@ -185,13 +189,15 @@
     columnCount;
     drag.zone;
     drag.index;
+    drag.anchor;
     if (!width) return;
     if (!mounted) {
       mounted = true;
       return;
     }
     const before = measure(root);
-    tick().then(() => play(root, before));
+    const duration = drag.id ? DRAG_MOVE_MS : undefined;
+    tick().then(() => play(root, before, duration));
   });
 
   /**
@@ -261,7 +267,7 @@
   function estimate(note) {
     const chars = Math.max(12, columnWidth / CHAR_PX);
     let height = CARD_CHROME_PX;
-    if (note.title) height += TITLE_LINE_PX * Math.ceil(note.title.length / chars);
+    if (note.title) height += TITLE_LINE_PX * Math.min(TITLE_MAX_LINES, Math.ceil(note.title.length / chars));
     if (note.body) {
       const lines = note.body.split('\n').reduce((/** @type {number} */ total, /** @type {string} */ line) => total + Math.max(1, Math.ceil(line.length / chars)), 0);
       height += BODY_LINE_PX * Math.min(BODY_MAX_LINES, lines);
@@ -281,6 +287,25 @@
       shortest.height += estimate(note) + GAP_PX;
     }
     return columns.map((column) => column.notes);
+  }
+
+  /**
+   * A section's columns. While a card is dragged over it the other cards keep the columns they had, and only the
+   * hovered card's column opens a gap, so moving the pointer doesn't reshuffle every later note across the grid.
+   * @param {{ key: string, notes: any[] }} section
+   */
+  function layout(section) {
+    const arranged = drag.arrange(section.notes, section.key);
+    const anchor = drag.anchor;
+    if (drag.zone !== section.key || !anchor) return columnsFor(arranged);
+    const start = Math.min(drag.index, arranged.length - drag.taking);
+    const block = arranged.slice(start, start + drag.taking);
+    const moving = new Set(block.map((note) => note.id));
+    const columns = columnsFor(section.notes).map((column) => column.filter((note) => !moving.has(note.id)));
+    const column = columns.find((notes) => notes.some((note) => note.id === anchor.id));
+    if (!column) return columnsFor(arranged);
+    column.splice(column.findIndex((note) => note.id === anchor.id) + (anchor.below ? 1 : 0), 0, ...block);
+    return columns;
   }
 </script>
 
@@ -349,7 +374,7 @@
         {#if !section.group?.collapsed}
           <!-- A group's notes sit indented behind a rail in the group's color, set apart from ungrouped notes -->
           <div class="flex items-start gap-2 {section.group ? `${GROUP_INDENT} ${RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (section.group.color)] || RAIL_BORDER.default}` : ''}" transition:slide={{ duration: FOLD_MS }}>
-            {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
+            {#each layout(section) as column, columnIndex (columnIndex)}
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
