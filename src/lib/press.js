@@ -9,7 +9,7 @@ const MOUSE_SLOP_PX = 5;
 const HAPTIC_MS = 10;
 const PRIMARY_BUTTON = 0;
 // Presses that start on these keep their own behaviour (the card's select and pin buttons, its hold menu).
-const OWN_CONTROLS = 'button, a, input, textarea, select';
+const OWN_CONTROLS = 'button, a, input, textarea, select, audio, video';
 
 /** @typedef {{ onhold?: () => void, onlift?: (event: PointerEvent) => void }} PressOptions */
 

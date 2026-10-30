@@ -11,7 +11,6 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import AttachmentMedia from './AttachmentMedia.svelte';
-  import AudioTile from './AudioTile.svelte';
   import DocumentPreview from './DocumentPreview.svelte';
   import DocumentTile from './DocumentTile.svelte';
   import { store } from '../lib/store.svelte.js';
@@ -119,13 +118,12 @@
   {#if files.length || uploads.length}
     <!-- Phones: an even three-column grid of square tiles. Wider screens: fixed-size tiles that wrap. -->
     <div class="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap" transition:fade={{ duration: 150 }}>
-      {#each files as file (file.id)}
+      {#each files.filter((file) => attachmentKind(file.type) !== 'audio') as file (file.id)}
         <div class="group relative aspect-square overflow-hidden border border-line bg-app sm:size-28 tv:size-40" animate:flip={{ duration: 200 }} in:scale={{ start: 0.9, duration: 150 }} out:fade={{ duration: 120 }}>
           <button class="block size-full" onclick={() => view(file)} aria-label="View {file.name}">
             {#if attachmentKind(file.type) === 'document'}
               <DocumentTile {file} class="size-full" />
-            {:else if attachmentKind(file.type) === 'audio'}
-              <AudioTile {file} class="size-full" />
+
             {:else}
               <AttachmentMedia {file} class="size-full object-cover" />
             {/if}
@@ -153,6 +151,15 @@
       {/each}
     </div>
   {/if}
+  {#each files.filter((file) => attachmentKind(file.type) === 'audio') as file (file.id)}
+    <div class="mt-2 flex min-w-0 items-center gap-2 border border-line p-2">
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-xs text-ink-muted" title={file.name}>{file.name}</p>
+        <AttachmentMedia {file} controls class="h-10 w-full min-w-0 max-w-full" />
+      </div>
+      <button class="spring press shrink-0 p-2 text-ink-muted hover:text-accent" aria-label="Delete {file.name}" onclick={() => remove(file)}><Trash class="size-3.5" /></button>
+    </div>
+  {/each}
   {#if error}<p class="mt-1 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{error}</p>{/if}
 </section>
 

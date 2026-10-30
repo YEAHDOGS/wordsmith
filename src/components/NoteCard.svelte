@@ -18,7 +18,11 @@
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import Folder from '@lucide/svelte/icons/folder';
-  import Paperclip from '@lucide/svelte/icons/paperclip';
+  import Volume2 from '@lucide/svelte/icons/volume-2';
+  import FileText from '@lucide/svelte/icons/file-text';
+  import Image from '@lucide/svelte/icons/image';
+  import Video from '@lucide/svelte/icons/video';
+  import { attachmentKind } from '../lib/models.js';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Archive from '@lucide/svelte/icons/archive';
   import ArchiveRestore from '@lucide/svelte/icons/archive-restore';
@@ -39,6 +43,13 @@
   /** @type {{ note: any, showProject?: boolean, inTrash?: boolean }} */
   let { note, showProject = true, inTrash = false } = $props();
 
+  const ATTACHMENT_TYPES = [
+    { kind: 'audio', label: 'Audio files', icon: Volume2 },
+    { kind: 'document', label: 'Documents', icon: FileText },
+    { kind: 'image', label: 'Images', icon: Image },
+    { kind: 'video', label: 'Videos', icon: Video },
+  ];
+  const OWN_CONTROLS = 'a, button, audio, video, input, select';
   const BODY_PREVIEW_CHARS = 600;
   const FLIP_WRAPPER = '[data-flip-id]';
   // On narrow cards (two columns on a 320px phone) the labels hide and the actions sit icon-only in one row, so the
@@ -59,6 +70,10 @@
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
   const files = $derived(store.attachmentsFor(note.id));
+  const audioFiles = $derived(files.filter((file) => attachmentKind(file.type) === 'audio'));
+  const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
+    ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
+  })).filter((type) => type.count));
   // Keep-style cover: the first image, else the first video frame. Documents are never a cover.
   const cover = $derived(files.find((file) => file.type.startsWith('image/')) ?? files.find((file) => file.type.startsWith('video/')) ?? null);
   // The latest timestamp in the chain is the one worth showing on a card.
@@ -91,7 +106,7 @@
 
   /** @param {MouseEvent | KeyboardEvent} event */
   function activate(event) {
-    if (event.target instanceof Element && event.target.closest('a')) return;
+    if (event.target instanceof Element && event.target.closest(OWN_CONTROLS)) return;
     if (inTrash) { router.openNote(note.id); return; }
     if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) ui.toggleSelected(note.id);
     else router.openNote(note.id);
@@ -228,14 +243,23 @@
     <p class="flex items-start gap-1.5 border-l-2 border-progress pl-2 text-xs text-ink"><span class="line-clamp-2">{note.status}</span></p>
   {/if}
 
+  {#each audioFiles as file (file.id)}
+    <div class="min-w-0">
+      <p class="truncate text-xs text-ink-muted" title={file.name}>{file.name}</p>
+      <AttachmentMedia {file} controls class="h-10 w-full min-w-0 max-w-full" />
+    </div>
+  {/each}
+
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
     {#if inTrash && note.created_by_type === 'agent' && note.created_by}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><BotMessageSquare class="size-3" />{note.created_by}</span>
     {/if}
-    {#if files.length}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{files.length} attachment{files.length === 1 ? '' : 's'}"><Paperclip class="size-3" />{files.length}</span>
-    {/if}
+    {#each attachmentCounts as type (type.kind)}
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
+        <type.icon class="size-3" />{type.count}
+      </span>
+    {/each}
     {#if note.assignee}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
     {/if}

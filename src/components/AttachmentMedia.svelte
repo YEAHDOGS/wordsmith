@@ -20,10 +20,11 @@
     /** @type {string} */
     let created = '';
     failed = false;
+    src = '';
     mediaUrl(file.url).then((url) => {
       created = url;
       if (!revoked) src = url;
-    }).catch(() => (failed = true));
+    }).catch(() => { if (!revoked) failed = true; });
     return () => {
       revoked = true;
       if (created.startsWith('blob:')) URL.revokeObjectURL(created);
@@ -42,7 +43,7 @@
 {:else if isAudio && controls}
   <!-- User-provided audio may contain speech; the native controls remain keyboard accessible. -->
   <!-- svelte-ignore a11y_media_has_caption -->
-  <audio {src} class={className} controls preload="metadata" aria-label={file.name} in:fade={{ duration: FADE_MS }}></audio>
+  <audio {src} class={className} controls preload="none" aria-label={file.name} in:fade={{ duration: FADE_MS }}></audio>
 {:else if isAudio}
   <AudioTile {file} class={className} compact />
 {:else}

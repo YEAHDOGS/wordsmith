@@ -50,6 +50,7 @@
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
   const COVER_RATIO = 9 / 16;
+  const AUDIO_ROW_PX = 64;
   const ORDER_LABELS = { updated: 'Updated', created: 'Created', priority: 'Priority', manual: 'Manual' };
   const ORDER_HINTS = {
     updated: 'Newest updated first',
@@ -275,7 +276,9 @@
       const lines = note.body.split('\n').reduce((/** @type {number} */ total, /** @type {string} */ line) => total + Math.max(1, Math.ceil(line.length / chars)), 0);
       height += BODY_LINE_PX * Math.min(BODY_MAX_LINES, lines);
     }
-    if (store.attachmentsFor(note.id).length) height += columnWidth * COVER_RATIO;
+    const attachments = store.attachmentsFor(note.id);
+    if (attachments.some((file) => file.type.startsWith('image/') || file.type.startsWith('video/'))) height += columnWidth * COVER_RATIO;
+    height += attachments.filter((file) => file.type.startsWith('audio/')).length * AUDIO_ROW_PX;
     if (note.kind === 'feature' || note.label_ids.length || (showProject && note.project_id)) height += META_ROW_PX;
     if (note.kind === 'feature' && note.status) height += BODY_LINE_PX;
     return Math.max(CARD_MIN_PX, height);
