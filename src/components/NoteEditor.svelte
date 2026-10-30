@@ -331,9 +331,9 @@
                   <ExternalLink class="size-3.5 text-ink-faint" />
                 </a>
               {/each}
-              <form class="flex" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
-                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} border-0" />
-                <button class="spring press border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
+              <form class="flex min-w-0" onsubmit={(event) => { event.preventDefault(); addPr(); }}>
+                <input bind:value={prInput} placeholder="https://github.com/owner/repo/pull/123" aria-label="Add pull request URL" class="{FIELD} min-w-0 flex-1 border-0" />
+                <button class="spring press shrink-0 border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised">Link</button>
               </form>
               {#if prError}<p class="px-3 py-1.5 text-xs text-accent" role="alert" in:fly={{ y: -4, duration: 150 }} out:fade={{ duration: 100 }}>{prError}</p>{/if}
             </section>

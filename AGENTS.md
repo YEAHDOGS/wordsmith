@@ -83,6 +83,7 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - Desktop landscape: full dashboard capped at `max-w-7xl`; desktop portrait stacks content into rows.
 - TV: large type and spacing for 10-foot viewing. Ultra-wide: spread panels to use available width.
 - Fit on one screen. Vertical scrolling is allowed only inside lists. Never show a horizontal scrollbar; sideways content must support swipe, drag and scroll wheel and provide controls.
+- Overflow is hidden by default. Opt into scrolling only for content that needs it; text and form controls should wrap, shrink, or expand to fit instead of creating scrollbars. Never let a single-line field, long title, or other ordinary content introduce horizontal scrolling.
 - Nothing is cropped or unreachable at any size, down to a 320×320 window.
 
 ## Layout stability and accessibility

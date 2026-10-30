@@ -14,20 +14,26 @@ function fit(node) {
  */
 export function autosize(node, value) {
   let width = 0;
+  let frame;
+  const scheduleFit = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => fit(node));
+  };
   const observer = new ResizeObserver(([entry]) => {
     if (entry.contentRect.width === width) return;
     width = entry.contentRect.width;
-    fit(node);
+    scheduleFit();
   });
-  const oninput = () => fit(node);
+  const oninput = scheduleFit;
   node.addEventListener('input', oninput);
   observer.observe(node);
-  fit(node);
+  scheduleFit();
   return {
-    update: () => fit(node),
+    update: scheduleFit,
     destroy() {
       observer.disconnect();
       node.removeEventListener('input', oninput);
+      cancelAnimationFrame(frame);
     },
   };
 }
