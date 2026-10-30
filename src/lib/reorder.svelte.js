@@ -22,8 +22,12 @@ const EDGE_PX = 64;
 const MAX_SCROLL_PX = 18;
 // Phone board lanes snap, so near a side edge the board jumps one lane, then waits before the next jump.
 const LANE_JUMP_MS = 700;
-// Pointer travel needed before the preview slot is worked out again; stops the slot flickering between two cards.
+// Pointer travel since the last slot change needed before the slot is worked out again. Cards sliding under a still
+// pointer never move the slot, so the preview can't flick between two slots on its own.
 const RETARGET_PX = 4;
+// The pointer rests on a new slot this long before the preview moves there, so cards don't flick back and forth
+// while it passes over them (letting go commits the slot under the pointer at once).
+const SETTLE_MS = 160;
 // Horizontal distance weighs this much more than vertical when picking the card under the pointer (stay in the column).
 const COLUMN_WEIGHT = 1000;
 const LAND_MS = 160;
@@ -179,7 +183,6 @@ function scrollParent(start, axis) {
  * @param {string} id the dragged note
  * @param {number} x
  * @param {number} y
- * @returns {{ index: number, anchor: { id: string, below: boolean } | null }} the slot, and the card it sits above or below
  */
 function slotAt(zoneEl, ids, id, x, y) {
   let best = { id: '', below: false, score: Infinity };
@@ -193,8 +196,7 @@ function slotAt(zoneEl, ids, id, x, y) {
     if (score < best.score) best = { id: cardId, below: y > rect.top + rect.height / 2, score };
   }
   const at = ids.indexOf(best.id);
-  if (at === -1) return { index: ids.length, anchor: null };
-  return { index: at + (best.below ? 1 : 0), anchor: { id: best.id, below: best.below } };
+  return at === -1 ? ids.length : at + (best.below ? 1 : 0);
 }
 
 /** @type {HTMLElement | null} */
@@ -227,8 +229,6 @@ class Drag {
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
   index = $state(0);
-  /** The card the preview slot sits above or below, so a masonry can open the gap in that card's column. @type {{ id: string, below: boolean } | null} */
-  anchor = $state(null);
   /** Ghost card position (viewport px, top-left) and width. */
   x = $state(0);
   y = $state(0);
@@ -248,6 +248,8 @@ class Drag {
   #laneAt = 0;
   #frame = 0;
   #moved = false;
+  /** A slot the pointer is over but hasn't rested on long enough yet. @type {{ key: string, index: number, at: number } | null} */
+  #pending = null;
   // Where the finger first touched. Its touchmoves keep coming there even after the card is rebuilt in another column,
   // when they no longer reach window; listening there keeps the page from scrolling (and cancelling the drag).
   /** @type {EventTarget | null} */
@@ -320,7 +322,7 @@ class Drag {
     this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
-    this.anchor = null;
+    this.#pending = null;
     this.landing = false;
     this.#last = { x: event.clientX, y: event.clientY };
     this.#follow(event);
@@ -403,7 +405,7 @@ class Drag {
 
   #loop = () => {
     const scrolled = this.#autoscroll();
-    if (this.#moved || scrolled) this.#locate(scrolled);
+    if (this.#moved || scrolled || this.#pending) this.#locate(scrolled);
     this.#moved = false;
     this.#frame = requestAnimationFrame(this.#loop);
   };
@@ -435,19 +437,31 @@ class Drag {
   /** Works out the zone and slot under the pointer. Outside every zone the last preview stays. @param {boolean} force */
   #locate(force) {
     const { x, y } = this.#pointer;
-    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) return;
+    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) {
+      this.#pending = null;
+      return;
+    }
     const zoneEl = document.elementFromPoint(x, y)?.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
-    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) return;
-    this.#last = { x, y };
+    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) {
+      this.#pending = null;
+      return;
+    }
     const taken = this.#takenBy(zone);
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
-    const { index, anchor } = zone.sortable === false ? { index: zone.naturalIndex?.(this.note) ?? 0, anchor: null } : slotAt(zoneEl, ids, this.id, x, y);
+    const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
+    const now = performance.now();
+    if (zone.key === this.zone && index === this.index) this.#pending = null;
+    else if (!force && this.zone) {
+      if (this.#pending?.key !== zone.key || this.#pending.index !== index) this.#pending = { key: zone.key, index, at: now };
+      if (now - this.#pending.at < SETTLE_MS) return;
+    }
+    this.#pending = null;
+    this.#last = { x, y };
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
-    this.anchor = anchor;
   }
 
   #stop() {
@@ -461,8 +475,9 @@ class Drag {
   }
 
   #ondrop = () => {
-    // A quick flick can end before the next frame has worked out the slot.
-    if (this.#moved) this.#locate(true);
+    // Let go on the slot the preview shows. A quick flick can end before any slot was worked out, or while the pointer
+    // waits on a new one: take the slot under the pointer then.
+    if (!this.zone || this.#pending) this.#locate(true);
     const zone = [...this.#zones.values()].find((entry) => entry.key === this.zone);
     const { note, index } = this;
     this.#stop();

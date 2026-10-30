@@ -45,7 +45,7 @@
   // Card titles clamp at this many lines (NoteCard's line-clamp-4).
   const TITLE_MAX_LINES = 4;
   // While a card is dragged the others glide slower, so the preview reads as calm rather than twitchy.
-  const DRAG_MOVE_MS = 520;
+  const DRAG_MOVE_MS = 400;
   const CARD_CHROME_PX = 64;
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
@@ -189,7 +189,6 @@
     columnCount;
     drag.zone;
     drag.index;
-    drag.anchor;
     if (!width) return;
     if (!mounted) {
       mounted = true;
@@ -289,24 +288,6 @@
     return columns.map((column) => column.notes);
   }
 
-  /**
-   * A section's columns. While a card is dragged over it the other cards keep the columns they had, and only the
-   * hovered card's column opens a gap, so moving the pointer doesn't reshuffle every later note across the grid.
-   * @param {{ key: string, notes: any[] }} section
-   */
-  function layout(section) {
-    const arranged = drag.arrange(section.notes, section.key);
-    const anchor = drag.anchor;
-    if (drag.zone !== section.key || !anchor) return columnsFor(arranged);
-    const start = Math.min(drag.index, arranged.length - drag.taking);
-    const block = arranged.slice(start, start + drag.taking);
-    const moving = new Set(block.map((note) => note.id));
-    const columns = columnsFor(section.notes).map((column) => column.filter((note) => !moving.has(note.id)));
-    const column = columns.find((notes) => notes.some((note) => note.id === anchor.id));
-    if (!column) return columnsFor(arranged);
-    column.splice(column.findIndex((note) => note.id === anchor.id) + (anchor.below ? 1 : 0), 0, ...block);
-    return columns;
-  }
 </script>
 
 <div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
@@ -374,7 +355,7 @@
         {#if !section.group?.collapsed}
           <!-- A group's notes sit indented behind a rail in the group's color, set apart from ungrouped notes -->
           <div class="flex items-start gap-2 {section.group ? `${GROUP_INDENT} ${RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (section.group.color)] || RAIL_BORDER.default}` : ''}" transition:slide={{ duration: FOLD_MS }}>
-            {#each layout(section) as column, columnIndex (columnIndex)}
+            {#each columnsFor(drag.arrange(section.notes, section.key)) as column, columnIndex (columnIndex)}
               <div class="flex min-w-0 flex-1 flex-col gap-2">
                 {#each column as note, index (note.id)}
                   <!-- The card being dragged stays here as a dimmed placeholder; the ghost follows the pointer -->
