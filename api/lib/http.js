@@ -4,7 +4,7 @@ const MAX_JSON_BYTES = 2_000_000;
 // Origins of the shipped Tauri WebViews: macOS, iOS and Linux use tauri://localhost; Windows and Android use http(s)://tauri.localhost.
 const NATIVE_ORIGINS = ['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost'];
 const CORS_METHODS = 'GET, POST, PATCH, DELETE, OPTIONS';
-const CORS_HEADERS = 'Authorization, Content-Type';
+const CORS_HEADERS = 'Authorization, Content-Type, X-Agent-Session, X-File-Name';
 const CORS_MAX_AGE = '86400';
 const NO_STORE = 'private, no-store';
 
