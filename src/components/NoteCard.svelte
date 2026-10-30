@@ -36,8 +36,8 @@
   import { exit } from '../lib/flip.js';
   import { renderMarkdown } from '../lib/markdown.js';
 
-  /** @type {{ note: any, showProject?: boolean }} */
-  let { note, showProject = true } = $props();
+  /** @type {{ note: any, showProject?: boolean, inTrash?: boolean }} */
+  let { note, showProject = true, inTrash = false } = $props();
 
   const BODY_PREVIEW_CHARS = 600;
   const FLIP_WRAPPER = '[data-flip-id]';
@@ -56,7 +56,7 @@
   const menuOpen = $derived(menu.id === note.id);
 
   const project = $derived(showProject && note.project_id ? store.find('projects', note.project_id) : null);
-  const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.deleted_at));
+  const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
   const files = $derived(store.attachmentsFor(note.id));
   // Keep-style cover: the first image, else the first video frame. Documents are never a cover.
@@ -92,6 +92,7 @@
   /** @param {MouseEvent | KeyboardEvent} event */
   function activate(event) {
     if (event.target instanceof Element && event.target.closest('a')) return;
+    if (inTrash) { router.openNote(note.id); return; }
     if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) ui.toggleSelected(note.id);
     else router.openNote(note.id);
   }
@@ -105,6 +106,7 @@
 
   /** Keyboard path to the menu: open it and focus its first action. */
   async function openMenuFromKeys() {
+    if (inTrash) return;
     menu.id = note.id;
     await tick();
     /** @type {HTMLElement | null | undefined} */ (card?.querySelector('[role="menuitem"]'))?.focus();
@@ -127,6 +129,7 @@
 
   /** Moving after a hold (or dragging with a mouse) picks the card up. @param {PointerEvent} event */
   function lift(event) {
+    if (inTrash) return;
     const wrapper = /** @type {HTMLElement | null | undefined} */ (card?.closest(FLIP_WRAPPER));
     menu.id = '';
     if (!wrapper) return;
@@ -143,7 +146,7 @@
     } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault();
       openMenuFromKeys();
-    } else if (event.altKey && event.key in NUDGE_KEYS) {
+    } else if (!inTrash && event.altKey && event.key in NUDGE_KEYS) {
       event.preventDefault();
       drag.nudge(note, /** @type {HTMLElement} */ (card), /** @type {keyof typeof NUDGE_KEYS} */ (event.key));
     }
@@ -152,7 +155,7 @@
   /** Right-click and the long-press menu of touch browsers open the card's own menu. @param {MouseEvent} event */
   function oncontextmenu(event) {
     event.preventDefault();
-    if (!drag.id) menu.id = note.id;
+    if (!inTrash && !drag.id) menu.id = note.id;
   }
 
   /** Plays the card out, then archives or deletes it. @param {MouseEvent} event @param {() => void} commit */
@@ -184,9 +187,9 @@
   role="button"
   tabindex="0"
   aria-label="{note.title || 'Untitled note'}{selected ? ', selected' : ''}"
-  aria-haspopup="menu"
+  aria-haspopup={inTrash ? undefined : 'menu'}
   aria-keyshortcuts="Shift+F10 Alt+ArrowUp Alt+ArrowDown"
-  use:press={{ onhold: () => (menu.id = note.id), onlift: lift }}
+  use:press={inTrash ? {} : { onhold: () => (menu.id = note.id), onlift: lift }}
   ondragstart={(event) => event.preventDefault()}
   onclick={activate}
   {onkeydown}
@@ -209,10 +212,12 @@
     {:else}
       <span class="flex-1"></span>
     {/if}
+    {#if !inTrash}
     <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
     <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
+    {/if}
   </div>
 
   {#if note.body}
@@ -225,6 +230,9 @@
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
+    {#if inTrash && note.created_by_type === 'agent' && note.created_by}
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><BotMessageSquare class="size-3" />{note.created_by}</span>
+    {/if}
     {#if files.length}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{files.length} attachment{files.length === 1 ? '' : 's'}"><Paperclip class="size-3" />{files.length}</span>
     {/if}
@@ -252,7 +260,7 @@
   </p>
 
   <!-- Hold menu: dims the card in place (absolute, so nothing moves) and floats the actions over it -->
-  {#if menuOpen}
+  {#if menuOpen && !inTrash}
     <div class="absolute inset-0 z-10 flex items-center justify-center p-2" transition:fade={{ duration: 150 }}>
       <button class="absolute inset-0 cursor-default bg-scrim" tabindex="-1" aria-label="Close menu" onclick={(event) => { event.stopPropagation(); closeMenu(); }}></button>
       <!-- A real menu: arrow keys, Home and End move between the actions, which stay out of the Tab order -->

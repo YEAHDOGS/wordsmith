@@ -94,9 +94,9 @@
         {@const Icon = ACTOR_ICONS[/** @type {keyof typeof ACTOR_ICONS} */ (event.actor_type)] ?? User}
         <li class="relative py-1.5" in:fly={{ x: -8, duration: 200, delay: Math.min(index * ROW_STAGGER_MS, MAX_STAGGER_MS) }}>
           <span class="absolute top-2.5 -left-5 size-2 rounded-full ring-4 ring-app {event.type === 'pr_merged' || event.data?.to === 'complete' ? 'bg-complete' : event.actor_type === 'agent' ? 'bg-progress' : 'bg-accent'}"></span>
-          <p class="text-[0.8125rem] leading-snug text-ink">
-            <span class="inline-flex items-center gap-1 font-semibold"><Icon class="size-3.5 text-ink-muted" />{event.actor_name || event.actor_type}</span>
-            <span class="text-ink-muted">{describe(event)}</span>
+          <p class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-1 text-[0.8125rem] leading-snug text-ink">
+            <Icon class="mt-[0.15em] size-3.5 text-ink-muted" />
+            <span class="min-w-0 break-words"><span class="font-semibold">{event.actor_name || event.actor_type}</span>{' '}<span class="text-ink-muted">{describe(event)}</span></span>
           </p>
           <time class="selectable font-mono text-[0.6875rem] text-ink-faint" datetime={new Date(event.created_at).toISOString()} title={fullTime(event.created_at)}>{clockTime(event.created_at)}</time>
         </li>

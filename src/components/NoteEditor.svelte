@@ -239,8 +239,10 @@
             {@render copyNoteButton(TOOL)}
             <ShareMenu {note} class={TOOL} />
           </div>
+          {#if !note.deleted_at}
           <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden sm:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
+          {/if}
         </div>
         <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
         <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
@@ -256,6 +258,13 @@
         </button>
         <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={close} aria-label="Close"><X class="size-5" /></button>
       </div>
+
+      {#if note.deleted_at}
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2 text-sm text-ink-muted">
+          <span>In trash · deleted {fullTime(note.deleted_at)}</span>
+          <button class="{TOOL} text-ink" onclick={() => { set({ deleted_at: null }); store.sync(true); }}>Restore note</button>
+        </div>
+      {/if}
 
       <!-- One column on phones, pinned to the screen width (minmax 0), so no field can ever widen the page sideways -->
       <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto] overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-1 lg:overflow-hidden">

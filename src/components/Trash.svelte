@@ -11,6 +11,7 @@
   import Tag from '@lucide/svelte/icons/tag';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Trash from '@lucide/svelte/icons/trash';
+  import NoteCard from './NoteCard.svelte';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { TINT_BG } from '../lib/colors.js';
@@ -107,12 +108,17 @@
     {#if !shown.length}
       <p class="px-4 py-12 text-center text-sm text-ink-faint tv:text-xl" in:fade={{ duration: 200 }}>{ui.query && items.length ? TEXT.noMatches : TEXT.empty}</p>
     {:else}
-      <ul class="{CONTENT} grid gap-px border-y border-line bg-line pb-px sm:grid-cols-2 xl:grid-cols-3 ultrawide:grid-cols-4 short:grid-cols-2 sm:border-x" aria-label={fill(TEXT.itemCount, { count: items.length })}>
+      <ul class="{CONTENT} grid items-start gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3 ultrawide:grid-cols-4 short:grid-cols-2" aria-label={fill(TEXT.itemCount, { count: items.length })}>
         {#each shown as item (`${item.table}:${item.id}`)}
           {@const key = `${item.table}:${item.id}`}
           {@const Icon = ICONS[item.table]}
-          <li class="flex min-w-0 flex-col gap-2 {item.table === 'notes' ? TINT_BG[/** @type {keyof typeof TINT_BG} */ (item.color)] ?? 'bg-surface' : 'bg-surface'} p-3 tv:gap-3 tv:p-5"
+          <li class="flex min-w-0 flex-col gap-2 overflow-hidden rounded-ui border border-line {item.table === 'notes' ? TINT_BG[/** @type {keyof typeof TINT_BG} */ (item.color)] ?? 'bg-surface' : 'bg-surface'} p-3 tv:gap-3 tv:p-5"
             animate:flip={FLIP} in:fly={ROW_IN} out:fly={ROW_OUT}>
+            {#if item.table === 'notes'}
+              <div class="-mx-3 -mt-3 tv:-mx-5 tv:-mt-5">
+                <NoteCard note={store.find('notes', item.id)} inTrash />
+              </div>
+            {:else}
             <div class="flex min-w-0 items-start gap-2">
               <Icon class="mt-0.5 size-4 shrink-0 text-ink-faint tv:size-6" aria-hidden="true" />
               <div class="min-w-0 flex-1">
@@ -120,6 +126,7 @@
                 {#if item.snippet}<p class="line-clamp-2 text-xs break-words text-ink-muted tv:text-base">{item.snippet}</p>{/if}
               </div>
             </div>
+            {/if}
             <p class="font-mono text-[0.6875rem] text-ink-faint tv:text-sm" title={fullTime(item.deletedAt)}>
               {TEXT.kinds[item.table]} · {item.daysAgo ? fill(TEXT.deletedDaysAgo, { n: item.daysAgo }) : TEXT.deletedToday} ·
               <span class={item.daysLeft <= URGENT_DAYS ? 'text-accent' : ''}>{fill(TEXT.purgesIn, { n: item.daysLeft })}</span>
