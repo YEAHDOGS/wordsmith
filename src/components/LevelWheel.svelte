@@ -2,6 +2,8 @@
   // A vertical scroll wheel for one 0..5 level (priority by default, difficulty with labels={DIFFICULTY_LABELS}). Three
   // levels show at once; the middle row, under a fixed band, is the choice. Scroll, swipe or drag to turn it (it snaps
   // to a row), click a row to jump there, or use the arrow keys, Page Up/Down, Home and End (keyboards and TV remotes).
+  // A mouse wheel moves one level per notch: native wheel scrolling covers about three rows a notch, so the wheel is
+  // taken over and trackpad deltas add up until they reach one notch.
   // Loud levels (from `loud` up) turn the accent when chosen. No scrollend event: Safari 15.4 lacks it, so a short
   // pause after the last scroll settles the choice.
   import { LOUD_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
@@ -10,6 +12,12 @@
   let { value, levels, onselect, labels = PRIORITY_LABELS, name = 'Priority', loud = LOUD_PRIORITY, class: className = '', active = true } = $props();
 
   const SETTLE_MS = 120;
+  // Wheel travel that counts as one level. Under any mouse notch (about 100px in Chrome, 3 lines = 48px in Firefox, less
+  // on scaled displays), so every notch is one level and never more; trackpad deltas build up to it.
+  const WHEEL_STEP_PX = 30;
+  // deltaMode 1 (lines, Firefox) and 2 (pages) in pixels
+  const LINE_PX = 16;
+  const PAGE_PX = 400;
   /** Key -> how far the choice moves; Home and End jump to the ends. */
   const KEY_STEPS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, PageDown: 2, PageUp: -2 };
 
@@ -19,6 +27,7 @@
   let settle;
   let scrolling = false;
   let positioning = false;
+  let wheelTravel = 0;
 
   const index = $derived(Math.max(0, levels.indexOf(value)));
   const rowHeight = () => /** @type {HTMLElement | undefined} */ (list?.firstElementChild)?.offsetHeight || 1;
@@ -80,6 +89,27 @@
   function onuserinput() {
     positioning = false;
   }
+
+  // Registered by hand: the wheel has to be non-passive to stop the native multi-row scroll.
+  $effect(() => {
+    if (!list) return;
+    const wheel = list;
+    /** @param {WheelEvent} event */
+    const onwheel = (event) => {
+      if (!event.deltaY) return;
+      event.preventDefault();
+      positioning = false;
+      const scale = event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? PAGE_PX : 1;
+      // A turn the other way starts a fresh count
+      if (Math.sign(event.deltaY) !== Math.sign(wheelTravel)) wheelTravel = 0;
+      wheelTravel += event.deltaY * scale;
+      if (Math.abs(wheelTravel) < WHEEL_STEP_PX) return;
+      choose(index + Math.sign(wheelTravel));
+      wheelTravel = 0;
+    };
+    wheel.addEventListener('wheel', onwheel, { passive: false });
+    return () => wheel.removeEventListener('wheel', onwheel);
+  });
 </script>
 
 <div class="relative min-w-0 {className}">
@@ -87,7 +117,7 @@
   <!-- The band marks the middle row; the list scrolls under it. Padding of one row above and below lets the ends reach it. -->
   <div class="relative h-24 overflow-hidden rounded-ui-sm border border-line bg-surface focus-within:border-accent tv:h-36">
     <span class="pointer-events-none absolute inset-x-0 top-8 h-8 border-y border-line-strong bg-surface-raised tv:top-12 tv:h-12" aria-hidden="true"></span>
-    <div bind:this={list} {onscroll} {onkeydown} onwheel={onuserinput} onpointerdown={onuserinput} ontouchstart={onuserinput} tabindex="0" role="slider" aria-label={name} aria-valuemin={levels[0]} aria-valuemax={levels.at(-1)}
+    <div bind:this={list} {onscroll} {onkeydown} onpointerdown={onuserinput} ontouchstart={onuserinput} tabindex="0" role="slider" aria-label={name} aria-valuemin={levels[0]} aria-valuemax={levels.at(-1)}
       aria-valuenow={value} aria-valuetext={labels[value]}
       class="relative h-full snap-y snap-mandatory overflow-y-auto overscroll-contain py-8 scrollbar-none focus:outline-none tv:py-12">
       {#each levels as level, slot (level)}
