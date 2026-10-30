@@ -54,6 +54,7 @@
 
   /** @type {HTMLDialogElement | undefined} */
   let dialog = $state();
+  let dialogOpen = $state(false);
   /** @type {Attachments | undefined} */
   let attachments = $state();
   let dropping = $state(false);
@@ -87,6 +88,7 @@
     if (!dialog) return;
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute('open', '');
+    dialogOpen = true;
   });
 
   function flush() {
@@ -296,8 +298,8 @@
                 </div>
                 <!-- Priority and difficulty 0-5 as two scroll wheels side by side -->
                 <div class="grid grid-cols-2 gap-2">
-                  <LevelWheel value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} />
-                  <LevelWheel value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
+                  <LevelWheel active={dialogOpen} value={note.priority_level} levels={LEVELS} onselect={(level) => set({ priority_level: level })} />
+                  <LevelWheel active={dialogOpen} value={note.difficulty ?? 0} levels={LEVELS} labels={DIFFICULTY_LABELS} name="Difficulty" loud={LOUD_DIFFICULTY} onselect={(level) => set({ difficulty: level })} />
                 </div>
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <textarea bind:value={status} use:autosize={status} rows="1" maxlength={MAX_STATUS} placeholder="Status: what's happening right now" aria-label="Status"
