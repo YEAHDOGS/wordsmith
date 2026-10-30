@@ -1,9 +1,8 @@
 <script>
-  // A project's Media tab: every image and video attached to its notes, as a grid of tiles. Filter by the note's state
+  // A project's Media tab: every image, video, and audio attachment on its notes, as a grid of tiles. Filter by state
   // (All, Requested, In progress, Complete) and sort newest or oldest first; a tile opens its note. Attachments sync to
   // every device already (store.attachments), so this costs no extra requests beyond the files themselves, which the
-  // browser caches for good. Only the grid scrolls; the controls stay put. Documents are left out on purpose: this is a
-  // gallery of pictures, and a document's file tile says little next to them (it still shows on its note).
+  // browser caches for good. Only the grid scrolls; the controls stay put. Documents are left out on purpose.
   import Play from '@lucide/svelte/icons/play';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import ArrowUpNarrowWide from '@lucide/svelte/icons/arrow-up-narrow-wide';
@@ -94,7 +93,7 @@
         {/each}
       </ul>
     {:else}
-      <p class="px-4 py-12 text-center text-sm text-ink-muted" in:fade={MOTION}>{counts[ALL] ? 'No media on notes in this state.' : 'No pictures or videos on this project’s notes yet. Attach them to a note and they show up here.'}</p>
+      <p class="px-4 py-12 text-center text-sm text-ink-muted" in:fade={MOTION}>{counts[ALL] ? 'No media on notes in this state.' : 'No pictures, videos, or audio on this project’s notes yet. Attach them to a note and they show up here.'}</p>
     {/if}
   </div>
 </div>

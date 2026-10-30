@@ -1,5 +1,5 @@
 <script>
-  // Images, videos and documents on a note: pick, drop or paste files in; thumbnails (file tiles for documents) with
+  // Images, video, audio and documents on a note: pick, drop or paste files in; thumbnails (file tiles for audio and documents) with
   // upload progress; click to view full size, or a document's preview and its open / download link.
   // The full-size view can copy an image to the clipboard where the browser supports writing images.
   import Paperclip from '@lucide/svelte/icons/paperclip';
@@ -11,6 +11,7 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import AttachmentMedia from './AttachmentMedia.svelte';
+  import AudioTile from './AudioTile.svelte';
   import DocumentPreview from './DocumentPreview.svelte';
   import DocumentTile from './DocumentTile.svelte';
   import { store } from '../lib/store.svelte.js';
@@ -47,7 +48,7 @@
   export function add(list) {
     error = '';
     const allowed = list.filter((file) => uploadType(file));
-    if (allowed.length < list.length) error = 'Only images, videos and documents (pdf, docx, md, txt) can be attached.';
+    if (allowed.length < list.length) error = 'Choose a supported image, video, audio file, or document.';
     if (!allowed.length) return;
     if (!navigator.onLine) {
       error = 'Attachments need a connection. Try again when you are back online.';
@@ -123,6 +124,8 @@
           <button class="block size-full" onclick={() => view(file)} aria-label="View {file.name}">
             {#if attachmentKind(file.type) === 'document'}
               <DocumentTile {file} class="size-full" />
+            {:else if attachmentKind(file.type) === 'audio'}
+              <AudioTile {file} class="size-full" />
             {:else}
               <AttachmentMedia {file} class="size-full object-cover" />
             {/if}

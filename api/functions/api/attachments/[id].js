@@ -51,7 +51,7 @@ export async function onRequestGet(context) {
   if (!object) throw new HttpError(404, 'File is missing from storage');
 
   const type = String(row.type);
-  // Images, videos and PDFs show in the browser; other documents always download.
+  // Images, video, audio and PDFs show in the browser; other documents always download.
   const disposition = attachmentKind(type) !== 'document' || type === PDF ? 'inline' : 'attachment';
   const headers = new Headers({
     'Content-Type': type.startsWith('text/') ? type + TEXT_CHARSET : type,

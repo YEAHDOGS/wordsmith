@@ -100,7 +100,8 @@ async function purgeAttachments(env, userId, noteIds, now) {
     `SELECT id, r2_key, size FROM attachments WHERE user_id = ? AND deleted_at IS NULL AND note_id IN (${noteIds.map(() => '?').join(', ')})`,
   ).bind(userId, ...noteIds).all();
   const keys = results.map((/** @type {any} */ file) => file.r2_key);
-  for (let start = 0; env.ATTACHMENTS && start < keys.length; start += R2_DELETE_MAX) await env.ATTACHMENTS.delete(keys.slice(start, start + R2_DELETE_MAX));
+  if (keys.length && !env.ATTACHMENTS) throw new Error('Cannot purge attachments while R2 storage is unavailable');
+  for (let start = 0; start < keys.length; start += R2_DELETE_MAX) await env.ATTACHMENTS.delete(keys.slice(start, start + R2_DELETE_MAX));
   const list = noteIds.map(() => '?').join(', ');
   // One batch (a transaction): release only files still live, then scrub live and previously deleted file metadata.
   // Clearing note_id after the first statement means a racing regular delete or a later retry cannot release twice.

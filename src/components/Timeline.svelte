@@ -16,7 +16,7 @@
   const ACTOR_ICONS = { user: User, agent: Bot, github: GitMerge };
   const ROW_STAGGER_MS = 40;
   const MAX_STAGGER_MS = 400;
-  const ATTACHED = { image: 'an image', video: 'a video', document: 'a document' };
+  const ATTACHED = { image: 'an image', video: 'a video', audio: 'an audio file', document: 'a document' };
 
   const events = $derived(store.eventsFor(note.id));
   const firstPr = $derived(events.find((event) => event.type === 'pr_linked')?.created_at ?? null);

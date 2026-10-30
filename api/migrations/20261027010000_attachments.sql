@@ -1,4 +1,4 @@
--- Images and videos attached to notes. File bytes live in the private R2 bucket (binding ATTACHMENTS) under r2_key;
+-- Attachments on notes. File bytes live in the private R2 bucket (binding ATTACHMENTS) under r2_key;
 -- this table holds the metadata every device syncs. Rows are tombstoned (deleted_at) when removed.
 CREATE TABLE attachments (
   id TEXT PRIMARY KEY,

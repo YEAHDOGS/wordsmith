@@ -1,6 +1,6 @@
 <script>
   // Quick capture, Google Keep style. Collapsed it is one line; focus expands it. Enter in the title saves,
-  // Shift+Enter adds a line. Images, videos and documents can be picked, dropped or pasted in: they wait as thumbnails and
+  // Shift+Enter adds a line. Images, video, audio and documents can be picked, dropped or pasted in: they wait as thumbnails and
   // upload once the note is saved (a note has to reach the server before files can hang off it).
   // Every note is a feature (on the board, in the agent queue), so there is no Note / Feature toggle. The lightbulb
   // Feature button beside the paperclip unfolds the feature details: priority, difficulty, project, a pull request and
@@ -12,11 +12,12 @@
   import { fade, scale, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { store } from '../lib/store.svelte.js';
-  import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadType } from '../lib/models.js';
+  import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_AUDIO_BYTES, MAX_BODY, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadType } from '../lib/models.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import { topPosition } from '../lib/reorder.svelte.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
   import DocumentTile from './DocumentTile.svelte';
+  import AudioTile from './AudioTile.svelte';
   import LevelWheel from './LevelWheel.svelte';
 
   /** @type {{ projectId?: string | null, labelId?: string | null }} */
@@ -32,15 +33,15 @@
   // Priority and difficulty share the 0..5 scale; 0 is None / Unrated.
   const LEVELS = PRIORITY_LABELS.map((_, level) => level);
   const LOUD_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Hard');
-  const ERROR_TYPE = 'Only images, videos and documents (pdf, docx, md, txt) can be attached.';
+  const ERROR_TYPE = 'Choose a supported image, video, audio file, or document.';
   const BYTES_PER_MB = 1024 * 1024;
   const GIF = 'image/gif';
-  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, documents up to ${MAX_DOCUMENT_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
-  // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs, videos
-  // and documents can't be shrunk, so their real limit applies.
+  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, audio up to ${MAX_AUDIO_BYTES / BYTES_PER_MB} MB, documents up to ${MAX_DOCUMENT_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
+  // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs, video,
+  // audio and documents can't be shrunk, so their real limit applies.
   /** @param {File} file */
   const sizeLimit = (file) => (file.type === GIF ? MAX_IMAGE_BYTES : IMAGE_TYPES.includes(file.type) ? MAX_SOURCE_IMAGE_BYTES
-    : VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_BYTES : MAX_DOCUMENT_BYTES);
+    : VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_BYTES : attachmentKind(uploadType(file)) === 'audio' ? MAX_AUDIO_BYTES : MAX_DOCUMENT_BYTES);
   const ERROR_COUNT = `A note holds up to ${MAX_ATTACHMENTS_PER_NOTE} files.`;
   const ERROR_PR = 'That pull request link should look like https://github.com/owner/repo/pull/123';
   const FIELD = 'h-9 min-w-0 border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
@@ -214,6 +215,8 @@
             <li class="group relative size-16 overflow-hidden border border-line bg-app sm:size-20 tv:size-32" animate:flip={{ duration: THUMB_MS }} transition:scale={{ start: 0.85, duration: THUMB_MS }}>
               {#if attachmentKind(uploadType(item.file)) === 'document'}
                 <DocumentTile file={item.file} compact class="size-full" />
+              {:else if attachmentKind(uploadType(item.file)) === 'audio'}
+                <AudioTile file={item.file} compact class="size-full" />
               {:else if item.file.type.startsWith('video/')}
                 <!-- Local preview of a recording the user just picked; there are no captions to show -->
                 <!-- svelte-ignore a11y_media_has_caption -->

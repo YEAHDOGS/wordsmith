@@ -13,14 +13,25 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 // Timeline entries in note_events, written by the server on every interaction.
 export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
 
-// Attachments: images, videos and documents on notes, stored in R2. SVG is left out on purpose (it can carry script).
+// Attachments: images, videos, audio and documents on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+export const AUDIO_TYPES = {
+  'audio/aac': ['.aac'],
+  'audio/flac': ['.flac'],
+  'audio/mp4': ['.m4a'],
+  'audio/mpeg': ['.mp3'],
+  'audio/ogg': ['.oga', '.ogg'],
+  'audio/wav': ['.wav'],
+  'audio/webm': ['.weba', '.webm'],
+};
 // Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
 // and the server rejects anything larger.
 export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
 // Videos can't be re-encoded in the browser without a large library, so they're only capped: about a minute of 720p screen recording.
 export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+// Audio stays capped at 10 MB to keep recordings useful without making storage costly.
+export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 // Images up to this size are accepted for shrinking on the device before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Documents: each type and the file extensions it may carry. The server requires both to match, and never serves
@@ -35,7 +46,7 @@ export const DOCUMENT_TYPES = {
 // Documents aren't shrunk on the device, so they're only capped; 5 MB covers long specs and exported PDFs.
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 // The file pickers' accept list: every type, plus document extensions for systems that don't know the types.
-export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
+export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(AUDIO_TYPES), ...Object.values(AUDIO_TYPES).flat(), ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
 
 /** The lowercase extension of a file name, with its dot ('' when none). @param {string} name */
 export const fileExtension = (name) => (/\.[^.]+$/.exec(name)?.[0] || '').toLowerCase();
@@ -50,18 +61,25 @@ export function documentType(name) {
   return Object.keys(DOCUMENT_TYPES).find((type) => DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].includes(extension)) || '';
 }
 
-/** 'image', 'video', 'document', or '' for a type that can't be attached. @param {string} type */
+/** The audio type a file name stands for, or '' when it is not a supported audio file. @param {string} name */
+export function audioType(name) {
+  const extension = fileExtension(name);
+  return Object.keys(AUDIO_TYPES).find((type) => AUDIO_TYPES[/** @type {keyof typeof AUDIO_TYPES} */ (type)].includes(extension)) || '';
+}
+
+/** 'image', 'video', 'audio', 'document', or '' for a type that can't be attached. @param {string} type */
 export function attachmentKind(type) {
   if (IMAGE_TYPES.includes(type)) return 'image';
   if (VIDEO_TYPES.includes(type)) return 'video';
+  if (Object.hasOwn(AUDIO_TYPES, type)) return 'audio';
   return Object.hasOwn(DOCUMENT_TYPES, type) ? 'document' : '';
 }
 
 /**
- * The type a picked file uploads as: images and videos keep the browser's type, documents are named by their
+ * The type a picked file uploads as: images and videos keep the browser's type; audio and documents use their
  * extension. '' when the file can't be attached. @param {{ name: string, type: string }} file
  */
-export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : documentType(file.name));
+export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : audioType(file.name) || documentType(file.name));
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];

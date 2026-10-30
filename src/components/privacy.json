@@ -92,7 +92,7 @@
         },
         {
           "name": "Attachments",
-          "what": "Files you attach to notes: images, videos and documents (PDF, Word .docx, Markdown and plain text). The file itself sits in a private bucket; its name, type, size and note are in the database. Images are compressed on your device before upload.",
+          "what": "Files you attach to notes: images, videos, audio, and documents (PDF, Word .docx, Markdown and plain text). The file itself sits in a private bucket; its name, type, size and note are in the database. Images are compressed on your device before upload.",
           "where": "r2",
           "why": "To show and play your attachments on every device. Files are only ever served to your signed-in account, never on public share pages.",
           "kept": "Until you remove it, which deletes the file right away, or until its note is purged from Trash after 30 days."
