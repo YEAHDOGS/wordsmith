@@ -243,15 +243,16 @@
       ondragleave={(event) => event.currentTarget === event.target && (dropping = false)} {ondrop} {onpaste}>
       <!-- Toolbar: always one row, never wrapping or scrolling sideways. It's a container: as it narrows (rem, so it
            follows the UI size) labels drop to icons (Archive, Timeline, Copy under 44rem; Save under 22rem) and padding
-           tightens under 20rem. Phones keep only pin, color, archive and trash here; everything that organizes the note
+           tightens under 20rem; under 44rem the icons spread evenly. Phones keep only pin, color, archive and trash here; everything that organizes the note
            sits under the body in the details panel. -->
       <div class="@container flex items-start border-b border-line">
-        <div class="flex min-w-0 flex-1 items-center gap-1 px-2 py-1 @max-[20rem]:gap-0 @max-[20rem]:px-1">
+        <div class="flex min-w-0 flex-1 items-center gap-1 px-2 py-1 @max-[44rem]:justify-between @max-[20rem]:gap-0 @max-[20rem]:px-1">
           <button class="{TOOL} {note.pinned ? 'text-accent' : ''}" aria-pressed={note.pinned} onclick={() => set({ pinned: !note.pinned })} title={note.pinned ? 'Unpin' : 'Pin'}>
             <Pin class="size-4" />
           </button>
           <ColorPicker value={note.color} onchange={(color) => set({ color })} />
-          <span class="flex-1"></span>
+          <!-- Wide toolbars push the rest right; narrow ones space every icon evenly (justify-between) -->
+          <span class="hidden flex-1 @min-[44rem]:block"></span>
           <div class="hidden sm:contents">
             {@render copyNoteButton(TOOL)}
             <ShareMenu {note} class={TOOL} />
