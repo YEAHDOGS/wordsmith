@@ -14,6 +14,7 @@
   import RepoPicker from './RepoPicker.svelte';
   import ProviderIcon from './ProviderIcon.svelte';
   import { store } from '../lib/store.svelte.js';
+  import { relabelProject } from '../lib/groups.js';
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { reveal } from '../lib/reveal.js';
@@ -93,6 +94,8 @@
     }
     nameError = '';
     store.update('projects', project.id, { name });
+    // Group labels carry the project's name
+    relabelProject(project.id);
   }
 
   async function copyPrompt() {

@@ -5,7 +5,7 @@
   import X from '@lucide/svelte/icons/x';
   import { fly, scale } from 'svelte/transition';
   import { store } from '../lib/store.svelte.js';
-  import { assignGroup, createGroup, groupsIn, ungroup } from '../lib/groups.js';
+  import { assignGroup, createGroup, editGroup, groupsIn, ungroup } from '../lib/groups.js';
   import { DOT_BG } from '../lib/colors.js';
   import { COLORS, MAX_NAME } from '../lib/models.js';
   import TEXT from './group-dialog.json';
@@ -49,7 +49,7 @@
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    if (group) store.update('note_groups', group.id, { name: trimmed, color });
+    if (group) editGroup(group, trimmed, color);
     else createGroup(projectId, trimmed, color, notes);
     finish();
   }

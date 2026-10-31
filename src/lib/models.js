@@ -144,6 +144,8 @@ export const MODELS = {
   labels: {
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // The note group this label mirrors (note_groups.id; src/lib/groups.js), or null for an ordinary label
+    group_id: { type: 'id', nullable: true, default: null },
   },
   notes: {
     project_id: { type: 'id', nullable: true, default: null },

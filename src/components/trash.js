@@ -7,7 +7,7 @@ import { store } from '../lib/store.svelte.js';
 export const TRASH_KINDS = /** @type {const} */ (['notes', 'projects', 'labels']);
 const SNIPPET_LENGTH = 140;
 
-/** @typedef {{ table: typeof TRASH_KINDS[number], id: string, title: string, snippet: string, color: string, deletedAt: number, daysAgo: number, daysLeft: number }} TrashItem */
+/** @typedef {{ table: typeof TRASH_KINDS[number], id: string, title: string, snippet: string, color: string, group: boolean, deletedAt: number, daysAgo: number, daysLeft: number }} TrashItem */
 
 /**
  * Every listable row in the trash right now.
@@ -27,6 +27,8 @@ export function trashItems(now) {
       if (table === 'notes' && !title && !snippet && !store.attachmentsFor(row.id).length) continue;
       items.push({
         table, id: row.id, title, snippet, color: row.color,
+        // A note group's label (labels.group_id), shown with the group icon
+        group: table === 'labels' && Boolean(row.group_id),
         deletedAt: row.deleted_at,
         daysAgo: Math.max(0, Math.floor((now - row.deleted_at) / DAY_MS)),
         daysLeft: Math.max(1, Math.ceil((row.deleted_at + TRASH_MS - now) / DAY_MS)),

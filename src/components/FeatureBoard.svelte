@@ -16,7 +16,7 @@
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
-  import { groupsIn, pruneGroups, splitByGroup } from '../lib/groups.js';
+  import { groupsIn, joinGroup, pruneGroups, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
@@ -107,7 +107,8 @@
       moves.set(note.id, changed ? {
         column_id: column.id,
         ...(note.state === column.state ? {} : { state: column.state }),
-        ...(leftGroup === groupId ? {} : { group_id: groupId }),
+        // Joining or leaving a group swaps the group's label too
+        ...(leftGroup === groupId ? {} : joinGroup(note, groupId)),
       } : {});
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }

@@ -14,6 +14,7 @@
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
+  import Group from '@lucide/svelte/icons/group';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
@@ -225,7 +226,7 @@
         <div animate:flip={{ duration: 150 }}>
           {#if editingLabels}
             <div class="flex items-center gap-2 px-4 py-1" transition:slide={{ duration: 150 }}>
-              <Tag class="size-4 shrink-0 text-ink-faint" />
+              {#if label.group_id}<Group class="size-4 shrink-0 text-ink-faint" />{:else}<Tag class="size-4 shrink-0 text-ink-faint" />{/if}
               <input value={label.name} maxlength={MAX_NAME} aria-label="Rename label"
                 class="min-w-0 flex-1 border border-line bg-surface px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
                 onchange={(event) => event.currentTarget.value.trim() && store.update('labels', label.id, { name: event.currentTarget.value.trim() })} />
@@ -235,7 +236,8 @@
             <div transition:slide={{ duration: 150 }}>
               <button class="{ITEM} {active('label', label.id) ? ACTIVE : ''}" onclick={() => go('label', label.id)} aria-current={active('label', label.id) ? 'page' : undefined}>
                 <span class="{INDICATOR} {active('label', label.id) ? 'scale-y-100' : 'scale-y-0'}"></span>
-                <Tag class="size-4 shrink-0" />
+                <!-- A note group's label (labels.group_id, src/lib/groups.js) wears the group icon -->
+                {#if label.group_id}<Group class="size-4 shrink-0" />{:else}<Tag class="size-4 shrink-0" />{/if}
                 <span class="truncate">{label.name}</span>
               </button>
             </div>
