@@ -44,6 +44,9 @@ export const DOT_TEXT = {
   pink: 'text-dot-pink',
 };
 
+/** Default marker color per agent (lowercase name) for the robot and name on note cards; any other agent stays muted (DOT_TEXT.default). */
+export const AGENT_TEXT = { muse: 'text-dot-blue', codex: 'text-dot-green', claude: 'text-dot-orange', agy: 'text-dot-purple' };
+
 /** Left rail in a note group's color, beside its indented notes on the notes page and the board. */
 export const RAIL_BORDER = {
   default: 'border-line-strong',

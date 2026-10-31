@@ -33,7 +33,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
+  import { AGENT_TEXT, DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
@@ -72,8 +72,10 @@
   const agent = $derived(note.created_by_type === 'agent' ? note.created_by : '');
   // The card's bottom line names one agent: who it's assigned to, else the agent that filed it (the server stamps
   // notes.created_by for agent tokens). A different filer, when both are set, stays in the meta row.
-  const credit = $derived(note.assignee ? { name: note.assignee, icon: Bot, title: `Assigned to ${note.assignee}` }
+  const credited = $derived(note.assignee ? { name: note.assignee, icon: Bot, title: `Assigned to ${note.assignee}` }
     : agent ? { name: agent, icon: BotMessageSquare, title: `Created by agent ${agent}` } : null);
+  // ...in the agent's marker color (AGENT_TEXT), muted for agents without one
+  const credit = $derived(credited && { ...credited, text: AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (credited.name.toLowerCase())] || DOT_TEXT.default });
   const filedBy = $derived(note.assignee && agent && agent !== note.assignee ? agent : '');
   const files = $derived(store.attachmentsFor(note.id));
   const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
@@ -266,7 +268,7 @@
       </span>
     {/if}
     {#if filedBy}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="Created by agent {filedBy}"><BotMessageSquare class="size-3" />{filedBy}</span>
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (filedBy.toLowerCase())] || DOT_TEXT.default}" title="Created by agent {filedBy}"><BotMessageSquare class="size-3" />{filedBy}</span>
     {/if}
     {#each note.pull_requests as pr (pr.url)}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
@@ -294,7 +296,7 @@
     <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
       {#if credit}
         <!-- Robot over the full name (agent names run about 7 characters); never truncated -->
-        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm tv:@max-[11rem]:text-[0.6875rem] text-ink-muted" title={credit.title}>
+        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm tv:@max-[11rem]:text-[0.6875rem] {credit.text}" title={credit.title}>
           <credit.icon class="size-3 shrink-0 tv:size-4" /><span>{credit.name}</span>
         </span>
       {/if}
