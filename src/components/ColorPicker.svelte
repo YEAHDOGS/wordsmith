@@ -1,9 +1,9 @@
 <script>
-  // Color button for notes and projects. The dots float in a small popover under it, so opening it never pushes
+  // Color button for notes and projects: the palette icon itself takes the chosen color (muted when none). The dots float in a small popover under it, so opening it never pushes
   // the surrounding toolbar around; the popover slides sideways if it would run off the right edge.
   import Palette from '@lucide/svelte/icons/palette';
   import { scale } from 'svelte/transition';
-  import { DOT_BG } from '../lib/colors.js';
+  import { DOT_BG, DOT_TEXT } from '../lib/colors.js';
   import { COLORS } from '../lib/models.js';
 
   /** @type {{ value: string, onchange: (color: string) => void }} */
@@ -50,10 +50,9 @@
 <svelte:window onpointerdown={onWindowPointer} onkeydown={onWindowKey} />
 
 <div bind:this={root} class="relative flex items-center" role="group" aria-label="Color">
-  <button bind:this={button} class="spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink {open ? 'bg-surface-raised text-ink' : ''}"
+  <button bind:this={button} class="spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink @max-[20rem]:px-1.5 {open ? 'bg-surface-raised text-ink' : ''}"
     aria-expanded={open} onclick={toggle} title="Color">
-    <Palette class="size-4" />
-    <span class="spring size-2.5 rounded-full {DOT_BG[/** @type {keyof typeof DOT_BG} */ (value)] || DOT_BG.default}"></span>
+    <Palette class="spring size-4 {value && value !== 'default' ? DOT_TEXT[/** @type {keyof typeof DOT_TEXT} */ (value)] : ''}" />
   </button>
   {#if open}
     <div data-popover class="absolute top-full z-30 mt-1 grid w-40 origin-top-left grid-cols-5 gap-1.5 border border-line-strong bg-surface p-2 shadow-2xl"
