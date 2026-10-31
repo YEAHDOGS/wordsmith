@@ -294,7 +294,7 @@
     <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
       {#if credit}
         <!-- Robot over the full name (agent names run about 7 characters); never truncated -->
-        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm text-ink-muted" title={credit.title}>
+        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm tv:@max-[11rem]:text-[0.6875rem] text-ink-muted" title={credit.title}>
           <credit.icon class="size-3 shrink-0 tv:size-4" /><span>{credit.name}</span>
         </span>
       {/if}
