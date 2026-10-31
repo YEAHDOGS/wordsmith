@@ -16,7 +16,7 @@
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
-  import { groupsIn, pruneGroups, splitByGroup } from '../lib/groups.js';
+  import { groupsIn, joinGroup, pruneGroups, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
@@ -107,7 +107,8 @@
       moves.set(note.id, changed ? {
         column_id: column.id,
         ...(note.state === column.state ? {} : { state: column.state }),
-        ...(leftGroup === groupId ? {} : { group_id: groupId }),
+        // Joining or leaving a group swaps the group's label too
+        ...(leftGroup === groupId ? {} : joinGroup(note, groupId)),
       } : {});
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
@@ -219,8 +220,9 @@
             {@const over = drag.id && drag.zone === column.id + GROUP_KEY + group.id}
             <!-- One drop zone per group, header included; its cards sit indented behind a rail in the group's color -->
             <div class="flex flex-col gap-px" use:dropzone={zoneFor(column, group)}>
-              <GroupHeader {group} notes={own} total={groupTotals.get(group.id) ?? own.length} class="spring px-3 py-1.5 text-xs tv:px-4 tv:text-base {over ? 'bg-surface-raised' : 'bg-app'}" />
-              {#if !group.collapsed}
+              <GroupHeader {group} column={column.id} notes={own} total={groupTotals.get(group.id) ?? own.length} class="spring px-3 py-1.5 text-xs tv:px-4 tv:text-base {over ? 'bg-surface-raised' : 'bg-app'}" />
+              <!-- Each column folds its own copy of the group -->
+              {#if !(group.folded_columns ?? []).includes(column.id)}
                 <div class="bg-app pl-3 tv:pl-5" transition:slide={{ duration: FOLD_MS }}>
                   <div class="flex flex-col gap-px border-l-2 bg-line {RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (group.color)] || RAIL_BORDER.default}">
                     {#each members as note (note.id)}{@render card(note)}{/each}

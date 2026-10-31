@@ -9,6 +9,7 @@
   import FileText from '@lucide/svelte/icons/file-text';
   import Folder from '@lucide/svelte/icons/folder';
   import Tag from '@lucide/svelte/icons/tag';
+  import Group from '@lucide/svelte/icons/group';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Trash from '@lucide/svelte/icons/trash';
   import NoteCard from './NoteCard.svelte';
@@ -111,7 +112,7 @@
       <ul class="{CONTENT} grid items-start gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3 ultrawide:grid-cols-4 short:grid-cols-2" aria-label={fill(TEXT.itemCount, { count: items.length })}>
         {#each shown as item (`${item.table}:${item.id}`)}
           {@const key = `${item.table}:${item.id}`}
-          {@const Icon = ICONS[item.table]}
+          {@const Icon = item.group ? Group : ICONS[item.table]}
           <li class="flex min-w-0 flex-col gap-2 overflow-hidden rounded-ui border border-line {item.table === 'notes' ? TINT_BG[/** @type {keyof typeof TINT_BG} */ (item.color)] ?? 'bg-surface' : 'bg-surface'} p-3 tv:gap-3 tv:p-5"
             animate:flip={FLIP} in:fly={ROW_IN} out:fly={ROW_OUT}>
             {#if item.table === 'notes'}
