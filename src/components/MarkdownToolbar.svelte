@@ -24,6 +24,8 @@
   const BUTTON = 'spring press flex size-7 sm:size-8 tv:size-11 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink disabled:opacity-40';
   const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
   const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+  // Crossfade for the Preview / Edit icon and label, which swap in place
+  const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
   const MENU_IN = { start: 0.9, duration: 160, easing: backOut };
   const MENU_OUT = { start: 0.95, duration: 100 };
   const GROUPS = [
@@ -88,9 +90,17 @@
   {/each}
   {#if showPreview}
     <span class="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
-    <button type="button" class="{BUTTON} w-auto shrink-0 gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
+    <button type="button" class="{BUTTON} w-auto shrink-0 sm:w-auto tv:w-auto gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
       title={preview ? 'Back to editing' : 'Preview formatting'}>
-      {#if preview}<Pencil class="size-4 shrink-0" /><span>Edit</span>{:else}<Eye class="size-4 shrink-0" /><span>Preview</span>{/if}
+      <!-- Both icons and both labels share one grid cell and crossfade, so the button and the buttons beside it never move -->
+      <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+        <Eye class="size-4 {SWAP} {preview ? 'scale-50 opacity-0' : ''}" />
+        <Pencil class="size-4 {SWAP} {preview ? '' : 'scale-50 opacity-0'}" />
+      </span>
+      <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+        <span class="{SWAP} {preview ? 'opacity-0' : ''}">Preview</span>
+        <span class="{SWAP} {preview ? '' : 'opacity-0'}">Edit</span>
+      </span>
     </button>
   {/if}
 </div>

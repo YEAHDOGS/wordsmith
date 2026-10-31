@@ -85,18 +85,20 @@
     <Segmented options={CORNERS} value={appearance.corners} labels={TEXT.cornerNames} label={TEXT.corners} onselect={(corners) => appearance.setCorners(corners)} />
   </div>
 
-  <div>
+  <!-- --thumb sizes the slider's dot (src/app.css .slider) and places the labels: each is w-8 (2rem) and the row is
+       inset so the first and last centers sit thumb/2 in from the ends, exactly where the dot stops -->
+  <div class="[--thumb:1.25rem]">
     <div class="mb-2 flex items-baseline justify-between gap-2">
       <label class="{SUBHEADING} mb-0" for="ui-size">{TEXT.size}</label>
       <span class="text-xs text-ink-muted">{TEXT.sizeHint}</span>
     </div>
-    <input id="ui-size" type="range" class="w-full cursor-pointer accent-accent" min="0" max={SIZES.length - 1} step="1" value={sizeIndex}
+    <input id="ui-size" type="range" class="slider block w-full cursor-pointer" style:--fill={shownSize / (SIZES.length - 1)} min="0" max={SIZES.length - 1} step="1" value={sizeIndex}
       aria-valuetext={TEXT.sizeNames[SIZES[shownSize]]}
       oninput={(event) => (draggingSize = Number(event.currentTarget.value))}
       onchange={(event) => { appearance.setSize(SIZES[Number(event.currentTarget.value)]); draggingSize = -1; }} />
-    <div class="mt-1 grid grid-cols-5">
+    <div class="mx-[calc(var(--thumb)/2-1rem)] mt-1 flex justify-between">
       {#each SIZES as size, index (size)}
-        <button type="button" tabindex="-1" class="spring press py-1 text-center font-mono text-xs {index === shownSize ? 'scale-110 font-bold text-accent' : 'text-ink-faint hover:text-ink'}"
+        <button type="button" tabindex="-1" class="spring press w-8 py-1 text-center font-mono text-xs {index === shownSize ? 'scale-110 font-bold text-accent' : 'text-ink-faint hover:text-ink'}"
           onclick={() => appearance.setSize(size)}>{TEXT.sizeNames[size]}</button>
       {/each}
     </div>

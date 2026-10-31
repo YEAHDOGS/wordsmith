@@ -4,7 +4,7 @@
   // Complete) that shows up once the list holds features.
   // Reading order runs left to right; each note goes into the currently shortest column. Heights are estimated from
   // content, not measured, so cards never jump after they render. Two toggles: the order (newest updated, newest
-  // created, highest priority, or manual) and grouping by nothing, project, or season (winter is December to February).
+  // created, highest priority, hardest, or manual) and grouping by nothing, project, or season (winter is December to February).
   // Hold and slide a card to move it: each band is a drop zone (src/lib/reorder.svelte.js); a drop in a time order
   // switches to manual so it sticks. Every reorder, sort change and resize slides cards with FLIP.
   // Inside a project, its note groups (src/lib/groups.js) come right after Pinned, one band each, and fold away under their header.
@@ -12,6 +12,7 @@
   import { slide } from 'svelte/transition';
   import { router } from '../lib/router.svelte.js';
   import CheckCheck from '@lucide/svelte/icons/check-check';
+  import X from '@lucide/svelte/icons/x';
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
@@ -50,11 +51,14 @@
   const CARD_MIN_PX = 112;
   const META_ROW_PX = 26;
   const COVER_RATIO = 9 / 16;
-  const ORDER_LABELS = { updated: 'Updated', created: 'Created', priority: 'Priority', manual: 'Manual' };
+  const ORDER_LABELS = { updated: 'Updated', created: 'Created', priority: 'Priority', difficulty: 'Difficulty', manual: 'Manual' };
+  // Orders that sort by a level, and the note field each one reads; drops in them take their neighbours' level.
+  const LEVEL_ORDERS = { priority: 'priority_level', difficulty: 'difficulty' };
   const ORDER_HINTS = {
     updated: 'Newest updated first',
     created: 'Newest created first',
     priority: 'Highest priority first, then your order',
+    difficulty: 'Hardest first, then your order',
     manual: 'Your order: hold a note and slide it, or Alt+Arrow keys',
   };
   /** @type {Record<string, (a: any, b: any) => number>} */
@@ -62,6 +66,7 @@
     updated: (a, b) => b.updated_at - a.updated_at,
     created: (a, b) => b.created_at - a.created_at,
     priority: (a, b) => b.priority_level - a.priority_level || orderKey(a) - orderKey(b),
+    difficulty: (a, b) => (b.difficulty ?? 0) - (a.difficulty ?? 0) || orderKey(a) - orderKey(b),
     manual: (a, b) => orderKey(a) - orderKey(b),
   };
   const GROUP_LABELS = { all: 'All', project: 'Projects', season: 'Seasons' };
@@ -72,6 +77,8 @@
   // the width of the widest one's longest label, so cycling a label never resizes it or its neighbours.
   const TOGGLE = 'spring press flex h-8 min-w-0 items-center justify-center gap-1.5 bg-app px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink sm:px-2.5 tv:h-11 tv:text-base';
   const NO_PROJECT = 'No project';
+  // Crossfade for the Select all / Deselect all icon and label, which swap in place
+  const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
   const STATE_FILTER_LABELS = { all: 'All', requested: STATE_STYLE.requested.label, in_progress: STATE_STYLE.in_progress.label, complete: STATE_STYLE.complete.label };
   const FILTERED_EMPTY = 'No features in this state.';
   const GROUP_PREFIX = 'group:';
@@ -122,6 +129,7 @@
   // The state filter only matters once there are features to filter; it stays visible while set, so it can be undone.
   const hasFeatures = $derived(ui.stateFilter !== 'all' || notes.some((note) => note.kind === 'feature'));
   const shown = $derived(notes.filter((note) => ui.showsState(note)));
+  const allPicked = $derived(shown.length > 0 && shown.every((note) => ui.selected.has(note.id)));
 
   const naturalOrder = $derived.by(() => {
     const compare = COMPARE[ui.order] ?? COMPARE.updated;
@@ -161,7 +169,7 @@
     }
     if (group !== 'all') {
       // Notes arrive already ordered by project or by time, so each band is one consecutive run.
-      // In priority or manual order seasons can interleave, so bands are gathered by key instead.
+      // In level or manual order seasons can interleave, so bands are gathered by key instead.
       /** @type {Map<string, { key: string, title: string, notes: any[] }>} */
       const bands = new Map();
       for (const note of rest) {
@@ -206,7 +214,7 @@
    * sorted by time, so the note goes right after the one shown before it (or before the one shown after it, at the
    * top) in manual order, and only then does the grid switch to manual so the drop sticks. Picking a card up,
    * cancelling, or letting go on its own slot never reaches here, so none of those touch the chosen sort.
-   * Priority order only moves features between levels: plain notes have no priority control to undo it.
+   * Priority and difficulty order only move features between levels: plain notes have no level controls to undo it.
    * Several selected notes dropped together go in as one block, in the order they were shown, each taking its own pin
    * and group change.
    * @param {{ key: string, notes: any[] }} section @param {any[]} notes @param {number} index
@@ -235,9 +243,10 @@
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }
     // A masonry drop saves the whole order the preview showed, so the note stays in the column it was dropped in.
-    // Priority order moves only features between levels: plain notes have no priority control to undo it.
+    // Level orders move only features between levels: plain notes have no level controls to undo it.
     const shown = previewOrder(section);
-    const writes = shown ? respace(shown) : placeNotes(list, notes, slot, (note) => ui.order === 'priority' && note.kind === 'feature');
+    const levelField = LEVEL_ORDERS[/** @type {keyof typeof LEVEL_ORDERS} */ (ui.order)] ?? false;
+    const writes = shown ? respace(shown) : placeNotes(list, notes, slot, (note) => note.kind === 'feature' && levelField);
     for (const note of notes) if (!writes.some((write) => write.id === note.id)) writes.push({ id: note.id, patch: {} });
     for (const { id, patch } of writes) {
       const change = { ...patch, ...own.get(id) };
@@ -297,12 +306,12 @@
    * The order a section takes while a card is dragged over it, or null to use the plain slot. The other cards keep the
    * columns they had and the carried ones open a gap beside the card under the pointer, in its column; the order is
    * then interleaved so the shortest-column layout rebuilds exactly those columns, and saving it keeps them after the drop.
-   * Priority order is left to the plain slot: it re-sorts by level anyway.
+   * Level orders are left to the plain slot: they re-sort by level anyway.
    * @param {{ key: string, notes: any[] }} section
    */
   function previewOrder(section) {
     const anchor = drag.anchor;
-    if (drag.zone !== section.key || !anchor || ui.order === 'priority') return null;
+    if (drag.zone !== section.key || !anchor || ui.order in LEVEL_ORDERS) return null;
     const arranged = drag.arrange(section.notes, section.key);
     const start = Math.min(drag.index, arranged.length - drag.taking);
     const block = arranged.slice(start, start + drag.taking);
@@ -330,11 +339,20 @@
 
 <div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
   {#if notes.length}
-    <!-- Phones: Select all as an icon, then the toggles split the rest of the row evenly. From sm up: label, toggles on the right -->
+    <!-- Phones: Select all as an icon, then the toggles split the rest of the row evenly. From sm up: label, toggles on the right.
+         With every shown note picked it becomes Deselect all; both icons and labels share one cell, so it never resizes. -->
     <div class="flex items-stretch gap-2 pt-2 pb-2 sm:pt-4">
       <button class="spring press flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border border-line text-xs text-ink-muted hover:border-line-strong hover:text-ink sm:w-auto sm:px-2.5 tv:h-11 tv:text-base"
-        onclick={() => ui.selectAll(shown.map((note) => note.id))} disabled={!shown.length} title="Select every note here to copy or archive them together" aria-label="Select all">
-        <CheckCheck class="size-3.5 shrink-0" /><span class="hidden sm:inline">Select all</span>
+        onclick={() => toggleBand(shown)} disabled={!shown.length} aria-label={allPicked ? 'Deselect all' : 'Select all'}
+        title={allPicked ? 'Deselect every note here' : 'Select every note here to copy or archive them together'}>
+        <span class="grid shrink-0 *:col-start-1 *:row-start-1" aria-hidden="true">
+          <CheckCheck class="size-3.5 {SWAP} {allPicked ? 'scale-50 opacity-0' : ''}" />
+          <X class="size-3.5 {SWAP} {allPicked ? '' : 'scale-50 opacity-0'}" />
+        </span>
+        <span class="hidden *:col-start-1 *:row-start-1 sm:grid" aria-hidden="true">
+          <span class="{SWAP} {allPicked ? 'opacity-0' : ''}">Select all</span>
+          <span class="{SWAP} {allPicked ? '' : 'opacity-0'}">Deselect all</span>
+        </span>
       </button>
       <div class="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-px border border-line bg-line sm:ml-auto sm:flex-none" role="group" aria-label="Sort notes">
         <!-- Every label sits in one grid cell, so the button keeps the width of its longest label and never jumps -->

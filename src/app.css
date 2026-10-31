@@ -127,6 +127,70 @@ input[type="color"].swatch::-moz-color-swatch {
   border-radius: var(--ws-radius-sm);
 }
 
+/* Range sliders (Settings → Appearance → Size). The thumb has a set size (--thumb, inherited from the slider's wrapper so
+   the labels under it can use it too), so stop n of N sits exactly at thumb/2 + (100% - thumb) * n/(N-1) in every
+   browser. The track fills in the accent up to the thumb's center (--fill, 0 to 1). */
+.slider {
+  appearance: none;
+  height: var(--thumb, 1.25rem);
+  background: transparent;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-accent) calc(var(--thumb, 1.25rem) / 2 + (100% - var(--thumb, 1.25rem)) * var(--fill, 0)), var(--color-line-strong) 0);
+}
+
+.slider::-moz-range-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-accent) calc(var(--thumb, 1.25rem) / 2 + (100% - var(--thumb, 1.25rem)) * var(--fill, 0)), var(--color-line-strong) 0);
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--thumb, 1.25rem);
+  height: var(--thumb, 1.25rem);
+  /* Centers the thumb on the 0.375rem track */
+  margin-top: calc((0.375rem - var(--thumb, 1.25rem)) / 2);
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  transition: scale 150ms var(--ease-spring);
+}
+
+.slider::-moz-range-thumb {
+  width: var(--thumb, 1.25rem);
+  height: var(--thumb, 1.25rem);
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  transition: scale 150ms var(--ease-spring);
+}
+
+.slider:active::-webkit-slider-thumb {
+  scale: 1.15;
+}
+
+.slider:active::-moz-range-thumb {
+  scale: 1.15;
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.slider:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* Hide scrollbars but keep scrolling functionality (sideways swipe lists) */
 @utility scrollbar-none {
   scrollbar-width: none;

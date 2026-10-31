@@ -33,7 +33,7 @@
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
+  import { AGENT_TEXT, DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
@@ -69,6 +69,14 @@
   const project = $derived(showProject && note.project_id ? store.find('projects', note.project_id) : null);
   const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
+  const agent = $derived(note.created_by_type === 'agent' ? note.created_by : '');
+  // The card's bottom line names one agent: who it's assigned to, else the agent that filed it (the server stamps
+  // notes.created_by for agent tokens). A different filer, when both are set, stays in the meta row.
+  const credited = $derived(note.assignee ? { name: note.assignee, icon: Bot, title: `Assigned to ${note.assignee}` }
+    : agent ? { name: agent, icon: BotMessageSquare, title: `Created by agent ${agent}` } : null);
+  // ...in the agent's marker color (AGENT_TEXT), muted for agents without one
+  const credit = $derived(credited && { ...credited, text: AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (credited.name.toLowerCase())] || DOT_TEXT.default });
+  const filedBy = $derived(note.assignee && agent && agent !== note.assignee ? agent : '');
   const files = $derived(store.attachmentsFor(note.id));
   const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
     ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
@@ -215,23 +223,28 @@
       <AttachmentMedia file={cover} class="spring size-full object-cover group-hover:scale-[1.02]" />
     </div>
   {/if}
-  <div class="flex items-start gap-2">
-    {#if note.priority_level || note.difficulty}<LevelDots priority={note.priority_level} difficulty={note.difficulty} />{/if}
-    {#if note.created_by_type === 'agent'}
-      <!-- Made by an agent token, not a person: the server stamps who (notes.created_by) -->
-      <span class="mt-0.5 shrink-0 text-ink-faint tv:mt-1.5" role="img" aria-label="Created by agent {note.created_by}" title="Created by agent {note.created_by}"><BotMessageSquare class="size-3.5 tv:size-5" /></span>
-    {/if}
-    {#if note.title}
-      <h3 class="line-clamp-4 min-w-0 flex-1 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>
-    {:else}
-      <span class="flex-1"></span>
-    {/if}
+  <!-- Pin and select: hover-only on desktop; phones have no hover, so they show only when active -->
+  {#snippet selectButton()}
     {#if !inTrash}
-    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
-    <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+    {/if}
+  {/snippet}
+  {#snippet pinButton()}
+    {#if !inTrash}
+    <button class="spring press -mx-1 flex h-[1.375em] items-center px-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
     {/if}
+  {/snippet}
+
+  <!-- Title at the top, taking all the width it can; pin over select in one column in the top-right corner.
+       The column shares the title's type, so the pin's box is one title line tall (leading-snug: 1.375em) and centers on it. -->
+  <div class="flex items-start gap-2">
+    {#if note.title}<h3 class="min-w-0 flex-1 line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{:else}<span class="flex-1"></span>{/if}
+    <div class="flex shrink-0 flex-col items-center gap-0.5 text-fluid-sm leading-snug">
+      {@render pinButton()}
+      {@render selectButton()}
+    </div>
   </div>
 
   {#if note.body}
@@ -244,16 +257,18 @@
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
-    {#if inTrash && note.created_by_type === 'agent' && note.created_by}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><BotMessageSquare class="size-3" />{note.created_by}</span>
-    {/if}
-    {#each attachmentCounts as type (type.kind)}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
-        <type.icon class="size-3" />{type.count}
+    {#if attachmentCounts.length}
+      <!-- Attachment counts stay together on one line, never split across the wrap -->
+      <span class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+        {#each attachmentCounts as type (type.kind)}
+          <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
+            <type.icon class="size-3" />{type.count}
+          </span>
+        {/each}
       </span>
-    {/each}
-    {#if note.assignee}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
+    {/if}
+    {#if filedBy}
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (filedBy.toLowerCase())] || DOT_TEXT.default}" title="Created by agent {filedBy}"><BotMessageSquare class="size-3" />{filedBy}</span>
     {/if}
     {#each note.pull_requests as pr (pr.url)}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
@@ -274,6 +289,19 @@
   <p class="font-mono text-[0.625rem] tv:text-sm text-ink-faint" title={fullTime(stamp.at)}>
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
+
+  <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the credited agent
+       centered between them -->
+  {#if note.priority_level || note.difficulty || credit}
+    <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
+      {#if credit}
+        <!-- Robot over the full name (agent names run about 7 characters); never truncated -->
+        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm tv:@max-[11rem]:text-[0.6875rem] {credit.text}" title={credit.title}>
+          <credit.icon class="size-3 shrink-0 tv:size-4" /><span>{credit.name}</span>
+        </span>
+      {/if}
+    </LevelDots>
+  {/if}
 
   <!-- Hold menu: dims the card in place (absolute, so nothing moves) and floats the actions over it -->
   {#if menuOpen && !inTrash}
