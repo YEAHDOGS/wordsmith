@@ -184,7 +184,10 @@ export const MODELS = {
     project_id: { type: 'id', nullable: true, default: null },
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // Folded on the notes page, where the group is one band
     collapsed: { type: 'bool', default: false },
+    // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
+    folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
 };
 
@@ -194,7 +197,7 @@ export const MODELS = {
 export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
-export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
+export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns'];
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';

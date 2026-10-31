@@ -54,10 +54,10 @@
     finish();
   }
 
-  /** Adding to a folded group opens it, so the notes don't seem to vanish. @param {any} target */
+  /** Adding to a folded group opens it everywhere (notes page and every board column), so the notes don't seem to vanish. @param {any} target */
   function addTo(target) {
     assignGroup(notes, target.id);
-    if (target.collapsed) store.update('note_groups', target.id, { collapsed: false });
+    if (target.collapsed || target.folded_columns?.length) store.update('note_groups', target.id, { collapsed: false, folded_columns: [] });
     finish();
   }
 

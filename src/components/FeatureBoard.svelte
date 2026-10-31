@@ -219,8 +219,9 @@
             {@const over = drag.id && drag.zone === column.id + GROUP_KEY + group.id}
             <!-- One drop zone per group, header included; its cards sit indented behind a rail in the group's color -->
             <div class="flex flex-col gap-px" use:dropzone={zoneFor(column, group)}>
-              <GroupHeader {group} notes={own} total={groupTotals.get(group.id) ?? own.length} class="spring px-3 py-1.5 text-xs tv:px-4 tv:text-base {over ? 'bg-surface-raised' : 'bg-app'}" />
-              {#if !group.collapsed}
+              <GroupHeader {group} column={column.id} notes={own} total={groupTotals.get(group.id) ?? own.length} class="spring px-3 py-1.5 text-xs tv:px-4 tv:text-base {over ? 'bg-surface-raised' : 'bg-app'}" />
+              <!-- Each column folds its own copy of the group -->
+              {#if !(group.folded_columns ?? []).includes(column.id)}
                 <div class="bg-app pl-3 tv:pl-5" transition:slide={{ duration: FOLD_MS }}>
                   <div class="flex flex-col gap-px border-l-2 bg-line {RAIL_BORDER[/** @type {keyof typeof RAIL_BORDER} */ (group.color)] || RAIL_BORDER.default}">
                     {#each members as note (note.id)}{@render card(note)}{/each}
