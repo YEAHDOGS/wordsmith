@@ -50,7 +50,7 @@
 <svelte:window onpointerdown={onWindowPointer} onkeydown={onWindowKey} />
 
 <div bind:this={root} class="relative flex items-center" role="group" aria-label="Color">
-  <button bind:this={button} class="spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink {open ? 'bg-surface-raised text-ink' : ''}"
+  <button bind:this={button} class="spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink @max-[20rem]:px-1.5 {open ? 'bg-surface-raised text-ink' : ''}"
     aria-expanded={open} onclick={toggle} title="Color">
     <Palette class="size-4" />
     <span class="spring size-2.5 rounded-full {DOT_BG[/** @type {keyof typeof DOT_BG} */ (value)] || DOT_BG.default}"></span>

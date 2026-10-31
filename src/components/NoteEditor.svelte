@@ -45,7 +45,8 @@
   const SAVED_MS = 360;
   const SAVE_KEY = 's';
   const FIELD = 'w-full border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none';
-  const TOOL = 'spring press flex items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink';
+  // Toolbar buttons tighten on a narrow toolbar (@max-[20rem], container queries on the toolbar) so it stays one row
+  const TOOL = 'spring press flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink @max-[20rem]:px-1.5';
   // Crossfade for icons and labels that swap in place (copy -> copied)
   const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
   // Priority and difficulty share the 0..5 scale.
@@ -224,7 +225,8 @@
       <ClipboardCopy class="size-4 {SWAP} {copiedNote ? 'scale-50 opacity-0' : ''}" />
       <Check class="size-4 {SWAP} {copiedNote ? '' : 'scale-50 opacity-0'}" />
     </span>
-    <span class="grid *:col-start-1 *:row-start-1">
+    <!-- Icon-only on a toolbar under 44rem; outside the toolbar (the phone details row) there's no container, so it shows -->
+    <span class="grid *:col-start-1 *:row-start-1 @max-[44rem]:sr-only">
       <span class="{SWAP} {copiedNote ? 'opacity-0' : ''}" aria-hidden={copiedNote}>Copy</span>
       <span class="{SWAP} {copiedNote ? '' : 'opacity-0'}" aria-hidden={!copiedNote} aria-live="polite">Copied</span>
     </span>
@@ -239,10 +241,12 @@
     <div class="spring flex h-full flex-col bg-app sm:rounded-ui sm:border {dropping ? 'border-accent' : 'border-line'}" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 120 }} role="presentation"
       ondragover={(event) => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); dropping = true; } }}
       ondragleave={(event) => event.currentTarget === event.target && (dropping = false)} {ondrop} {onpaste}>
-      <!-- Toolbar: a single wrapping row, never a sideways scroller. Phones keep only pin, color, archive and trash here;
-           everything that organizes the note sits under the body in the details panel. -->
-      <div class="flex items-start border-b border-line">
-        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-2 py-1">
+      <!-- Toolbar: always one row, never wrapping or scrolling sideways. It's a container: as it narrows (rem, so it
+           follows the UI size) labels drop to icons (Archive, Timeline, Copy under 44rem; Save under 22rem) and padding
+           tightens under 20rem. Phones keep only pin, color, archive and trash here; everything that organizes the note
+           sits under the body in the details panel. -->
+      <div class="@container flex items-start border-b border-line">
+        <div class="flex min-w-0 flex-1 items-center gap-1 px-2 py-1 @max-[20rem]:gap-0 @max-[20rem]:px-1">
           <button class="{TOOL} {note.pinned ? 'text-accent' : ''}" aria-pressed={note.pinned} onclick={() => set({ pinned: !note.pinned })} title={note.pinned ? 'Unpin' : 'Pin'}>
             <Pin class="size-4" />
           </button>
@@ -253,36 +257,36 @@
             <ShareMenu {note} class={TOOL} />
           </div>
           {#if !note.deleted_at}
-          <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden sm:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
+          <button class={TOOL} onclick={() => { set({ archived: !note.archived }); close(); }} title={note.archived ? 'Unarchive' : 'Archive'}><Archive class="size-4" /><span class="hidden @min-[44rem]:inline">{note.archived ? 'Unarchive' : 'Archive'}</span></button>
           <button class="{TOOL} hover:text-accent" onclick={() => { store.remove('notes', id); close(); }} title="Delete"><Trash class="size-4" /></button>
           {/if}
         </div>
         <!-- Phones: swaps the whole body between the note and its timeline; the icon shows where a press goes. Both icons and
              both labels share one grid cell and crossfade, so the button and its row never change size. -->
-        <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3 md:hidden" onclick={() => (showTimeline = !showTimeline)} aria-pressed={showTimeline}
+        <button class="{TOOL} self-stretch border-l border-line px-3 md:hidden @max-[20rem]:px-2" onclick={() => (showTimeline = !showTimeline)} aria-pressed={showTimeline}
           aria-label={showTimeline ? 'Show note' : 'Show timeline'} title={showTimeline ? 'Note' : 'Timeline'}>
           <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
             <History class="size-4 {SWAP} {showTimeline ? 'scale-50 opacity-0' : ''}" />
             <FileText class="size-4 {SWAP} {showTimeline ? '' : 'scale-50 opacity-0'}" />
           </span>
-          <span class="hidden *:col-start-1 *:row-start-1 sm:grid" aria-hidden="true">
+          <span class="hidden *:col-start-1 *:row-start-1 @min-[44rem]:grid" aria-hidden="true">
             <span class="{SWAP} {showTimeline ? 'opacity-0' : ''}">Timeline</span>
             <span class="{SWAP} {showTimeline ? '' : 'opacity-0'}">Note</span>
           </span>
         </button>
-        <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on the narrowest phones -->
-        <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
+        <!-- Save: icon and label crossfade to a check and "Saved" in place, so the button never changes width; the label is screen-reader only on a narrow toolbar -->
+        <button class="spring press flex shrink-0 items-center gap-1.5 self-stretch px-3 @max-[20rem]:px-2 text-xs font-semibold {saved ? 'bg-complete-soft text-complete' : 'bg-accent text-accent-ink hover:bg-accent-hover'}"
           onclick={save} title="Save and close (Ctrl+S)" aria-keyshortcuts="Control+S Meta+S">
           <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
             <Save class="size-4 {SWAP} {saved ? 'scale-50 opacity-0' : ''}" />
             <Check class="size-4 {SWAP} {saved ? '' : 'scale-50 opacity-0'}" />
           </span>
-          <span class="sr-only grid *:col-start-1 *:row-start-1 min-[360px]:not-sr-only">
+          <span class="sr-only grid *:col-start-1 *:row-start-1 @min-[22rem]:not-sr-only">
             <span class="{SWAP} {saved ? 'opacity-0' : ''}" aria-hidden={saved}>Save</span>
             <span class="{SWAP} {saved ? '' : 'opacity-0'}" aria-hidden={!saved} aria-live="polite">Saved</span>
           </span>
         </button>
-        <button class="{TOOL} shrink-0 self-stretch border-l border-line px-3" onclick={close} aria-label="Close"><X class="size-5" /></button>
+        <button class="{TOOL} self-stretch border-l border-line px-3 @max-[20rem]:px-2" onclick={close} aria-label="Close"><X class="size-5" /></button>
       </div>
 
       {#if note.deleted_at}
@@ -298,7 +302,8 @@
         <div class="{PANE} flex flex-col gap-3 tv:gap-5 {noteHidden ? `${PANE_HIDDEN} -translate-x-6` : ''}" inert={noteHidden}>
           <NoteTitle bind:value={title} onchange={queueSave} onnext={() => bodyField?.focus()} />
 
-          <div class="flex min-h-[12dvh] shrink-0 grow flex-col border-y border-line">
+          <!-- The note pane scrolls as a whole, so the body always gets a real height (45% of the screen) and grows to fill any room left -->
+          <div class="flex min-h-[45dvh] shrink-0 grow flex-col border-y border-line">
             {#if preview}
               <!-- Rendered by src/lib/markdown.js, which escapes all input -->
               <div class="markdown selectable min-h-0 flex-1 overflow-y-auto py-2 text-fluid-sm text-ink" in:fade={{ duration: 120 }}>
