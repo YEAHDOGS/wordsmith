@@ -15,14 +15,38 @@ import * as v1Labels from '../functions/api/v1/labels.js';
 import * as v1Events from '../functions/api/v1/events.js';
 import * as v1Context from '../functions/api/v1/context.js';
 import * as v1ProjectContext from '../functions/api/v1/projects/[project]/context.js';
-import { COLORS, DIFFICULTY_LABELS, FEATURE_STATES, PRIORITY_LABELS } from '../../src/lib/models.js';
+import * as v1Diagrams from '../functions/api/v1/diagrams/index.js';
+import * as v1Diagram from '../functions/api/v1/diagrams/[id].js';
+import { COLORS, DIFFICULTY_LABELS, EDGE_STYLES, FEATURE_STATES, NODE_KINDS, PRIORITY_LABELS } from '../../src/lib/models.js';
 
 const STRING = { type: 'string' };
 const ID = { type: 'string', description: 'Note or feature id' };
 const PROJECT = { type: 'string', description: 'Project id or name' };
 const PRIORITY = { type: 'integer', minimum: 0, maximum: PRIORITY_LABELS.length - 1, description: `0 none to ${PRIORITY_LABELS.length - 1} critical` };
 const DIFFICULTY = { type: 'integer', minimum: 0, maximum: DIFFICULTY_LABELS.length - 1, description: DIFFICULTY_LABELS.map((label, level) => `${level} ${label}`).join(', ') };
-const LABELS = { type: 'array', items: STRING, description: 'Label names. Tokens can add labels, never remove them: send every current one plus the new ones.' };
+const LABELS = { type: 'array', items: STRING, description: 'Label names. The list replaces the current labels: send every one the note should keep.' };
+const DIAGRAM_ID = { type: 'string', description: 'Diagram id' };
+const NODES = {
+  type: 'array',
+  description: 'Boxes. Only title is needed; leave x and y out and the server lays them out along the arrows.',
+  items: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Short id to name the box in edges, e.g. "api". Made from the title when left out.' },
+      title: STRING,
+      kind: { type: 'string', enum: NODE_KINDS, description: 'zone is a boundary around other boxes (a cloud, a region, a device)' },
+      text: { type: 'string', description: 'A line or two under the title: tech, responsibility, region' },
+      color: { type: 'string', enum: COLORS },
+      inside: { type: 'string', description: 'Id of the zone this box sits in' },
+      x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' },
+    },
+  },
+};
+const EDGES = {
+  type: 'array',
+  description: 'Arrows between boxes.',
+  items: { type: 'object', properties: { from: { type: 'string', description: 'Node id or exact title' }, to: { type: 'string', description: 'Node id or exact title' }, label: STRING, style: { type: 'string', enum: EDGE_STYLES } }, required: ['from', 'to'] },
+};
 const FORMAT = { type: 'string', enum: ['json', 'md'], description: 'md for one Markdown document' };
 
 /**
@@ -68,6 +92,14 @@ export const TOOLS = [
   { name: 'create_feature', description: 'File a new feature request.', method: 'POST', module: v1Features, path: '/api/v1/features',
     properties: { project: PROJECT, title: STRING, body: STRING, priority: PRIORITY, labels: LABELS }, required: ['title'] },
   { name: 'create_note', description: 'Capture a note, e.g. research to act on later.', method: 'POST', module: v1Notes, path: '/api/v1/notes', properties: { title: STRING, body: STRING, project: PROJECT, labels: LABELS } },
+  { name: 'list_diagrams', description: 'Architecture diagrams: id, name, description, project, node and edge counts.', method: 'GET', module: v1Diagrams, path: '/api/v1/diagrams', properties: { project: PROJECT }, query: ['project'] },
+  { name: 'get_diagram', description: 'One architecture diagram: its nodes, edges and Mermaid source. Read it before changing a system it documents.', method: 'GET', module: v1Diagram, path: '/api/v1/diagrams/:id', properties: { id: DIAGRAM_ID }, required: ['id'] },
+  { name: 'create_diagram', description: 'Draw an architecture diagram for the owner: clients, services, databases, queues and the zones they run in, joined by labeled arrows. It appears on their Architecture page.',
+    method: 'POST', module: v1Diagrams, path: '/api/v1/diagrams', properties: { name: STRING, project: PROJECT, description: { type: 'string', description: 'What the diagram shows, Markdown' }, nodes: NODES, edges: EDGES }, required: ['name'] },
+  { name: 'update_diagram', description: 'Change a diagram. add_nodes adds boxes or updates them by id (unmentioned fields and positions stay); remove_nodes takes ids or titles; nodes and edges replace everything.',
+    method: 'PATCH', module: v1Diagram, path: '/api/v1/diagrams/:id',
+    properties: { id: DIAGRAM_ID, name: STRING, description: STRING, project: PROJECT, add_nodes: NODES, remove_nodes: { type: 'array', items: STRING }, add_edges: EDGES, remove_edges: { type: 'array', items: STRING, description: 'Edge ids' }, nodes: NODES, edges: EDGES },
+    required: ['id'] },
   { name: 'create_project', description: 'Create a project. If the name is taken, the existing project comes back: use that one.', method: 'POST', module: v1Projects, path: '/api/v1/projects',
     properties: { name: STRING, description: { type: 'string', description: 'Mission statement, Markdown' }, color: { type: 'string', enum: COLORS }, repo: { type: 'string', description: 'owner/name' } }, required: ['name'] },
 ];

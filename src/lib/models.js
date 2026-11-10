@@ -133,8 +133,24 @@ export const TRASH_DAYS = 30;
 export const DAY_MS = 86_400_000;
 export const TRASH_MS = TRASH_DAYS * DAY_MS;
 export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
+// Architecture diagrams (the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the
+// icon and shape. A zone is a boundary drawn behind other boxes (a cloud, a region, a device); text is a bare caption.
+export const NODE_KINDS = ['client', 'service', 'worker', 'database', 'storage', 'queue', 'external', 'agent', 'zone', 'text'];
+export const DEFAULT_NODE_KIND = 'service';
+export const EDGE_STYLES = ['solid', 'dashed'];
+export const MAX_DIAGRAM_NODES = 200;
+export const MAX_DIAGRAM_EDGES = 400;
+export const MAX_NODE_TEXT = 500;
+// Boxes sit on this grid (pixels at 100% zoom) and stay within MAX_DIAGRAM_EXTENT of the origin.
+export const DIAGRAM_GRID = 20;
+export const MAX_DIAGRAM_EXTENT = 20_000;
+export const MIN_NODE_SIZE = 40;
+export const MAX_NODE_SIZE = 2_000;
+// Size of a new box; a new zone starts larger so it can hold a few.
+export const NODE_SIZE = { w: 180, h: 80 };
+export const ZONE_SIZE = { w: 480, h: 320 };
 
-/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number }} FieldRule */
+/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number } | { type: 'nodes', max: number } | { type: 'edges', max: number }} FieldRule */
 
 /** Writable fields per synced table, with defaults for new rows. @type {Record<string, Record<string, FieldRule & { default: any }>>} */
 export const MODELS = {
@@ -199,15 +215,25 @@ export const MODELS = {
     // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
     folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
+  // Architecture diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
+  diagrams: {
+    project_id: { type: 'id', nullable: true, default: null },
+    name: { type: 'text', max: MAX_NAME, default: '' },
+    description: { type: 'text', max: MAX_MISSION, default: '' },
+    nodes: { type: 'nodes', max: MAX_DIAGRAM_NODES, default: [] },
+    edges: { type: 'edges', max: MAX_DIAGRAM_EDGES, default: [] },
+  },
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 // purged_at: when a deleted row left the trash for good (migration 20261028100000); restoring it clears it.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'] };
+export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
-export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns'];
+export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns', 'nodes', 'edges'];
+// Every table the app keeps on the device and syncs (api/functions/api/sync.js, src/lib/store.svelte.js).
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams']);
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
@@ -265,6 +291,51 @@ function cleanColumns(name, value) {
   return columns;
 }
 
+/** A number rounded and held between two bounds, or the fallback when it isn't one. @param {unknown} value @param {number} min @param {number} max @param {number} fallback */
+function bounded(value, min, max, fallback) {
+  const number = Number(value);
+  if (value === null || value === undefined || value === '' || !Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+/**
+ * Diagram boxes: an id each (unique), a known kind and color, text within limits, position and size on the canvas.
+ * @param {string} name @param {any[]} value
+ */
+function cleanNodes(name, value) {
+  const nodes = value.map((node) => {
+    const size = node?.kind === 'zone' ? ZONE_SIZE : NODE_SIZE;
+    return {
+      id: node?.id,
+      kind: NODE_KINDS.includes(node?.kind) ? node.kind : DEFAULT_NODE_KIND,
+      title: String(node?.title ?? '').slice(0, MAX_NAME),
+      text: String(node?.text ?? '').slice(0, MAX_NODE_TEXT),
+      color: COLORS.includes(node?.color) ? node.color : 'default',
+      x: bounded(node?.x, -MAX_DIAGRAM_EXTENT, MAX_DIAGRAM_EXTENT, 0),
+      y: bounded(node?.y, -MAX_DIAGRAM_EXTENT, MAX_DIAGRAM_EXTENT, 0),
+      w: bounded(node?.w, MIN_NODE_SIZE, MAX_NODE_SIZE, size.w),
+      h: bounded(node?.h, MIN_NODE_SIZE, MAX_NODE_SIZE, size.h),
+    };
+  });
+  if (nodes.some((node) => !isId(node.id))) throw new Error(`${name} need an id each (letters, digits, - and _)`);
+  if (new Set(nodes.map((node) => node.id)).size !== nodes.length) throw new Error(`${name} need unique ids`);
+  return nodes;
+}
+
+/** Diagram arrows: an id each (unique), the ids of the two boxes they join, a label and a line style. @param {string} name @param {any[]} value */
+function cleanEdges(name, value) {
+  const edges = value.map((edge) => ({
+    id: edge?.id,
+    from: edge?.from,
+    to: edge?.to,
+    label: String(edge?.label ?? '').slice(0, MAX_NAME),
+    style: EDGE_STYLES.includes(edge?.style) ? edge.style : EDGE_STYLES[0],
+  }));
+  if (edges.some((edge) => !isId(edge.id) || !isId(edge.from) || !isId(edge.to))) throw new Error(`${name} need an id, a from and a to each`);
+  if (new Set(edges.map((edge) => edge.id)).size !== edges.length) throw new Error(`${name} need unique ids`);
+  return edges;
+}
+
 /**
  * Checks one field against its rule and returns the cleaned value, or throws with a readable message.
  * @param {string} name
@@ -299,6 +370,8 @@ function cleanField(name, rule, value) {
   }
   if (!Array.isArray(value) || value.length > rule.max) throw new Error(`${name} must be a list of at most ${rule.max}`);
   if (rule.type === 'columns') return cleanColumns(name, value);
+  if (rule.type === 'nodes') return cleanNodes(name, value);
+  if (rule.type === 'edges') return cleanEdges(name, value);
   if (rule.type === 'ids') {
     if (!value.every(isId)) throw new Error(`${name} must contain ids`);
     return [...new Set(value)];

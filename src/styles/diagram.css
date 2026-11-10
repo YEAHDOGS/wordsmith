@@ -1,0 +1,27 @@
+/* Architecture canvas (src/components/DiagramCanvas.svelte). */
+
+/* The dotted grid behind the boxes: one dot per grid step (DIAGRAM_GRID in src/lib/models.js), drawn in the line
+   token. --grid-step and --grid-x/--grid-y are set inline by the canvas so the dots pan and zoom with the boxes. */
+.diagram-grid {
+  background-image: radial-gradient(circle, var(--color-line-strong) 1px, transparent 1.5px);
+  background-size: var(--grid-step, 20px) var(--grid-step, 20px);
+  background-position: var(--grid-x, 0) var(--grid-y, 0);
+}
+
+/* The arrow being pulled from a box marches toward the pointer. */
+@keyframes diagram-link-march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.diagram-link {
+  stroke-dasharray: 6 6;
+  animation: diagram-link-march 400ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-link {
+    animation: none;
+  }
+}

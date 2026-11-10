@@ -6,6 +6,7 @@
 @import "./styles/legacy-fallback.css";
 @import "./styles/motion.css";
 @import "./styles/markdown.css";
+@import "./styles/diagram.css";
 
 /* UI size (Settings → Appearance): --ws-scale from theme.css scales every rem. 100% keeps the visitor's browser font size. */
 html {

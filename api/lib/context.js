@@ -4,13 +4,16 @@
 import { featuresMarkdown, listNotes, resolveProject } from './agent.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
-import { safeJson } from './rows.js';
+import { safeJson, toApi } from './rows.js';
+import { toMermaid } from '../../src/lib/diagram.js';
 import { MAX_CONTEXT } from '../../src/lib/models.js';
 
 const OPEN_STATES = 'requested,in_progress';
 const MAX_FEATURES = 200;
 const DEFAULT_EVENTS = 50;
 const MAX_EVENTS = 200;
+// Architecture diagrams carried in a project bundle, newest change first.
+const MAX_BUNDLE_DIAGRAMS = 5;
 // A bundle past this many characters drops its oldest events, then its lowest-ranked features, and says so.
 const MAX_BUNDLE_CHARS = 200_000;
 const NOT_FOUND = 404;
@@ -61,8 +64,12 @@ export async function projectContext(env, userId, ref, query) {
      FROM note_events e JOIN notes n ON n.id = e.note_id AND n.user_id = e.user_id
      WHERE e.user_id = ? AND n.project_id = ? AND e.created_at > ? ORDER BY e.created_at DESC LIMIT ?`,
   ).bind(userId, project.id, since, bounded(query, 'events_limit', DEFAULT_EVENTS, MAX_EVENTS)).all();
+  const { results: drawn } = await env.DB.prepare('SELECT * FROM diagrams WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?')
+    .bind(userId, project.id, MAX_BUNDLE_DIAGRAMS).all();
   const bundle = {
     project: { id: project.id, name: project.name, repo: project.repo, mission: project.description },
+    // The project's architecture as Mermaid source; GET /api/v1/diagrams/:id has the boxes and arrows themselves.
+    diagrams: drawn.map(toApi).map((diagram) => ({ id: diagram.id, name: diagram.name, description: diagram.description, mermaid: toMermaid(/** @type {any} */ (diagram)) })),
     features: features.map((note) => ({ ...note, attachments: files.filter((file) => file.note_id === note.id).map(presentAttachment) })),
     events: results.map(presentEvent).reverse(),
     truncated: { events: 0, features: 0 },
@@ -77,8 +84,11 @@ export async function projectContext(env, userId, ref, query) {
 
 /** The bundle as one Markdown document, ready to drop into an agent's context. @param {Awaited<ReturnType<typeof projectContext>>} bundle */
 export function projectContextMarkdown(bundle) {
-  const { project, features, events, truncated } = bundle;
+  const { project, diagrams, features, events, truncated } = bundle;
   const lines = [`# ${project.name}${project.repo ? ` (${project.repo})` : ''}`, '', '## Mission', '', project.mission || '_No mission statement yet._', ''];
+  for (const diagram of diagrams) {
+    lines.push(`## Architecture: ${diagram.name || 'Untitled'} (diagram ${diagram.id})`, '', ...(diagram.description ? [diagram.description, ''] : []), '```mermaid', diagram.mermaid, '```', '');
+  }
   lines.push(`## Open features (${features.length}, claim order)`, '', featuresMarkdown(features).split('\n').slice(2).join('\n'), '');
   lines.push(`## Recent events (${events.length})`, '');
   for (const event of events) {

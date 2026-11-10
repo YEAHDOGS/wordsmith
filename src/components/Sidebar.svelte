@@ -17,6 +17,7 @@
   import Group from '@lucide/svelte/icons/group';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import BellDot from '@lucide/svelte/icons/bell-dot';
+  import Network from '@lucide/svelte/icons/network';
   import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
@@ -46,6 +47,7 @@
     { view: 'attention', label: 'Needs you', icon: BellDot },
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
+    { view: 'architecture', label: 'Architecture', icon: Network },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';

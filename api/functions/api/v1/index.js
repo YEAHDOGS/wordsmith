@@ -1,6 +1,6 @@
 // GET /api/v1 - self-describing index so an agent handed just a token and this URL can find its way.
 import { json } from '../../../lib/http.js';
-import { AUDIO_TYPES, COLORS, DIFFICULTY_LABELS, FEATURE_STATES, MAX_AUDIO_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, SMALL_DIFFICULTY } from '../../../../src/lib/models.js';
+import { AUDIO_TYPES, COLORS, DIFFICULTY_LABELS, EDGE_STYLES, FEATURE_STATES, MAX_AUDIO_BYTES, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, NODE_KINDS, SMALL_DIFFICULTY } from '../../../../src/lib/models.js';
 
 const BYTES_PER_MB = 1024 * 1024;
 
@@ -20,6 +20,11 @@ const ENDPOINTS = [
   ['PATCH', '/api/v1/notes/:id', 'Update: { state?, column? (id or name; sets the state to its role), status?, ask? (a question for the owner; "1. ..." lines are options), pr_url?, body_append?, title?, body?, priority?, difficulty?, labels?, project? }.'],
   ['GET', '/api/v1/boards', 'Every board (the Features page and each project) with its columns in order: { id, name, state } each.'],
   ['GET', '/api/v1/labels', 'Every label: id, name, color.'],
+  ['GET', '/api/v1/diagrams?project=', 'Architecture diagrams: id, name, description, project, node and edge counts.'],
+  ['POST', '/api/v1/diagrams', `Draw an architecture diagram: { name, project?, description?, nodes: [{ title, kind? (${NODE_KINDS.join(', ')}), text?, color?, id?, inside? (id of the zone it sits in), x?, y?, w?, h? }], edges: [{ from, to (node ids or titles), label?, style? (${EDGE_STYLES.join(', ')}) }] }. Leave x and y out and the server lays the boxes out along the arrows.`],
+  ['GET', '/api/v1/diagrams/:id?format=mermaid', 'One diagram with its nodes and edges, plus Mermaid source under mermaid. format=mermaid returns the source alone.'],
+  ['PATCH', '/api/v1/diagrams/:id', 'Change a diagram: { name?, description?, project?, add_nodes? (new boxes, or changes to boxes by id), remove_nodes? (ids or titles), add_edges?, remove_edges? (ids), nodes? and edges? (replace everything) }. The owner sees it move in the app on their next sync.'],
+  ['DELETE', '/api/v1/diagrams/:id', 'Delete a diagram.'],
   ['GET', '/api/v1/notes/:id/analysis', 'The triage of one note: difficulty, batch, analysis notes, analyzed_at. Read it before you start.'],
   ['POST', '/api/v1/notes/:id/analysis', 'Triage a note: { difficulty (1 trivial to 5 epic), batch, analysis (replaces) or analysis_append }. Write scope, files to touch, plan, blockers and work done.'],
   ['GET', '/api/v1/batches', 'Notes grouped by batch: what ships together, how much is open, which PRs carry it.'],
