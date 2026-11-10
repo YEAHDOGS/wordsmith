@@ -1,5 +1,5 @@
 // The MCP tools (api/functions/api/mcp.js). Each one is a row pointing at an /api/v1 handler, which it calls in-process
-// with the caller's own auth, so MCP and REST share every check (validation, ownership, the add-only token rules) and
+// with the caller's own auth, so MCP and REST share every check (validation, ownership, limits) and
 // can never drift. Arguments named in `path` fill the URL, the ones in `query` become ?params, the rest are the body.
 import * as v1Projects from '../functions/api/v1/projects.js';
 import * as v1Features from '../functions/api/v1/features/index.js';
@@ -59,7 +59,7 @@ export const TOOLS = [
   { name: 'list_labels', description: 'Every label: id, name, color.', method: 'GET', module: v1Labels, path: '/api/v1/labels' },
   { name: 'claim_next', description: 'Claim the next requested feature (atomic: two agents never get the same one). Empty when the queue is.', method: 'POST', module: v1FeaturesNext, path: '/api/v1/features/next', properties: { project: PROJECT } },
   { name: 'claim_note', description: 'Claim one specific requested feature. Fails if it is taken.', method: 'POST', module: v1NoteClaim, path: '/api/v1/notes/:id/claim', properties: { id: ID }, required: ['id'] },
-  { name: 'update_note', description: 'Report progress, ask the owner (ask), or move work along. Tokens only add: title, body and analysis can be filled while empty, then appended to (body_append); overwriting, removing labels and archiving are refused.',
+  { name: 'update_note', description: 'Report progress, ask the owner (ask), or move work along. body_append adds to the body; title, body and labels replace what is there.',
     method: 'PATCH', module: v1Note, path: '/api/v1/notes/:id',
     properties: { id: ID, state: { type: 'string', enum: FEATURE_STATES }, column: { type: 'string', description: 'Board column id or name' }, status: { type: 'string', description: 'What is happening right now' }, ask: { type: 'string', description: 'A question for the owner, shown in their Needs you view. Options as "1. ..." lines. Their answer is appended to the body and ask clears.' }, pr_url: { type: 'string', description: 'https://github.com/owner/repo/pull/123' }, body_append: STRING, title: STRING, body: STRING, priority: PRIORITY, difficulty: DIFFICULTY, labels: LABELS, project: PROJECT },
     required: ['id'] },

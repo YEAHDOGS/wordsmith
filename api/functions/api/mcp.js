@@ -1,7 +1,7 @@
 // POST /api/mcp - wordsmith as a remote MCP server (Streamable HTTP, stateless, JSON responses; no SSE stream, so GET
 // answers 405). One config block connects Claude Code, Codex or any MCP client: the URL plus an agent token as a
-// bearer. Tools (api/lib/mcp-tools.js) run the /api/v1 handlers in-process, so auth, validation, attribution and the
-// add-only token rules are the REST API's own. Writes count against the same per-user limit as /api/v1 writes.
+// bearer. Tools (api/lib/mcp-tools.js) run the /api/v1 handlers in-process, so auth, validation, attribution and
+// limits are the REST API's own. Writes count against the same per-user limit as /api/v1 writes.
 import { WRITE_LIMIT, WRITE_WINDOW_MS, agentContext } from './v1/_middleware.js';
 import { json } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
@@ -23,7 +23,7 @@ const INSTRUCTIONS = [
   'wordsmith is the owner\'s notes and feature queue for agentic development.',
   'Start every session with get_context, then get_project_context for the project you work on.',
   'Loop: claim_next (or claim_note), update_note with status as you go, update_note pr_url once the PR is open. A merged PR completes the feature by itself.',
-  'Triage with post_analysis. Tokens only add: fill empty text or append (body_append, analysis_append); never overwrite, remove labels, archive or delete.',
+  'Triage with post_analysis. Prefer body_append and analysis_append over replacing text the owner wrote; every change is on the timeline under your token name.',
 ].join(' ');
 const TOOL_LIST = TOOLS.map((tool) => ({
   name: tool.name,
