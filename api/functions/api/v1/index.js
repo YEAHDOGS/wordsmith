@@ -5,6 +5,10 @@ import { AUDIO_TYPES, COLORS, DIFFICULTY_LABELS, FEATURE_STATES, MAX_AUDIO_BYTES
 const BYTES_PER_MB = 1024 * 1024;
 
 const ENDPOINTS = [
+  ['POST', '/api/mcp', 'The same API as an MCP server (Streamable HTTP, JSON-RPC). Connect any MCP client with this URL and your token as a bearer.'],
+  ['GET', '/api/v1/context', "The owner's standing context: preferences, facts and pointers. Read it first, every session."],
+  ['GET', '/api/v1/projects/:project/context?format=md&events_since=&events_limit=', "One project's whole picture in one call: mission, open features with triage, recent events, attachment links."],
+  ['GET', '/api/v1/events?since=&after=&limit=', 'Everything that happened across your projects since a moment, oldest first. To continue, pass cursor back as since and after back as after.'],
   ['GET', '/api/v1/projects', 'Projects with counts of features per state. description is the mission statement (Markdown): read it before working a project.'],
   ['POST', '/api/v1/projects', `Create a project: { name, description? (its mission statement, Markdown), color? (${COLORS.join(', ')}), repo? (owner/name) }. 409 with { project: { id, name } } if the name is taken: use that one.`],
   ['GET', '/api/v1/features?project=&state=requested,in_progress&analyzed=false&max_difficulty=&batch=&format=md', 'Feature requests, most important and oldest first. analyzed=false: not triaged yet. max_difficulty=2: small ones only. format=md gives a checklist.'],
@@ -13,7 +17,7 @@ const ENDPOINTS = [
   ['GET', '/api/v1/notes/:id', 'One note or feature with project, labels and PR status.'],
   ['GET', '/api/v1/notes/:id/events', 'Timestamped timeline of everything that happened to it.'],
   ['POST', '/api/v1/notes/:id/claim', 'Claim one specific requested feature. 409 if it is taken.'],
-  ['PATCH', '/api/v1/notes/:id', 'Update: { state?, column? (id or name; sets the state to its role), status?, pr_url?, body_append?, title?, body?, priority?, difficulty?, labels?, project? }.'],
+  ['PATCH', '/api/v1/notes/:id', 'Update: { state?, column? (id or name; sets the state to its role), status?, ask? (a question for the owner; "1. ..." lines are options), pr_url?, body_append?, title?, body?, priority?, difficulty?, labels?, project? }.'],
   ['GET', '/api/v1/boards', 'Every board (the Features page and each project) with its columns in order: { id, name, state } each.'],
   ['GET', '/api/v1/labels', 'Every label: id, name, color.'],
   ['GET', '/api/v1/notes/:id/analysis', 'The triage of one note: difficulty, batch, analysis notes, analyzed_at. Read it before you start.'],
@@ -39,9 +43,11 @@ export function onRequestGet({ data }) {
       'GET /api/v1/batches shows what earlier agents grouped and shipped.',
     ],
     workflow: [
+      'Start with GET /api/v1/context (standing context), then GET /api/v1/projects/:project/context?format=md for the project you work on.',
       'Send an X-Agent-Session header (letters, digits, . _ -, up to 32) naming your session, so sessions sharing a token show apart on claims and timelines.',
       'POST /api/v1/features/next to claim work (state becomes in_progress, started_at is stamped).',
       'PATCH status as you go so the human can follow along.',
+      'Need the owner to decide something? PATCH ask with the question, options as "1. ..." lines. It shows in their Needs you view; their answer is appended to the body ("**Owner:** ..."), ask clears and an "answered" event lands on the timeline.',
       'PATCH pr_url once your pull request is open.',
       'When the PR merges on GitHub the feature completes on its own (completed_at is stamped).',
     ],

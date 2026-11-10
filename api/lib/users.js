@@ -8,9 +8,10 @@ import { encryptText } from './crypto.js';
  * @param {string} provider
  * @param {import('./oauth.js').Profile} profile
  * @param {string | null} signedInUserId
- * @returns {Promise<string>} user id
+ * @param {boolean} mayCreate false while sign-up is locked (see signupLocked) and no beta password was given
+ * @returns {Promise<string | null>} user id, or null when the profile needs a new account and mayCreate is false
  */
-export async function upsertUserForProfile(env, provider, profile, signedInUserId) {
+export async function upsertUserForProfile(env, provider, profile, signedInUserId, mayCreate) {
   const now = Date.now();
   const sealedToken = profile.accessToken && env.TOKEN_ENCRYPTION_KEY ? await encryptText(profile.accessToken, env.TOKEN_ENCRYPTION_KEY) : null;
 
@@ -32,6 +33,7 @@ export async function upsertUserForProfile(env, provider, profile, signedInUserI
     userId = match ? String(match.id) : null;
   }
 
+  if (!userId && !mayCreate) return null;
   const statements = [];
   if (!userId) {
     userId = crypto.randomUUID();

@@ -16,7 +16,7 @@
   import NoteCard from './NoteCard.svelte';
   import DragGhost from './DragGhost.svelte';
   import GroupHeader from './GroupHeader.svelte';
-  import { groupsIn, pruneGroups, splitByGroup } from '../lib/groups.js';
+  import { groupsIn, joinGroup, pruneGroups, splitByGroup } from '../lib/groups.js';
   import { store } from '../lib/store.svelte.js';
   import ArrowDownWideNarrow from '@lucide/svelte/icons/arrow-down-wide-narrow';
   import Layers from '@lucide/svelte/icons/layers';
@@ -237,8 +237,9 @@
       const leftGroup = groupIds.has(note.group_id) ? note.group_id : null;
       own.set(note.id, {
         ...(Boolean(note.pinned) !== pinned ? { pinned } : {}),
-        // Compared with the group shown here, so a drop on a page without groups never ungroups a note.
-        ...(leftGroup !== groupId ? { group_id: groupId } : {}),
+        // Compared with the group shown here, so a drop on a page without groups never ungroups a note. Joining or
+        // leaving a group swaps the group's label too.
+        ...(leftGroup !== groupId ? joinGroup(note, groupId) : {}),
       });
       if (leftGroup !== groupId) leftGroups.push(leftGroup);
     }

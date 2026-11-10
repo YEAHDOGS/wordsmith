@@ -10,8 +10,10 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 // Card and label tints. Each maps to a --color-tint-* token in src/styles/theme.css.
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
+// Longest Preview or beta password the sign-in screen accepts and the server checks.
+export const MAX_PASSWORD_LENGTH = 200;
 // Timeline entries in note_events, written by the server on every interaction.
-export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
+export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed', 'asked', 'answered'];
 
 // Attachments: images, videos, audio and documents on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
@@ -91,6 +93,8 @@ const MAX_ID = 64;
 export const MAX_STATUS = 500;
 // A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
 export const MAX_MISSION = 20_000;
+// The owner's standing context (user_context.body): what every agent reads before it starts.
+export const MAX_CONTEXT = 50_000;
 // Projects per user: bounds every projects query and sync download (agents can create projects, see api/lib/agent.js).
 export const MAX_PROJECTS = 200;
 // Why sync refused a project row, so the app knows what to do: rename a clashing new project, or just say so.
@@ -144,6 +148,8 @@ export const MODELS = {
   labels: {
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // The note group this label mirrors (note_groups.id; src/lib/groups.js), or null for an ordinary label
+    group_id: { type: 'id', nullable: true, default: null },
   },
   notes: {
     project_id: { type: 'id', nullable: true, default: null },
@@ -164,6 +170,10 @@ export const MODELS = {
     priority: { type: 'int', min: 0, max: MAX_LEGACY_PRIORITY, default: 0 },
     // Manual order from hold-and-drag. Lower sorts first; null = never placed by hand (fall back to the active sort).
     position: { type: 'real', nullable: true, default: null },
+    // An agent's open question to the owner ("Needs you"). Lines "1. ..." to "9. ..." are one-key options.
+    ask: { type: 'text', max: MAX_STATUS, default: '' },
+    // Hidden from "Needs you" until this time (ms). Set by the owner in the app; agents can't snooze.
+    snoozed_until: { type: 'real', nullable: true, default: null },
     pull_requests: { type: 'prs', max: MAX_PRS_PER_NOTE, default: [] },
     assignee: { type: 'text', max: MAX_NAME, default: '' },
     difficulty: { type: 'int', min: 0, max: MAX_DIFFICULTY, default: 0 },
@@ -184,7 +194,10 @@ export const MODELS = {
     project_id: { type: 'id', nullable: true, default: null },
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // Folded on the notes page, where the group is one band
     collapsed: { type: 'bool', default: false },
+    // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
+    folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
 };
 
@@ -194,7 +207,7 @@ export const MODELS = {
 export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
-export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
+export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns'];
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';

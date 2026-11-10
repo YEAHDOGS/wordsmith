@@ -1,0 +1,22 @@
+{
+  "title": "Needs you",
+  "subtitle": "Only what an agent is waiting on you for",
+  "count": "{n} of {total}",
+  "question": "Question",
+  "review": "PR to review",
+  "done": "Done",
+  "reply": "Reply",
+  "send": "Send",
+  "replyPlaceholder": "Your answer. The agent reads it in the note.",
+  "snooze": "Snooze",
+  "open": "Open",
+  "previous": "Previous",
+  "next": "Next",
+  "undo": "Undo",
+  "pick": "Pick option {key}",
+  "empty": "Nothing needs you.",
+  "emptyHint": "Agents ask here when they need a decision: PATCH ask on a note, options as \"1. ...\" lines. Open PRs on work in progress show up too.",
+  "noProject": "No project",
+  "keys": "E done · 1-9 pick · R reply · L snooze · O open · J/K next/previous · Z undo",
+  "undone": "Undone"
+}
