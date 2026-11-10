@@ -33,7 +33,9 @@ function at(now, days, hour) {
 /** Splits an ask into its question and its one-key options ("1. ..." lines). @param {string} ask */
 export function parseAsk(ask) {
   const lines = ask.split('\n');
-  const options = lines.map((line) => OPTION.exec(line)).filter((match) => match !== null).map((match) => ({ key: match[1], text: match[2].trim() }));
+  // One option per digit, the first one written: the digit is the key you press.
+  const options = lines.map((line) => OPTION.exec(line)).filter((match) => match !== null).map((match) => ({ key: match[1], text: match[2].trim() }))
+    .filter((option, index, all) => all.findIndex((other) => other.key === option.key) === index);
   return { question: lines.filter((line) => !OPTION.test(line)).join('\n').trim(), options };
 }
 

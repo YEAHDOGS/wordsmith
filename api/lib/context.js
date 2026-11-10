@@ -65,11 +65,14 @@ export async function projectContext(env, userId, ref, query) {
     `SELECT a.* FROM attachments a JOIN notes n ON n.id = a.note_id AND n.user_id = a.user_id
      WHERE a.user_id = ? AND n.project_id = ? AND a.deleted_at IS NULL AND n.deleted_at IS NULL AND n.state != 'complete' AND n.archived = 0
      ORDER BY a.created_at DESC LIMIT ?`,
-  ).bind(userId, project.id, MAX_ATTACHMENTS).all();
+  ).bind(userId, project.id, MAX_ATTACHMENTS + 1).all();
+  // One row past the cap means older attachment links were left out; the bundle says so.
+  const cutAttachments = files.length > MAX_ATTACHMENTS;
+  if (cutAttachments) files.pop();
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.note_id, n.title AS note_title, e.type, e.actor_type, e.actor_name, e.data, e.created_at
      FROM note_events e JOIN notes n ON n.id = e.note_id AND n.user_id = e.user_id
-     WHERE e.user_id = ? AND n.project_id = ? AND e.created_at > ? ORDER BY e.created_at DESC LIMIT ?`,
+     WHERE e.user_id = ? AND n.project_id = ? AND e.created_at > ? ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
   ).bind(userId, project.id, since, bounded(query, 'events_limit', DEFAULT_EVENTS, MAX_EVENTS)).all();
   const { results: drawn } = await env.DB.prepare('SELECT * FROM diagrams WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?')
     .bind(userId, project.id, MAX_BUNDLE_DIAGRAMS).all();
@@ -79,7 +82,7 @@ export async function projectContext(env, userId, ref, query) {
     diagrams: drawn.map(toApi).map((diagram) => ({ id: diagram.id, name: diagram.name, description: diagram.description, mermaid: toMermaid(/** @type {any} */ (diagram)) })),
     features: features.map((note) => ({ ...note, attachments: files.filter((file) => file.note_id === note.id).map(presentAttachment) })),
     events: results.map(presentEvent).reverse(),
-    truncated: { events: 0, features: 0 },
+    truncated: { events: 0, features: 0, attachments: cutAttachments },
   };
   // Over the cap: oldest events go first, then the features at the end of the claim order.
   while (JSON.stringify(bundle).length > MAX_BUNDLE_CHARS && (bundle.events.length || bundle.features.length > 1)) {
@@ -101,6 +104,7 @@ export function projectContextMarkdown(bundle) {
   for (const event of events) {
     lines.push(`- ${new Date(event.created_at).toISOString()} ${event.actor_name} ${event.type} "${event.note_title || 'Untitled'}"${Object.keys(event.data).length ? ` ${JSON.stringify(event.data)}` : ''}`);
   }
+  if (truncated.attachments) lines.push('', '_Only the newest attachment links are listed; GET a feature to see all of its files._');
   if (truncated.events || truncated.features) lines.push('', `_Cut to fit: ${truncated.features} features and ${truncated.events} older events left out. Narrow with events_since or read features one by one._`);
   return lines.join('\n');
 }
