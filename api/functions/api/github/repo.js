@@ -6,5 +6,5 @@ import { json } from '../../../lib/http.js';
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestGet(context) {
   const name = (new URL(context.request.url).searchParams.get('name') || '').trim();
-  return json({ repo: await withGithub(context, ({ token }) => getRepo(token, name)) });
+  return json({ repo: await withGithub(context, ({ token, source }) => getRepo(token, name, source !== 'sign-in')) });
 }

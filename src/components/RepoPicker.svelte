@@ -6,9 +6,9 @@
 </script>
 
 <script>
-  // Link a project to a GitHub repo. Searches your repos, collaborations and organization repos (grouped by owner) when
-  // wordsmith has a GitHub token (GitHub sign-in or GITHUB_TOKEN); otherwise, or for any repo, type owner/name and it is
-  // checked against GitHub. When org repos may be hidden it links to where you grant wordsmith org access. Optional.
+  // Link a project to a GitHub repo. With a GitHub sign-in it searches your repos, collaborations and organization repos
+  // (grouped by owner). Without one (Google or Apple sign-in only) it searches public repos by name. Either way, type
+  // owner/name for any repo and it is checked against GitHub. When org repos may be hidden it links to where you grant wordsmith org access. Optional.
   import Search from '@lucide/svelte/icons/search';
   import Lock from '@lucide/svelte/icons/lock';
   import X from '@lucide/svelte/icons/x';
@@ -47,6 +47,12 @@
   const HINT_NO_ORG_SCOPE = 'Organization missing? Link GitHub again in Settings so wordsmith can list your orgs, or grant it access.';
   const HINT_DEFAULT = 'Organization repos missing? Its owners may need to approve wordsmith.';
   const HINT_PRIVATE = 'Private repos are hidden until the GitHub sign-in includes the repo scope.';
+  // Shown to people with no GitHub sign-in, who search public repos only.
+  const PUBLIC_MIN_QUERY = 2;
+  const PUBLIC_EMPTY = 'No public repos match. Type owner/name to link any public repo.';
+  const PUBLIC_HINT = "Public repos only. Link GitHub in Settings to search your own and your organizations' repos, and to see private ones.";
+  const PLACEHOLDER = "Search your and your orgs' repos, or type owner/name";
+  const PUBLIC_PLACEHOLDER = 'Search public repos, or type owner/name';
 
   let query = $state('');
   /** @type {any[]} */
@@ -82,10 +88,10 @@
 
   const status = $derived.by(() => {
     if (loading) return STATUS_LOADING;
-    if (needsGithub) return '';
+    if (needsGithub && !repos.length) return query.trim().length >= PUBLIC_MIN_QUERY && !typedIsRepo ? PUBLIC_EMPTY : '';
     if (!repos.length) return STATUS_EMPTY;
     const owners = groups.length > 1 ? ` from ${groups.length} owners` : '';
-    return `${repos.length} repo${repos.length === 1 ? '' : 's'}${owners}`;
+    return `${repos.length} ${needsGithub ? 'public ' : ''}repo${repos.length === 1 ? '' : 's'}${owners}`;
   });
 
   const orgHint = $derived.by(() => {
@@ -160,13 +166,13 @@
     <label class="relative flex min-w-0 flex-1 items-center">
       <Search class="pointer-events-none absolute left-3 size-4 text-ink-faint" />
       <!-- Focused on open: the picker opens because you just asked for it -->
-      <input bind:value={query} {@attach (node) => node.focus()} placeholder={needsGithub ? 'owner/name or a github.com URL' : 'Search your and your orgs\' repos, or type owner/name'} aria-label="Repository"
+      <input bind:value={query} {@attach (node) => node.focus()} placeholder={needsGithub ? PUBLIC_PLACEHOLDER : PLACEHOLDER} aria-label="Repository"
         class="w-full min-w-0 bg-transparent py-2.5 pr-3 pl-9 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-faint focus:outline-none" />
     </label>
     <button class="spring press border-l border-line px-4 text-sm font-semibold text-accent hover:bg-surface-raised disabled:opacity-40" disabled={!typedIsRepo || loading}>Link</button>
   </form>
   {#if needsGithub}
-    <p class="px-3 py-2 text-xs text-ink-muted" transition:slide={{ duration: FLIP_MS }}>Sign in with GitHub (Settings → Link GitHub) to search your repos and your organizations' repos, and see private ones. Public repos work by typing owner/name.</p>
+    <p class="px-3 py-2 text-xs text-ink-muted" transition:slide={{ duration: FLIP_MS }}>{PUBLIC_HINT}</p>
   {/if}
   <!-- Status line keeps its height, so loading, counts and "no matches" crossfade without moving the list -->
   <p class="relative h-7 overflow-hidden border-b border-line font-mono text-[0.6875rem] text-ink-faint" aria-live="polite">

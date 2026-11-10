@@ -7,11 +7,11 @@ import { isId } from '../../../../../src/lib/models.js';
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
 export async function onRequestGet(context) {
   if (!isId(context.params.id)) throw new HttpError(400, 'Bad project id');
-  return json(await withGithub(context, async ({ auth, token }) => {
+  return json(await withGithub(context, async ({ auth, token, source }) => {
     const project = await context.env.DB.prepare('SELECT repo FROM projects WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
       .bind(context.params.id, auth.user.id).first();
     if (!project) throw new HttpError(404, 'Project not found. Sync it first.');
     if (!project.repo) throw new HttpError(400, 'Link a GitHub repo to this project first');
-    return { ...(await repoPulls(token, auth.user.id, String(project.repo))), authenticated: Boolean(token) };
+    return { ...(await repoPulls(token, auth.user.id, String(project.repo), source !== 'sign-in')), authenticated: Boolean(token) };
   }));
 }

@@ -34,14 +34,16 @@ export async function githubCredential(env, userId) {
  * Fetches one PR and returns its current state, or null when GitHub can't be reached.
  * @param {string | null} token
  * @param {{ repo: string, number: number }} pr
+ * @param {boolean} publicOnly true unless the token is the user's own: the shared GITHUB_TOKEN must not read private repos
  */
-export async function fetchPullRequest(token, pr) {
+export async function fetchPullRequest(token, pr, publicOnly) {
   /** @type {Record<string, string>} */
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': USER_AGENT };
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${GITHUB_API}/repos/${pr.repo}/pulls/${pr.number}`, { headers });
   if (!response.ok) return null;
   const data = await response.json();
+  if (publicOnly && data.base?.repo?.private) return null;
   const mergedAt = data.merged_at ? Date.parse(data.merged_at) : null;
   return { title: String(data.title || '').slice(0, 300), state: mergedAt ? 'merged' : data.state === 'closed' ? 'closed' : 'open', merged_at: mergedAt };
 }
@@ -63,7 +65,7 @@ export async function refreshPullRequests(env, userId, noteIds) {
   const { results } = await query.all();
   if (!results.length) return [];
 
-  const { token } = await githubCredential(env, userId);
+  const { token, source } = await githubCredential(env, userId);
   const changes = [];
   /** @type {string[]} */
   const unchanged = [];
@@ -71,7 +73,7 @@ export async function refreshPullRequests(env, userId, noteIds) {
     const before = toApi(row);
     const prs = await Promise.all(before.pull_requests.map(async (/** @type {any} */ pr) => {
       if (pr.state !== 'open') return pr;
-      const latest = await fetchPullRequest(token, pr);
+      const latest = await fetchPullRequest(token, pr, source !== 'sign-in');
       return latest ? { ...pr, ...latest } : pr;
     }));
     if (JSON.stringify(prs) === JSON.stringify(before.pull_requests)) unchanged.push(before.id);
