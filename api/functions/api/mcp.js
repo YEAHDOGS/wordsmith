@@ -39,6 +39,8 @@ const TOOL_LIST = TOOLS.map((tool) => ({
 }));
 const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
 
+/** True for a plain JSON object (not null, not a list). @param {unknown} value */
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 /** @param {unknown} id @param {any} result */
 const reply = (id, result) => ({ jsonrpc: JSON_RPC, id, result });
 /** @param {unknown} id @param {number} code @param {string} message */
@@ -81,7 +83,7 @@ async function handle(context, message) {
   if (!message || typeof message !== 'object' || message.jsonrpc !== JSON_RPC || typeof message.method !== 'string') return failure(message?.id, INVALID_REQUEST, 'Not a JSON-RPC 2.0 request');
   const { id, method } = message;
   if (id === undefined) return null;
-  if (message.params !== undefined && (message.params === null || typeof message.params !== 'object')) return failure(id, INVALID_PARAMS, 'params must be an object');
+  if (message.params !== undefined && !isObject(message.params)) return failure(id, INVALID_PARAMS, 'params must be an object');
   const params = message.params ?? {};
   if (method === 'initialize') {
     const asked = params.protocolVersion;
@@ -97,6 +99,8 @@ async function handle(context, message) {
   if (method === TOOL_CALL) {
     const tool = TOOLS_BY_NAME.get(params.name);
     if (!tool) return failure(id, INVALID_PARAMS, `Unknown tool: ${params.name}`);
+    // A model that sends its arguments as a string or a list must not run the tool with none (claim_next needs none).
+    if (params.arguments !== undefined && !isObject(params.arguments)) return failure(id, INVALID_PARAMS, 'arguments must be an object');
     const args = params.arguments ?? {};
     const missing = (tool.required ?? []).filter((name) => args[name] === undefined || args[name] === '');
     if (missing.length) return reply(id, { content: [{ type: 'text', text: `Missing ${missing.join(', ')}` }], isError: true });
