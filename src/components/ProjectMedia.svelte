@@ -1,6 +1,7 @@
 <script>
   // A project's Media tab: every image, video, and audio attachment on its notes, as a grid of tiles. Filter by state
-  // (All, Requested, In progress, Complete) and sort newest or oldest first; a tile opens its note. Attachments sync to
+  // (All, Requested, In progress, Complete) and sort newest or oldest first; a tile opens the carousel
+  // (MediaCarousel.svelte) on that file, walking the tiles in the order shown, with a button to its note. Attachments sync to
   // every device already (store.attachments), so this costs no extra requests beyond the files themselves, which the
   // browser caches for good. Only the grid scrolls; the controls stay put. Documents are left out on purpose.
   import Play from '@lucide/svelte/icons/play';
@@ -9,6 +10,7 @@
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
   import AttachmentMedia from './AttachmentMedia.svelte';
+  import MediaCarousel from './MediaCarousel.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
@@ -19,12 +21,15 @@
   let { notes } = $props();
 
   const ALL = 'all';
+  const UNTITLED = 'Untitled';
   const FILTERS = [ALL, ...FEATURE_STATES];
   const MOTION = { duration: 180 };
   const CHIP = 'spring press flex h-8 shrink-0 items-center gap-1.5 px-3 text-xs tv:h-11 tv:text-base';
 
   let filter = $state(ALL);
   let newestFirst = $state(true);
+  // The attachment open in the carousel, by id ('' = closed).
+  let viewingId = $state('');
 
   const byId = $derived(new Map(notes.map((note) => [note.id, note])));
   const media = $derived(store.attachments.filter((file) => !file.deleted_at && byId.has(file.note_id) && attachmentKind(file.type) !== 'document'));
@@ -32,6 +37,7 @@
     .map((file) => ({ file, note: byId.get(file.note_id) }))
     .filter(({ note }) => filter === ALL || note.state === filter)
     .sort((a, b) => (newestFirst ? b.file.created_at - a.file.created_at : a.file.created_at - b.file.created_at)));
+  const shown = $derived(tiles.map((tile) => tile.file));
   const counts = $derived(Object.fromEntries(FILTERS.map((state) => [state, media
     .filter((file) => state === ALL || byId.get(file.note_id).state === state).length])));
 
@@ -78,9 +84,9 @@
         {#each tiles as { file, note } (file.id)}
           {@const style = STATE_STYLE[/** @type {keyof typeof STATE_STYLE} */ (note.state)]}
           <li class="bg-app" animate:flip={MOTION} in:fade={MOTION}>
-            <button class="group relative block aspect-square w-full overflow-hidden" onclick={() => router.openNote(note.id)}
+            <button class="group relative block aspect-square w-full overflow-hidden" onclick={() => (viewingId = file.id)}
               onloadcapture={setCoverScale} onloadedmetadatacapture={setCoverScale}
-              title="{note.title || 'Untitled'} · {file.name} · {fullTime(file.created_at)}" aria-label="Open {note.title || 'untitled note'} ({file.name})">
+              title="{note.title || 'Untitled'} · {file.name} · {fullTime(file.created_at)}" aria-label="View {file.name}, on {note.title || 'untitled note'}">
               <AttachmentMedia {file} class="spring size-full object-contain duration-300 [transform:scale(var(--cover,1))] group-hover:[transform:none] group-focus-visible:[transform:none]" />
               {#if file.type.startsWith('video/')}
                 <span class="pointer-events-none absolute inset-0 flex items-center justify-center"><span class="flex size-8 items-center justify-center rounded-full bg-scrim text-ink"><Play class="size-4" /></span></span>
@@ -97,3 +103,8 @@
     {/if}
   </div>
 </div>
+
+{#if viewingId}
+  <MediaCarousel files={shown} bind:id={viewingId} onclose={() => (viewingId = '')} caption={(file) => byId.get(file.note_id)?.title || UNTITLED}
+    openLabel="Open note" onopen={(file) => { viewingId = ''; router.openNote(file.note_id); }} />
+{/if}
