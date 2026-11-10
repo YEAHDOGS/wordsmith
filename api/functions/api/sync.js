@@ -23,7 +23,6 @@ const SYNC_WINDOW_MS = 600_000;
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { env, request } = context;
-  await rateLimit(env, `sync-pull:${user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
   const now = Date.now();
   // Rows past their days in the trash are purged in the background; the purge stamps updated_at, so the next pull has them.
@@ -40,6 +39,9 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Counted only here, past the "nothing new" answer above: the limiter writes a D1 row per hit, and idle polls (the
+  // common case, one a minute per open device) must stay a single small read.
+  await rateLimit(env, `sync-pull:${user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const queries = SYNCED_TABLES.map((table) =>
     env.DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?`).bind(user.id, since, PULL_LIMIT));
   queries.push(env.DB.prepare('SELECT id, note_id, type, actor_type, actor_name, data, created_at FROM note_events WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT ?')

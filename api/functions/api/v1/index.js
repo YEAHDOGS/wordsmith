@@ -8,7 +8,7 @@ const ENDPOINTS = [
   ['POST', '/api/mcp', 'The same API as an MCP server (Streamable HTTP, JSON-RPC). Connect any MCP client with this URL and your token as a bearer.'],
   ['GET', '/api/v1/context', "The owner's standing context: preferences, facts and pointers. Read it first, every session."],
   ['GET', '/api/v1/projects/:project/context?format=md&events_since=&events_limit=', "One project's whole picture in one call: mission, open features with triage, recent events, attachment links."],
-  ['GET', '/api/v1/events?since=&limit=', 'Everything that happened across your projects since a moment, oldest first. Pass cursor back as since.'],
+  ['GET', '/api/v1/events?since=&after=&limit=', 'Everything that happened across your projects since a moment, oldest first. To continue, pass cursor back as since and after back as after.'],
   ['GET', '/api/v1/projects', 'Projects with counts of features per state. description is the mission statement (Markdown): read it before working a project.'],
   ['POST', '/api/v1/projects', `Create a project: { name, description? (its mission statement, Markdown), color? (${COLORS.join(', ')}), repo? (owner/name) }. 409 with { project: { id, name } } if the name is taken: use that one.`],
   ['GET', '/api/v1/features?project=&state=requested,in_progress&analyzed=false&max_difficulty=&batch=&format=md', 'Feature requests, most important and oldest first. analyzed=false: not triaged yet. max_difficulty=2: small ones only. format=md gives a checklist.'],

@@ -14,6 +14,8 @@ const DEFAULT_EVENTS = 50;
 const MAX_EVENTS = 200;
 // Architecture diagrams carried in a project bundle, newest change first.
 const MAX_BUNDLE_DIAGRAMS = 5;
+// Attachment links carried in a project bundle (open features only), newest first.
+const MAX_ATTACHMENTS = 500;
 // A bundle past this many characters drops its oldest events, then its lowest-ranked features, and says so.
 const MAX_BUNDLE_CHARS = 200_000;
 const NOT_FOUND = 404;
@@ -28,20 +30,24 @@ const presentEvent = (row) => ({ ...row, data: safeJson(row.data, {}) });
 
 /**
  * Everything that happened since a moment, across the caller's projects: claims, state changes, analyses, PRs.
- * Oldest first; pass `cursor` back as `since` to continue.
+ * Oldest first; pass `cursor` back as `since` and `after` back as `after` to continue. Several events often share one
+ * timestamp (a save stamps all of its events alike), so the page boundary is a (time, id) pair: `after` is the id of
+ * the last event returned, and the next page resumes inside that timestamp instead of skipping the rest of it.
  * @param {Record<string, any>} env @param {string} userId @param {URLSearchParams} query
  */
 export async function eventsFeed(env, userId, query) {
   const since = Math.max(0, Number(query.get('since')) || 0);
+  const after = query.get('after') || '';
   const limit = bounded(query, 'limit', DEFAULT_EVENTS, MAX_EVENTS);
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.note_id, n.title AS note_title, n.project_id, e.type, e.actor_type, e.actor_name, e.data, e.created_at
      FROM note_events e LEFT JOIN notes n ON n.id = e.note_id AND n.user_id = e.user_id
-     WHERE e.user_id = ? AND e.created_at > ? ORDER BY e.created_at LIMIT ?`,
-  ).bind(userId, since, limit + 1).all();
+     WHERE e.user_id = ?1 AND (e.created_at > ?2 OR (?3 != '' AND e.created_at = ?2 AND e.id > ?3)) ORDER BY e.created_at, e.id LIMIT ?4`,
+  ).bind(userId, since, after, limit + 1).all();
   const more = results.length > limit;
   const events = results.slice(0, limit).map(presentEvent);
-  return { events, cursor: events.length ? events.at(-1).created_at : since, more };
+  const last = events.at(-1);
+  return { events, cursor: last ? last.created_at : since, after: last ? last.id : after, more };
 }
 
 /**
@@ -57,8 +63,9 @@ export async function projectContext(env, userId, ref, query) {
   // Joined on the project rather than listing note ids: D1 caps bound parameters at 100.
   const { results: files } = await env.DB.prepare(
     `SELECT a.* FROM attachments a JOIN notes n ON n.id = a.note_id AND n.user_id = a.user_id
-     WHERE a.user_id = ? AND n.project_id = ? AND a.deleted_at IS NULL AND n.deleted_at IS NULL ORDER BY a.created_at`,
-  ).bind(userId, project.id).all();
+     WHERE a.user_id = ? AND n.project_id = ? AND a.deleted_at IS NULL AND n.deleted_at IS NULL AND n.state != 'complete' AND n.archived = 0
+     ORDER BY a.created_at DESC LIMIT ?`,
+  ).bind(userId, project.id, MAX_ATTACHMENTS).all();
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.note_id, n.title AS note_title, e.type, e.actor_type, e.actor_name, e.data, e.created_at
      FROM note_events e JOIN notes n ON n.id = e.note_id AND n.user_id = e.user_id

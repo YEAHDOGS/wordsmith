@@ -3,7 +3,7 @@
 // bearer. Tools (api/lib/mcp-tools.js) run the /api/v1 handlers in-process, so auth, validation, attribution and
 // limits are the REST API's own. Writes count against the same per-user limit as /api/v1 writes.
 import { WRITE_LIMIT, WRITE_WINDOW_MS, agentContext } from './v1/_middleware.js';
-import { json } from '../../lib/http.js';
+import { json, readJson } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
 import { TOOLS } from '../../lib/mcp-tools.js';
 import { APP_VERSION } from '../../../src/lib/version.js';
@@ -13,12 +13,16 @@ const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const JSON_RPC = '2.0';
 const ACCEPTED = 202;
 const NO_CONTENT = 204;
+const BAD_REQUEST = 400;
 const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const HANDLERS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut' };
 const INTERNAL_ORIGIN = 'https://mcp.internal';
+// Messages in one JSON-RPC batch. They run one after another: a write costs several D1 queries and the free plan
+// allows 50 per request.
+const MAX_BATCH = 10;
 const INSTRUCTIONS = [
   'wordsmith is the owner\'s notes and feature queue for agentic development.',
   'Start every session with get_context, then get_project_context for the project you work on.',
@@ -46,7 +50,6 @@ const failure = (id, code, message) => ({ jsonrpc: JSON_RPC, id: id ?? null, err
  */
 async function callTool(context, tool, args) {
   const { auth } = context.data;
-  if (tool.method !== 'GET') await rateLimit(context.env, `v1:${auth.user.id}`, WRITE_LIMIT, WRITE_WINDOW_MS);
   /** @type {Record<string, string>} */
   const params = {};
   const path = tool.path.replace(/:(\w+)/g, (_, name) => encodeURIComponent((params[name] = String(args[name] ?? ''))));
@@ -57,6 +60,8 @@ async function callTool(context, tool, args) {
   const body = Object.fromEntries(Object.entries(args).filter(([name]) => name in (tool.properties ?? {}) && !named.includes(name)));
   const request = new Request(url, tool.method === 'GET' ? { method: 'GET' } : { method: tool.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
+    // Inside the try, so a caller over the limit gets a tool error for this message and the rest of a batch still answers.
+    if (tool.method !== 'GET') await rateLimit(context.env, `v1:${auth.user.id}`, WRITE_LIMIT, WRITE_WINDOW_MS);
     const response = await tool.module[HANDLERS[tool.method]]({ ...context, request, params });
     if (response.status === NO_CONTENT) return { content: [{ type: 'text', text: 'Nothing to return (for claim_next: the queue is empty).' }] };
     const text = await response.text();
@@ -72,8 +77,10 @@ async function callTool(context, tool, args) {
  */
 async function handle(context, message) {
   if (!message || typeof message !== 'object' || message.jsonrpc !== JSON_RPC || typeof message.method !== 'string') return failure(message?.id, INVALID_REQUEST, 'Not a JSON-RPC 2.0 request');
-  const { id, method, params = {} } = message;
+  const { id, method } = message;
   if (id === undefined) return null;
+  if (message.params !== undefined && (message.params === null || typeof message.params !== 'object')) return failure(id, INVALID_PARAMS, 'params must be an object');
+  const params = message.params ?? {};
   if (method === 'initialize') {
     const asked = params.protocolVersion;
     return reply(id, {
@@ -101,11 +108,18 @@ export async function onRequestPost(context) {
   await agentContext(context);
   let body;
   try {
-    body = await context.request.json();
-  } catch {
+    body = await readJson(context.request);
+  } catch (error) {
+    if (/** @type {any} */ (error).status !== BAD_REQUEST) throw error;
     return json(failure(null, PARSE_ERROR, 'Body must be JSON'));
   }
-  const answers = (await Promise.all((Array.isArray(body) ? body : [body]).map((message) => handle(context, message)))).filter(Boolean);
+  const messages = Array.isArray(body) ? body : [body];
+  if (messages.length > MAX_BATCH) return json(failure(null, INVALID_REQUEST, `Send at most ${MAX_BATCH} messages per batch`));
+  const answers = [];
+  for (const message of messages) {
+    const answer = await handle(context, message);
+    if (answer) answers.push(answer);
+  }
   if (!answers.length) return new Response(null, { status: ACCEPTED });
   return json(Array.isArray(body) ? answers : answers[0]);
 }
