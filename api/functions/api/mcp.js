@@ -20,9 +20,11 @@ const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const HANDLERS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut' };
 const INTERNAL_ORIGIN = 'https://mcp.internal';
-// Messages in one JSON-RPC batch. They run one after another: a write costs several D1 queries and the free plan
-// allows 50 per request.
+// Messages in one JSON-RPC batch, run one after another. A batch may hold one tool call at most: a write costs up to
+// eight D1 queries and the free plan allows 50 per request, so several could fail partway with some already saved.
+// (MCP dropped batching in protocol 2025-06-18; this only bounds older clients.)
 const MAX_BATCH = 10;
+const TOOL_CALL = 'tools/call';
 const INSTRUCTIONS = [
   'wordsmith is the owner\'s notes and feature queue for agentic development.',
   'Start every session with get_context, then get_project_context for the project you work on.',
@@ -37,6 +39,8 @@ const TOOL_LIST = TOOLS.map((tool) => ({
 }));
 const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
 
+/** True for a plain JSON object (not null, not a list). @param {unknown} value */
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 /** @param {unknown} id @param {any} result */
 const reply = (id, result) => ({ jsonrpc: JSON_RPC, id, result });
 /** @param {unknown} id @param {number} code @param {string} message */
@@ -79,7 +83,7 @@ async function handle(context, message) {
   if (!message || typeof message !== 'object' || message.jsonrpc !== JSON_RPC || typeof message.method !== 'string') return failure(message?.id, INVALID_REQUEST, 'Not a JSON-RPC 2.0 request');
   const { id, method } = message;
   if (id === undefined) return null;
-  if (message.params !== undefined && (message.params === null || typeof message.params !== 'object')) return failure(id, INVALID_PARAMS, 'params must be an object');
+  if (message.params !== undefined && !isObject(message.params)) return failure(id, INVALID_PARAMS, 'params must be an object');
   const params = message.params ?? {};
   if (method === 'initialize') {
     const asked = params.protocolVersion;
@@ -92,9 +96,11 @@ async function handle(context, message) {
   }
   if (method === 'ping') return reply(id, {});
   if (method === 'tools/list') return reply(id, { tools: TOOL_LIST });
-  if (method === 'tools/call') {
+  if (method === TOOL_CALL) {
     const tool = TOOLS_BY_NAME.get(params.name);
     if (!tool) return failure(id, INVALID_PARAMS, `Unknown tool: ${params.name}`);
+    // A model that sends its arguments as a string or a list must not run the tool with none (claim_next needs none).
+    if (params.arguments !== undefined && !isObject(params.arguments)) return failure(id, INVALID_PARAMS, 'arguments must be an object');
     const args = params.arguments ?? {};
     const missing = (tool.required ?? []).filter((name) => args[name] === undefined || args[name] === '');
     if (missing.length) return reply(id, { content: [{ type: 'text', text: `Missing ${missing.join(', ')}` }], isError: true });
@@ -114,7 +120,9 @@ export async function onRequestPost(context) {
     return json(failure(null, PARSE_ERROR, 'Body must be JSON'));
   }
   const messages = Array.isArray(body) ? body : [body];
+  if (!messages.length) return json(failure(null, INVALID_REQUEST, 'Empty batch'));
   if (messages.length > MAX_BATCH) return json(failure(null, INVALID_REQUEST, `Send at most ${MAX_BATCH} messages per batch`));
+  if (messages.filter((message) => message?.method === TOOL_CALL).length > 1) return json(failure(null, INVALID_REQUEST, 'Send one tool call per request'));
   const answers = [];
   for (const message of messages) {
     const answer = await handle(context, message);
