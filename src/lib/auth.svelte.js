@@ -26,6 +26,8 @@ class Auth {
   devLogin = $state(false);
   /** Worker Previews: sign in with the Preview password (PREVIEW_PASSWORD, see api/lib/login.js). */
   previewLogin = $state(false);
+  /** Private beta: new accounts need the beta password (SIGNUP_PASSWORD, see signupLocked in api/lib/login.js). */
+  signupLocked = $state(false);
   /** True once providers and linked accounts came from the server; screens that show them load the session if not. */
   sessionFetched = $state(false);
   /** Native login in progress: the code to match in the browser. @type {{ code: string, provider: string, url: string } | null} */
@@ -51,6 +53,7 @@ class Auth {
       this.providers = session.providers;
       this.devLogin = session.dev_login;
       this.previewLogin = Boolean(session.preview_login);
+      this.signupLocked = Boolean(session.signup_locked);
       this.linked = session.linked || [];
       this.sessionFetched = true;
       this.#setUser(session.user);
@@ -125,6 +128,22 @@ class Auth {
       await this.load();
     } catch (error) {
       this.error = /** @type {Error} */ (error).message;
+    }
+  }
+
+  /**
+   * Private beta: checks the beta password, which lets the next OAuth sign-in in this browser create an account.
+   * @param {string} password
+   * @returns {Promise<boolean>} false (with error set) when it was wrong
+   */
+  async unlockSignup(password) {
+    this.error = '';
+    try {
+      await api('/api/auth/signup', { method: 'POST', body: { password } });
+      return true;
+    } catch (error) {
+      this.error = /** @type {Error} */ (error).message;
+      return false;
     }
   }
 
