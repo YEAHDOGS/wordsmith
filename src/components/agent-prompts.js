@@ -16,6 +16,7 @@ Loop:
 1. Before you start a feature, read its triage: GET ${url('/api/v1/notes/<id>/analysis')}. Earlier agents leave scope, files and plans there.
 2. Claim work: POST ${url('/api/v1/features/next')} with JSON {"project":"<project name or id>"}. 204 means the queue is empty.
 3. Report progress: PATCH ${url('/api/v1/notes/<id>')} with {"status":"short present-tense update"}. Do this at each milestone.
+   Need a decision? PATCH {"ask":"question\\n1. option\\n2. option"}. It lands in the owner's Needs you view; the answer is appended to the body and ask clears.
 4. When your pull request is open: PATCH the same URL with {"pr_url":"https://github.com/owner/repo/pull/123"}.
 5. Record what you did: POST ${url('/api/v1/notes/<id>/analysis')} with {"analysis_append":"Done: ..."}.
 6. Don't mark features complete yourself. Merging the PR completes them.

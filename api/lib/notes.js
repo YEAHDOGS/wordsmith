@@ -63,6 +63,7 @@ function lifecycle(before, after, now, actor) {
     events.push({ type: 'analyzed', data: { difficulty: after.difficulty, batch: after.batch } });
   }
   if (before.status !== after.status && after.status) events.push({ type: 'status', data: { text: after.status } });
+  if ((before.ask ?? '') !== after.ask) events.push(after.ask ? { type: 'asked', data: { text: after.ask } } : { type: 'answered', data: {} });
   if (before.assignee !== after.assignee && after.assignee) events.push({ type: 'assigned', data: { to: after.assignee } });
   if (Boolean(before.public) !== Boolean(after.public)) events.push({ type: after.public ? 'published' : 'unpublished', data: {} });
   if (before.archived !== after.archived) events.push({ type: after.archived ? 'archived' : 'unarchived', data: {} });
