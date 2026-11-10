@@ -16,7 +16,9 @@ if (Object.values(PARAMS).some((name) => query.has(name))) {
   const share = Object.fromEntries(Object.entries(PARAMS).map(([key, name]) => [key, (query.get(name) || '').trim()]));
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(share));
   for (const name of Object.values(PARAMS)) query.delete(name);
-  history.replaceState(null, '', location.pathname + (query.size ? `?${query}` : '') + location.hash);
+  // toString rather than .size, which the oldest supported browsers lack.
+  const rest = query.toString();
+  history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
 }
 
 /** Files a waiting share as a note once the signed-in user's store is open. */

@@ -22,7 +22,7 @@ const ID = { type: 'string', description: 'Note or feature id' };
 const PROJECT = { type: 'string', description: 'Project id or name' };
 const PRIORITY = { type: 'integer', minimum: 0, maximum: PRIORITY_LABELS.length - 1, description: `0 none to ${PRIORITY_LABELS.length - 1} critical` };
 const DIFFICULTY = { type: 'integer', minimum: 0, maximum: DIFFICULTY_LABELS.length - 1, description: DIFFICULTY_LABELS.map((label, level) => `${level} ${label}`).join(', ') };
-const LABELS = { type: 'array', items: STRING, description: 'Label names. Tokens can add labels, never remove them: send every current one plus the new ones.' };
+const LABELS = { type: 'array', items: STRING, description: 'Label names. The list replaces the note\'s labels: send every one it should keep. The label of the group a note is in always stays.' };
 const FORMAT = { type: 'string', enum: ['json', 'md'], description: 'md for one Markdown document' };
 
 /**
@@ -51,8 +51,8 @@ export const TOOLS = [
     properties: { q: STRING, label: STRING, project: PROJECT, limit: { type: 'integer' } }, query: ['q', 'label', 'project', 'limit'] },
   { name: 'get_note', description: 'One note or feature with its project, labels, PRs and attachments.', method: 'GET', module: v1Note, path: '/api/v1/notes/:id', properties: { id: ID }, required: ['id'] },
   { name: 'get_note_events', description: "One note's timeline, oldest first.", method: 'GET', module: v1NoteEvents, path: '/api/v1/notes/:id/events', properties: { id: ID }, required: ['id'] },
-  { name: 'get_events', description: 'Everything that happened across your projects since a moment (claims, states, analyses, PRs), oldest first. Pass cursor back as since.',
-    method: 'GET', module: v1Events, path: '/api/v1/events', properties: { since: { type: 'integer', description: 'Time in ms' }, limit: { type: 'integer' } }, query: ['since', 'limit'] },
+  { name: 'get_events', description: 'Everything that happened across your projects since a moment (claims, states, analyses, PRs), oldest first. To continue, pass cursor back as since and after back as after.',
+    method: 'GET', module: v1Events, path: '/api/v1/events', properties: { since: { type: 'integer', description: 'Time in ms' }, after: { type: 'string', description: 'The after value of the previous page' }, limit: { type: 'integer' } }, query: ['since', 'after', 'limit'] },
   { name: 'get_analysis', description: "A note's triage: difficulty, batch, analysis notes. Read it before you start.", method: 'GET', module: v1NoteAnalysis, path: '/api/v1/notes/:id/analysis', properties: { id: ID }, required: ['id'] },
   { name: 'list_batches', description: 'Notes grouped by batch: what ships together, how much is open, which PRs carry it.', method: 'GET', module: v1Batches, path: '/api/v1/batches' },
   { name: 'list_boards', description: 'Every board with its columns in order.', method: 'GET', module: v1Boards, path: '/api/v1/boards' },
