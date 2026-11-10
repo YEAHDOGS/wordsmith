@@ -1,9 +1,10 @@
 <script>
   // Signed-in layout. Phones: one column + bottom nav + drawer. Tablets: icon rail. Desktop: full sidebar,
   // content capped at max-w-7xl. Ultra-wide: content spreads. Only lists scroll; the frame never does.
-  import { untrack } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
-  import { cubicIn, quintOut } from 'svelte/easing';
+  import { onDestroy, untrack } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { backOut, cubicIn, quintOut } from 'svelte/easing';
+  import Mic from '@lucide/svelte/icons/mic';
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
   import BottomNav from './BottomNav.svelte';
@@ -21,6 +22,9 @@
   import Attention from './Attention.svelte';
   import Architecture from './Architecture.svelte';
   import ARCHITECTURE_TEXT from './architecture.json';
+  import Scribe from './Scribe.svelte';
+  import SCRIBE_TEXT from './scribe.json';
+  import { scribe } from '../lib/scribe.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
@@ -36,6 +40,10 @@
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
+  const PILL = { start: 0.6, duration: 200, easing: backOut };
+
+  // Signing out unmounts the shell: the microphone goes off with it.
+  onDestroy(() => scribe.stop());
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -67,6 +75,7 @@
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
       case 'architecture': return { title: ARCHITECTURE_TEXT.title, subtitle: ARCHITECTURE_TEXT.subtitle };
+      case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
@@ -161,6 +170,8 @@
             <Attention />
           {:else if route.view === 'architecture'}
             <Architecture id={route.id} />
+          {:else if route.view === 'scribe'}
+            <Scribe />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}
@@ -216,6 +227,15 @@
         <Sidebar />
       </div>
     </div>
+  {/if}
+
+  <!-- Scribe keeps listening while you move around: this pill says so on every other page and leads back to it.
+       It floats over the top-right corner of the page, clear of the bottom nav and the composer. -->
+  {#if scribe.listening && route.view !== 'scribe'}
+    <button class="spring press fixed top-14 right-2 z-30 flex items-center gap-2 border border-accent bg-accent-soft px-2.5 py-1.5 text-xs text-ink sm:top-16 sm:right-4 tv:top-24 tv:text-lg"
+      aria-label={SCRIBE_TEXT.pill} title={SCRIBE_TEXT.pill} onclick={() => router.go('scribe')} transition:scale={PILL}>
+      <span class="live-dot size-2 rounded-full bg-accent" aria-hidden="true"></span><Mic class="size-3.5" />{scribe.thinking ? SCRIBE_TEXT.thinking : SCRIBE_TEXT.listening}
+    </button>
   {/if}
 
   {#if route.note}

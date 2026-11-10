@@ -1,9 +1,9 @@
-// Hash router. Routes: #/attention (Needs you), #/notes, #/features, #/architecture and #/architecture/<diagram id>, #/project/<id>, #/label/<id>, #/archive, #/trash, #/settings, and the board
+// Hash router. Routes: #/attention (Needs you), #/notes, #/features, #/architecture and #/architecture/<diagram id>, #/scribe, #/project/<id>, #/label/<id>, #/archive, #/trash, #/settings, and the board
 // settings pages #/features-settings and #/project-settings/<id>.
 // An open note adds ?note=<id>, so the back button and mobile back-swipe close it.
 
 const DEFAULT_VIEW = 'notes';
-const VIEWS = ['attention', 'notes', 'features', 'architecture', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
+const VIEWS = ['attention', 'notes', 'features', 'architecture', 'scribe', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
 const RETURN_VIEWS = new Set(['archive', 'trash', 'settings']);
 
 /** @typedef {{ view: string, id: string, note: string }} Route */
