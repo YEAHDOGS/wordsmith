@@ -25,7 +25,7 @@ const PROJECT = { type: 'string', description: 'Project id or name' };
 const PRIORITY = { type: 'integer', minimum: 0, maximum: PRIORITY_LABELS.length - 1, description: `0 none to ${PRIORITY_LABELS.length - 1} critical` };
 const DIFFICULTY = { type: 'integer', minimum: 0, maximum: DIFFICULTY_LABELS.length - 1, description: DIFFICULTY_LABELS.map((label, level) => `${level} ${label}`).join(', ') };
 const LABELS = { type: 'array', items: STRING, description: 'Label names. The list replaces the note\'s labels: send every one it should keep. The label of the group a note is in always stays.' };
-const DIAGRAM_ID = { type: 'string', description: 'Diagram id' };
+const DIAGRAM_ID = { type: 'string', description: 'Design diagram id, from list_diagrams' };
 const NODES = {
   type: 'array',
   description: 'Boxes. Only title is needed; leave x and y out and the server lays them out along the arrows.',
@@ -64,7 +64,7 @@ const FORMAT = { type: 'string', enum: ['json', 'md'], description: 'md for one 
 /** @type {Tool[]} */
 export const TOOLS = [
   { name: 'get_context', description: "The owner's standing context: preferences, facts and pointers. Read it first, every session.", method: 'GET', module: v1Context, path: '/api/v1/context' },
-  { name: 'list_projects', description: 'Projects with their mission statements (description, Markdown) and feature counts per state.', method: 'GET', module: v1Projects, path: '/api/v1/projects' },
+  { name: 'list_projects', description: 'Projects with their mission statements (description, Markdown), feature counts per state and how many design diagrams each has.', method: 'GET', module: v1Projects, path: '/api/v1/projects' },
   { name: 'get_project_context', description: "One project's whole picture in one call: mission, open features with their triage, recent events, attachment links. Load this before working a project.",
     method: 'GET', module: v1ProjectContext, path: '/api/v1/projects/:project/context', properties: { project: PROJECT, format: FORMAT, events_since: { type: 'integer', description: 'Only events after this time (ms)' }, events_limit: { type: 'integer' } },
     required: ['project'], query: ['format', 'events_since', 'events_limit'] },
@@ -92,14 +92,15 @@ export const TOOLS = [
   { name: 'create_feature', description: 'File a new feature request.', method: 'POST', module: v1Features, path: '/api/v1/features',
     properties: { project: PROJECT, title: STRING, body: STRING, priority: PRIORITY, labels: LABELS }, required: ['title'] },
   { name: 'create_note', description: 'Capture a note, e.g. research to act on later.', method: 'POST', module: v1Notes, path: '/api/v1/notes', properties: { title: STRING, body: STRING, project: PROJECT, labels: LABELS } },
-  { name: 'list_diagrams', description: 'Design diagrams (the Design page, and each project's Designs tab): id, name, description, project, node and edge counts.', method: 'GET', module: v1Diagrams, path: '/api/v1/diagrams', properties: { project: PROJECT }, query: ['project'] },
+  { name: 'list_diagrams', description: "Design diagrams (the Design page, and each project's Designs tab): id, name, description, project, node and edge counts. Pass project to see one project's designs.", method: 'GET', module: v1Diagrams, path: '/api/v1/diagrams', properties: { project: PROJECT }, query: ['project'] },
   { name: 'get_diagram', description: 'One design diagram: its nodes, edges and Mermaid source. Read it before changing a system it documents.', method: 'GET', module: v1Diagram, path: '/api/v1/diagrams/:id', properties: { id: DIAGRAM_ID }, required: ['id'] },
-  { name: 'create_diagram', description: 'Draw a design diagram for the owner: clients, services, databases, queues and the zones they run in, joined by labeled arrows. It appears on their Design page, and with a project it also shows in that project's Designs tab.',
+  { name: 'create_diagram', description: 'Draw a design diagram for the owner: clients, services, databases, queues and the zones they run in, joined by labeled arrows. It appears on their Design page; give it a project and it also shows in that project’s Designs tab.',
     method: 'POST', module: v1Diagrams, path: '/api/v1/diagrams', properties: { name: STRING, project: PROJECT, description: { type: 'string', description: 'What the diagram shows, Markdown' }, nodes: NODES, edges: EDGES }, required: ['name'] },
-  { name: 'update_diagram', description: 'Change a diagram. add_nodes adds boxes or updates them by id (unmentioned fields and positions stay); remove_nodes takes ids or titles; nodes and edges replace everything.',
+  { name: 'update_diagram', description: 'Change a design diagram: rename it, redraw it, or move it. add_nodes adds boxes or updates them by id (unmentioned fields and positions stay); remove_nodes takes ids or titles; nodes and edges replace everything. project links it to a project (id or name); an empty string takes it out of its project.',
     method: 'PATCH', module: v1Diagram, path: '/api/v1/diagrams/:id',
     properties: { id: DIAGRAM_ID, name: STRING, description: STRING, project: PROJECT, add_nodes: NODES, remove_nodes: { type: 'array', items: STRING }, add_edges: EDGES, remove_edges: { type: 'array', items: STRING, description: 'Edge ids' }, nodes: NODES, edges: EDGES },
     required: ['id'] },
+  { name: 'delete_diagram', description: 'Delete a design diagram on every device. Only when the owner asked for it, or for one you created by mistake.', method: 'DELETE', module: v1Diagram, path: '/api/v1/diagrams/:id', properties: { id: DIAGRAM_ID }, required: ['id'] },
   { name: 'create_project', description: 'Create a project. If the name is taken, the existing project comes back: use that one.', method: 'POST', module: v1Projects, path: '/api/v1/projects',
     properties: { name: STRING, description: { type: 'string', description: 'Mission statement, Markdown' }, color: { type: 'string', enum: COLORS }, repo: { type: 'string', description: 'owner/name' } }, required: ['name'] },
 ];
