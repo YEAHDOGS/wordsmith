@@ -23,6 +23,7 @@
   "projectEmptyBody": "Draw one here, or link one you already have. It is the same design as on the Design page: edit it in either place.",
   "open": "Open {design}",
   "back": "All designs",
+  "backToProject": "Back to this project's designs",
   "namePlaceholder": "Design name",
   "missing": "This design isn't on this device. It may still be syncing, or it was deleted.",
   "palette": "Add a box",

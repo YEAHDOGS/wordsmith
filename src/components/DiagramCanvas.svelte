@@ -26,8 +26,12 @@
   import { DIAGRAM_GRID, MAX_NAME, NODE_KINDS } from '../lib/models.js';
   import TEXT from './design.json';
 
-  /** @type {{ id: string }} */
-  let { id } = $props();
+  /**
+   * @type {{ id: string, onback?: () => void, backLabel?: string }}
+   * onback: where the back button (and deleting the design) leads; the Design page's list unless a project's
+   * Designs tab is showing the canvas in place.
+   */
+  let { id, onback = () => router.go('design'), backLabel = TEXT.back } = $props();
 
   const TOOL = 'spring press flex size-9 shrink-0 items-center justify-center border border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-40 tv:size-12';
   const TOOL_ON = 'border-accent bg-accent-soft text-ink';
@@ -141,7 +145,7 @@
   <p class="p-10 text-center text-ink-faint">{TEXT.missing}</p>
 {:else}
   <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5 sm:gap-1.5 sm:px-4 short:py-1">
-    <button class={TOOL} aria-label={TEXT.back} title={TEXT.back} onclick={() => router.go('design')}><ArrowLeft class="size-4" /></button>
+    <button class={TOOL} aria-label={backLabel} title={backLabel} onclick={onback}><ArrowLeft class="size-4" /></button>
     <input class="h-9 min-w-24 flex-1 border border-line bg-surface px-2 text-sm font-semibold text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none tv:h-12 tv:text-xl"
       value={diagram.name} maxlength={MAX_NAME} placeholder={TEXT.namePlaceholder} aria-label={TEXT.namePlaceholder} oninput={(event) => rename(event.currentTarget.value)} />
     <!-- Linking to a project, one choice away on screens with the room; phones have it under Design details -->
@@ -252,6 +256,6 @@
       <p class="pointer-events-none absolute inset-x-2 bottom-2 z-20 mx-auto w-fit max-w-full border border-line bg-surface px-3 py-1.5 text-center text-xs text-ink-muted" role="status" transition:fade={HINT}>{hint}</p>
     {/if}
 
-    <DiagramInspector {editor} {details} focus={focusInspector} onclose={() => (details = false)} />
+    <DiagramInspector {editor} {details} focus={focusInspector} onclose={() => (details = false)} ondeleted={onback} />
   </div>
 {/if}
