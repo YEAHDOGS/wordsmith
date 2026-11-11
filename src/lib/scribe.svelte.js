@@ -7,6 +7,7 @@
 // One session for the whole app (the page and the floating pill share it), so it keeps running while you move
 // between pages and watch the board fill in. Settings stay on this device: a local model's address means nothing on
 // another machine.
+import { auth } from './auth.svelte.js';
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
 import { NOT_CHAT, askModel, listModels, parseActions, scribeMessages } from './scribe-llm.js';
@@ -59,6 +60,7 @@ class Scribe {
   /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
   /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
   /** The model request in flight. @type {AbortController | null} */ #request = null;
+  /** The account this session belongs to (see claim). @type {string | undefined} */ #owner;
   /** Speech waiting to go to the model. */ #pending = '';
   /** Speech already handled, for context. */ #earlier = '';
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
@@ -147,6 +149,17 @@ class Scribe {
    * sent on; a request in flight is given up and its answer ignored, so one account's speech can never become a ticket
    * in the next one's notes, and its transcript and activity are gone.
    */
+  /**
+   * Ties the session to the signed-in account. A different account than before (signed in from another tab, say,
+   * without this one ever signing out) gets a clean session: the Shell calls this whenever the account changes.
+   * @param {string | undefined} userId
+   */
+  claim(userId) {
+    if (userId === this.#owner) return;
+    this.reset();
+    this.#owner = userId;
+  }
+
   reset() {
     this.#run++;
     this.#request?.abort();
@@ -193,6 +206,8 @@ class Scribe {
     const speech = this.#pending;
     const lines = this.transcript.filter((line) => !line.handled).map((line) => line.id);
     const run = this.#run;
+    // The account the speech belongs to: its answer is only ever written while that account is still the one signed in.
+    const owner = auth.user?.id;
     const request = new AbortController();
     this.#request = request;
     this.#pending = '';
@@ -204,8 +219,8 @@ class Scribe {
       if (this.settings.projectId && (!target || target.deleted_at)) this.configure({ projectId: '' });
       const project = target && !target.deleted_at ? target.name : '';
       const answer = await askModel(this.settings, scribeMessages({ project, tickets, earlier: this.#earlier, speech }), request.signal);
-      // The session was reset while the model was thinking: this answer is for a session that is gone.
-      if (run !== this.#run) return;
+      // The session was reset, or the account changed, while the model was thinking: this answer is for someone gone.
+      if (run !== this.#run || auth.user?.id !== owner) return;
       this.#apply(parseActions(answer, tickets), tickets);
       this.#earlier = `${this.#earlier} ${speech}`.trim().slice(-EARLIER_CHARS);
       for (const line of this.transcript) if (lines.includes(line.id)) line.handled = true;
