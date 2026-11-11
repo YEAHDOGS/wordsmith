@@ -145,11 +145,6 @@ class Scribe {
   }
 
   /**
-   * Ends the session for good and forgets it: signing out, or the account changing. Unlike stop(), nothing heard is
-   * sent on; a request in flight is given up and its answer ignored, so one account's speech can never become a ticket
-   * in the next one's notes, and its transcript and activity are gone.
-   */
-  /**
    * Ties the session to the signed-in account. A different account than before (signed in from another tab, say,
    * without this one ever signing out) gets a clean session: the Shell calls this whenever the account changes.
    * @param {string | undefined} userId
@@ -160,6 +155,11 @@ class Scribe {
     this.#owner = userId;
   }
 
+  /**
+   * Ends the session for good and forgets it: signing out, or the account changing. Unlike stop(), nothing heard is
+   * sent on; a request in flight is given up and its answer ignored, so one account's speech can never become a ticket
+   * in the next one's notes, and its transcript and activity are gone.
+   */
   reset() {
     this.#run++;
     this.#request?.abort();
