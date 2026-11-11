@@ -1,7 +1,7 @@
 {
   "title": "Privacy Policy",
   "kicker": "wordsmith by DOGS",
-  "effective": "2026-10-28",
+  "effective": "2026-11-10",
   "effectiveLabel": "Effective",
   "back": "Back",
   "contents": "On this page",
@@ -201,6 +201,7 @@
         "Cloudflare hosts wordsmith: the app, the API, the database (D1), file storage (R2) and logs all run on Cloudflare's network, and it handles your data only to provide that service.",
         "GitHub, Google and Apple handle sign-in when you choose them. GitHub also answers the repository and pull request lookups made with your token, and sends pull request updates to wordsmith if you set up a webhook. Each of them has its own privacy policy.",
         "Google Fonts serves the app's typefaces, so your browser contacts Google's font servers when the app loads.",
+        "Speech: Scribe uses the microphone only while you press its button. Your browser's own speech recognition turns your voice into text; Chrome, Edge and Safari send the audio to their maker (Google, Microsoft or Apple) to do it. Scribe then sends the text to the model server you entered, normally one on your own machine. wordsmith's servers never receive audio.",
         "Your AI agents read and write your notes with the API tokens you create. What an agent, or the AI service behind it, does with that data is between you and that service. Revoke a token in Settings to cut it off."
       ]
     },

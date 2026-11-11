@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Apple systems ask for the microphone and for speech recognition with these sentences, and end an app that
+       uses either without them. Scribe and dictation listen only while their microphone button is on. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>wordsmith listens when you press the microphone, to turn your speech into text.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>wordsmith turns what you say into text when you press the microphone.</string>
+</dict>
+</plist>

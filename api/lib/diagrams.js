@@ -1,13 +1,11 @@
 // Design diagrams for agents (/api/v1/diagrams and the MCP diagram tools). The app edits the same rows through
 // sync; here an agent sends boxes and arrows by name and the server fills in ids, positions and sizes.
-import { MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES, cleanRow, isId, newRow } from '../../src/lib/models.js';
+import { MAX_DIAGRAMS, MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES, cleanRow, isId, newRow } from '../../src/lib/models.js';
 import { layout, liveEdges, toMermaid } from '../../src/lib/diagram.js';
 import { resolveProject } from './agent.js';
 import { HttpError } from './http.js';
 import { toApi, upsertStatement } from './rows.js';
 
-// Live diagrams per user: bounds the list query and what sync downloads.
-const MAX_DIAGRAMS = 200;
 const BAD_REQUEST = 400;
 const NOT_FOUND = 404;
 const MAX_ID = 64;
@@ -38,7 +36,8 @@ function freshId(text, taken) {
  */
 function mergeNodes(current, incoming) {
   const nodes = current.map((node) => ({ ...node }));
-  const taken = new Set(nodes.map((node) => node.id));
+  // Ids the request names itself are reserved first, so an id made from another box's title can't take one of them.
+  const taken = new Set([...nodes.map((node) => node.id), ...incoming.map((raw) => raw?.id).filter((id) => id !== undefined)]);
   for (const raw of incoming) {
     if (!raw || typeof raw !== 'object') throw new HttpError(BAD_REQUEST, 'Each node must be an object: { title, kind?, text?, color?, id?, x?, y?, w?, h?, inside? }');
     const title = raw.title ?? raw.name ?? raw.label;

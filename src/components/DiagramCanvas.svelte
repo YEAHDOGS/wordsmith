@@ -135,10 +135,6 @@
     if (targetOf(event).node) focusInspector++;
   }
 
-  /** @param {string} name */
-  function rename(name) {
-    store.update('diagrams', id, { name });
-  }
 </script>
 
 {#if !diagram || diagram.deleted_at}
@@ -147,7 +143,7 @@
   <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5 sm:gap-1.5 sm:px-4 short:py-1">
     <button class={TOOL} aria-label={backLabel} title={backLabel} onclick={onback}><ArrowLeft class="size-4" /></button>
     <input class="h-9 min-w-24 flex-1 border border-line bg-surface px-2 text-sm font-semibold text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none tv:h-12 tv:text-xl"
-      value={diagram.name} maxlength={MAX_NAME} placeholder={TEXT.namePlaceholder} aria-label={TEXT.namePlaceholder} oninput={(event) => rename(event.currentTarget.value)} />
+      value={diagram.name} maxlength={MAX_NAME} placeholder={TEXT.namePlaceholder} aria-label={TEXT.namePlaceholder} oninput={(event) => store.update('diagrams', id, { name: event.currentTarget.value })} />
     <!-- Linking to a project, one choice away on screens with the room; phones have it under Design details -->
     <select class="spring h-9 w-40 shrink-0 truncate border border-line bg-surface px-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink focus:border-accent focus:outline-none max-md:hidden tv:h-12 tv:w-64 tv:text-xl"
       aria-label={TEXT.project} title={TEXT.project} value={diagram.project_id ?? ''} onchange={(event) => store.update('diagrams', id, { project_id: event.currentTarget.value || null })}>
