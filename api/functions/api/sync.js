@@ -127,7 +127,7 @@ export async function onRequestPost(context) {
       const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
       // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
       if (!row) {
-        saved[table].push(toApi(/** @type {Record<string, any>} */ (before)));
+        saved[table].push(before);
         continue;
       }
       if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
@@ -155,16 +155,15 @@ export async function onRequestPost(context) {
  * like when it last had it (diagramBase in src/lib/diagram.js). When the stored row has changed since (an agent drew
  * on it, another device edited it), the two are merged rather than letting this push replace the whole drawing.
  * Without a base (an old app build) the push is saved as sent, as before.
- * @param {Record<string, any> | null} before the stored row
+ * @param {Record<string, any> | null} before the stored row, API-shaped (loadByIds)
  * @param {Record<string, any>} row the pushed row
  * @returns {Record<string, any> | null} the row to save, or null when the diagram was deleted elsewhere and stays so
  */
 function reconcileDiagram(before, row) {
   const base = row.base;
   if (!before || !base || typeof base !== 'object' || !(Number(before.updated_at) > Number(base.at))) return row;
-  const stored = toApi(before);
-  if (stored.deleted_at && !row.deleted_at) return null;
-  return row.deleted_at ? row : mergeDiagram(stored, row, base);
+  if (before.deleted_at && !row.deleted_at) return null;
+  return row.deleted_at ? row : mergeDiagram(before, row, base);
 }
 
 /**
