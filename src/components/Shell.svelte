@@ -26,6 +26,7 @@
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
@@ -45,7 +46,12 @@
   const PILL = { start: 0.6, duration: 200, easing: backOut };
 
   // Signing out unmounts the shell: the microphone goes off with it.
-  // The Shell goes when the account does (sign-out, session ended): the Scribe session and all it heard go with it.
+  // The Scribe session and all it heard belong to one account. They go when the Shell does (sign-out, session ended),
+  // and also when the account changes under a Shell that stays (another tab signed in as someone else).
+  $effect.pre(() => {
+    const userId = auth.user?.id;
+    untrack(() => scribe.claim(userId));
+  });
   onDestroy(() => scribe.reset());
 
   let projectTab = $state('board');

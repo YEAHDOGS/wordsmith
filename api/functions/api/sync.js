@@ -163,10 +163,12 @@ export async function onRequestPost(context) {
  * @returns {Record<string, any> | null} the row to save, or null when the diagram was deleted elsewhere and stays so
  */
 function reconcileDiagram(before, row) {
+  // Deleting a diagram erases it and nothing restores one, so a deleted diagram stays deleted whatever is pushed,
+  // base or no base: otherwise a stale device, or a replayed request, could bring it back.
+  if (before?.deleted_at) return null;
   const base = row.base;
   // Anything but a plain base with a numeric time is treated as no base at all.
   if (!before || !base || typeof base !== 'object' || Array.isArray(base) || typeof base.at !== 'number' || !(Number(before.updated_at) > base.at)) return row;
-  if (before.deleted_at && !row.deleted_at) return null;
   return row.deleted_at ? row : mergeDiagram(before, row, base);
 }
 
