@@ -10,7 +10,6 @@
   import Plus from '@lucide/svelte/icons/plus';
   import Network from '@lucide/svelte/icons/network';
   import DesignGrid from './DesignGrid.svelte';
-  import DiagramCanvas from './DiagramCanvas.svelte';
   import { store } from '../lib/store.svelte.js';
   import TEXT from './design.json';
 
@@ -51,7 +50,8 @@
 
 {#if open}
   <div class="flex h-full min-h-0 flex-col border-x border-line" in:fade={{ duration: OPEN_MS }}>
-    <DiagramCanvas id={open.id} onback={() => (openId = '')} backLabel={TEXT.backToProject} />
+    <!-- The canvas editor loads on first use (the Design page shares the same chunk), keeping it out of the start-up bundle -->
+    {#await import('./DiagramCanvas.svelte') then { default: DiagramCanvas }}<DiagramCanvas id={open.id} onback={() => (openId = '')} backLabel={TEXT.backToProject} />{/await}
   </div>
 {:else}
 <div class="flex h-full min-h-0 flex-col" in:fade={{ duration: OPEN_MS }}>
