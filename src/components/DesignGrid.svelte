@@ -14,8 +14,12 @@
   import { bounds, center, liveEdges } from '../lib/diagram.js';
   import TEXT from './design.json';
 
-  /** @type {{ diagrams: any[], inProject?: boolean }} inProject: the cards belong to one project's tab (unlink instead of the picker) */
-  let { diagrams, inProject = false } = $props();
+  /**
+   * @type {{ diagrams: any[], inProject?: boolean, onopen?: (id: string) => void }}
+   * inProject: the cards belong to one project's tab (unlink instead of the picker).
+   * onopen: what a card does; by default it opens the design on the Design page.
+   */
+  let { diagrams, inProject = false, onopen = (id) => router.go('design', id) } = $props();
 
   const CARD_STAGGER_MS = 40;
   const MAX_STAGGERED = 12;
@@ -49,7 +53,7 @@
     {@const thumb = thumbnail(diagram)}
     {@const name = diagram.name || TEXT.untitled}
     <li class="flex min-w-0 flex-col bg-app" animate:flip={{ duration: FLIP_MS }} in:fly={{ y: 10, duration: 260, delay: Math.min(index, MAX_STAGGERED) * CARD_STAGGER_MS }}>
-      <button class="group flex w-full min-w-0 flex-col text-left transition-colors duration-150 hover:bg-surface-raised focus-visible:bg-surface-raised" aria-label={TEXT.open.replace('{design}', name)} onclick={() => router.go('design', diagram.id)}>
+      <button class="group flex w-full min-w-0 flex-col text-left transition-colors duration-150 hover:bg-surface-raised focus-visible:bg-surface-raised" aria-label={TEXT.open.replace('{design}', name)} onclick={() => onopen(diagram.id)}>
         <svg viewBox="0 0 {THUMB.w} {THUMB.h}" class="diagram-grid aspect-video w-full border-b border-line bg-app short:hidden" aria-hidden="true">
           {#each thumb.lines as line (line.id)}
             <line x1={line.from.x} y1={line.from.y} x2={line.to.x} y2={line.to.y} class="stroke-ink-faint" stroke-width="1" />

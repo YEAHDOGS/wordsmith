@@ -14,15 +14,14 @@
   import ColorPicker from './ColorPicker.svelte';
   import Segmented from './Segmented.svelte';
   import { store } from '../lib/store.svelte.js';
-  import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { toMermaid } from '../lib/diagram.js';
   import { byName } from '../lib/nav-order.js';
   import { EDGE_STYLES, MAX_MISSION, MAX_NAME, MAX_NODE_TEXT, NODE_KINDS } from '../lib/models.js';
   import TEXT from './design.json';
 
-  /** @type {{ editor: import('./diagram-editor.svelte.js').DiagramEditor, details: boolean, focus: number, onclose: () => void }} */
-  let { editor, details, focus, onclose } = $props();
+  /** @type {{ editor: import('./diagram-editor.svelte.js').DiagramEditor, details: boolean, focus: number, onclose: () => void, ondeleted: () => void }} */
+  let { editor, details, focus, onclose, ondeleted } = $props();
 
   const T = TEXT.inspector;
   const FIELD = 'w-full border border-line bg-app px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none tv:text-lg';
@@ -67,7 +66,7 @@
       return;
     }
     store.remove('diagrams', editor.id);
-    router.replace('design');
+    ondeleted();
   }
 
   function close() {
