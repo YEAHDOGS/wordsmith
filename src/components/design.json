@@ -36,6 +36,8 @@
   "fit": "Fit to screen",
   "details": "Design details",
   "limit": "This design is full.",
+  "arrowTaken": "These two boxes already have an arrow that way.",
+  "atLimit": "You have the most designs an account can hold. Delete one to make room.",
   "emptyCanvas": "Pick a box above to start. Drag from a box's dot to connect it to another.",
   "kinds": {
     "client": "Client app",

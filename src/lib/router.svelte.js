@@ -6,16 +6,13 @@ import { NEEDS_YOU_ENABLED } from './models.js';
 const DEFAULT_VIEW = 'notes';
 const VIEWS = [...(NEEDS_YOU_ENABLED ? ['attention'] : []), 'notes', 'features', 'design', 'scribe', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
 const RETURN_VIEWS = new Set(['archive', 'trash', 'settings']);
-// The Design page was called Architecture: links and bookmarks from then still open it.
-const RENAMED_VIEWS = { architecture: 'design' };
 
 /** @typedef {{ view: string, id: string, note: string }} Route */
 
 /** @returns {Route} */
 function parse() {
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
-  const [named, id = ''] = path.split('/');
-  const view = RENAMED_VIEWS[/** @type {keyof typeof RENAMED_VIEWS} */ (named)] ?? named;
+  const [view, id = ''] = path.split('/');
   const note = new URLSearchParams(query).get('note') || '';
   return { view: VIEWS.includes(view) ? view : DEFAULT_VIEW, id: decodeURIComponent(id), note };
 }

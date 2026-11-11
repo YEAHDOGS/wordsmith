@@ -1,5 +1,5 @@
--- Architecture diagrams: boxes on a grid joined by arrows, for laying out a project's systems (clients, services,
--- databases, queues, cloud zones). Drawn in the app (Architecture page) or by agents (/api/v1/diagrams, MCP).
+-- Design diagrams: boxes on a grid joined by arrows, for laying out a project's systems (clients, services,
+-- databases, queues, cloud zones). Drawn in the app (Design page) or by agents (/api/v1/diagrams, MCP).
 --   diagrams.project_id   the project it documents; NULL = not tied to one.
 --   diagrams.description  what the diagram shows, Markdown.
 --   diagrams.nodes        JSON list of boxes: { id, kind, title, text, color, x, y, w, h }.

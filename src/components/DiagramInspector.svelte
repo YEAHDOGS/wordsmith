@@ -124,7 +124,7 @@
           <Segmented options={EDGE_STYLES} value={edge.style} labels={{ solid: T.solid, dashed: T.dashed }} label={T.style} onselect={(style) => editor.patchEdge(edge.id, { style })} />
         </div>
         <div class="flex flex-wrap gap-1">
-          <button class={ACTION} onclick={() => editor.patchEdge(edge.id, { from: edge.to, to: edge.from })}><ArrowLeftRight class="size-3.5" />{T.reverse}</button>
+          <button class={ACTION} onclick={() => editor.reverseEdge(edge.id)}><ArrowLeftRight class="size-3.5" />{T.reverse}</button>
           <button class={DANGER} onclick={() => editor.removeSelection()}><Trash class="size-3.5" />{T.delete}</button>
         </div>
       {/key}

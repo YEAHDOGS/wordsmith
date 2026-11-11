@@ -16,7 +16,7 @@
   import X from '@lucide/svelte/icons/x';
   import { scribe } from '../lib/scribe.svelte.js';
   import { speech } from '../lib/speech.svelte.js';
-  import { listModels } from '../lib/scribe-llm.js';
+  import { NOT_CHAT, listModels } from '../lib/scribe-llm.js';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { byName } from '../lib/nav-order.js';
@@ -33,7 +33,7 @@
   const POP = { start: 0.7, duration: 200, easing: backOut };
   const FLIP_MS = 200;
 
-  const projects = $derived(byName(store.projects));
+  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? (speech.phase === 'loading' ? TEXT.loadingSpeech : TEXT.listening) : scribe.engine ? TEXT.idle : TEXT.idleNoMic);
   // Which engine hears you: a model on this device (desktop apps), or the browser's recognition.
   const engineNote = $derived(scribe.engine === 'local' ? TEXT.engineLocal.replace('{model}', speech.model?.name ?? '') : scribe.engine === 'browser' ? TEXT.engineBrowser : '');
@@ -82,7 +82,8 @@
     try {
       models = await listModels(scribe.settings.endpoint);
       findNote = TEXT.found.replace('{count}', String(models.length));
-      if (!scribe.settings.model && models.length) scribe.configure({ model: models[0] });
+      const chat = models.find((name) => !NOT_CHAT.test(name));
+      if (!scribe.settings.model && chat) scribe.configure({ model: chat });
     } catch (error) {
       models = [];
       findNote = `${/** @type {Error} */ (error).message}. ${TEXT.problems.cors}`;

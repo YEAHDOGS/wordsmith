@@ -11,6 +11,7 @@
   import DiagramCanvas from './DiagramCanvas.svelte';
   import DesignGrid from './DesignGrid.svelte';
   import { store } from '../lib/store.svelte.js';
+  import { MAX_DIAGRAMS } from '../lib/models.js';
   import { router } from '../lib/router.svelte.js';
   import { apiUrl } from '../lib/api.js';
   import { byName } from '../lib/nav-order.js';
@@ -50,7 +51,7 @@
   <DiagramCanvas {id} />
 {:else}
   <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-2 sm:px-4 short:py-1">
-    <button class={PRIMARY} onclick={create}><Plus class="size-4" />{TEXT.new}</button>
+    <button class="{PRIMARY} disabled:opacity-40" disabled={diagrams.length >= MAX_DIAGRAMS} title={diagrams.length >= MAX_DIAGRAMS ? TEXT.atLimit : undefined} onclick={create}><Plus class="size-4" />{TEXT.new}</button>
     <button class={SECONDARY} onclick={copyPrompt}><Copy class="size-4" />{copied ? TEXT.copied : TEXT.copyPrompt}</button>
     {#if diagrams.length}
       <select class="spring ml-auto min-h-10 max-w-full min-w-0 border border-line bg-surface px-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink focus:border-accent focus:outline-none tv:min-h-14 tv:text-xl"

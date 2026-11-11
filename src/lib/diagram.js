@@ -234,6 +234,8 @@ export function mergeDiagram(stored, sent, base) {
       ...stored[list].filter((/** @type {any} */ item) => !mine.has(item.id) && !had.has(item.id)),
     ];
   }
+  // Two sides may each have drawn the same arrow, or one may have removed the box the other's arrow points at.
+  if (Array.isArray(merged.nodes) && Array.isArray(merged.edges)) merged.edges = liveEdges(merged.nodes, merged.edges);
   for (const field of MERGED_FIELDS) if (sent[field] === base[field]) merged[field] = stored[field];
   return merged;
 }

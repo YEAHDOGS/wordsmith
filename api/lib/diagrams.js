@@ -153,6 +153,8 @@ async function save(env, userId, next, before) {
   const row = { ...next, ...fields, user_id: userId, updated_at: Date.now() };
   const upsert = upsertStatement(env, 'diagrams', row, before);
   if (upsert) await upsert.run();
+  // Nothing changed, nothing written: answer with the time the stored row really has.
+  else if (before) row.updated_at = before.updated_at;
   const { user_id: _owner, ...diagram } = row;
   return { ...present(diagram, await projectNames(env, userId)), mermaid: toMermaid(/** @type {any} */ (diagram)) };
 }
@@ -195,7 +197,8 @@ export async function updateDiagram(env, userId, id, input) {
   const gone = (listOf(body, 'remove_nodes') ?? []).map((ref) => String(ref).trim().toLowerCase());
   nodes = nodes.filter((/** @type {any} */ node) => !gone.includes(node.id.toLowerCase()) && !gone.includes(String(node.title ?? '').trim().toLowerCase()));
 
-  let edges = mergeEdges(nodes, [], listOf(body, 'edges') ?? before.edges.filter((/** @type {any} */ edge) => nodes.some((/** @type {any} */ node) => node.id === edge.from) && nodes.some((/** @type {any} */ node) => node.id === edge.to)));
+  // Stored arrows go through liveEdges first: those whose box is gone drop out, and a pair stored twice counts once.
+  let edges = mergeEdges(nodes, [], listOf(body, 'edges') ?? liveEdges(nodes, before.edges));
   edges = mergeEdges(nodes, edges, listOf(body, 'add_edges') ?? []);
   const cut = (listOf(body, 'remove_edges') ?? []).map(String);
   edges = edges.filter((edge) => !cut.includes(edge.id));

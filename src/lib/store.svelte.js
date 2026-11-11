@@ -68,6 +68,7 @@ class Store {
   #userId = '';
   /** Projects renamed after a name clash during the current push (each at most once). */
   #renamed = new Set();
+  /** What the server refused in the last push, once the device has settled it (see #push). */ #refused = '';
   /** The server has confirmed it is signed in as #userId; nothing is pushed before that. */
   #verified = false;
   #lastActivity = Date.now();
@@ -254,7 +255,9 @@ class Store {
       if (full || !pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
       this.online = true;
       this.lastSync = Date.now();
-      this.error = '';
+      // A change the server refused and this device already settled is reported once, until the next sync.
+      this.error = this.#refused;
+      this.#refused = '';
       await this.#refreshPullRequests();
     } catch (error) {
       const failure = /** @type {any} */ (error);
@@ -319,6 +322,14 @@ class Store {
           if (refusedTable === 'projects') {
             this.#outbox.delete(key);
             await this.#settleProject(id, current, code);
+          } else if (refusedTable === 'diagrams') {
+            // A refused diagram must not block every later sync. Take the server's copy; one the server never had
+            // (refused at the cap) is dropped here. The message shows once, without failing the push.
+            this.#outbox.delete(key);
+            const settled = current ?? { ...plain(this.find('diagrams', id)), deleted_at: Date.now() };
+            this.#upsertLocal('diagrams', settled);
+            await this.#db?.put('diagrams', [settled]);
+            this.#refused = `A design change was not saved: ${error}`;
           } else {
             rejection = `A change was rejected: ${error}`;
           }
