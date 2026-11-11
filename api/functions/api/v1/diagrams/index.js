@@ -1,4 +1,4 @@
-// GET /api/v1/diagrams?project= - architecture diagrams (boxes and arrows are counted, not listed).
+// GET /api/v1/diagrams?project= - design diagrams, shown on the app's Design page (boxes and arrows are counted, not listed).
 // POST - create one: { name, project?, description?, nodes?, edges? }. Positions are optional: the server lays out the rest.
 import { createDiagram, listDiagrams } from '../../../../lib/diagrams.js';
 import { json, readJson } from '../../../../lib/http.js';

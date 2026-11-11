@@ -30,6 +30,7 @@
   "find": "Find models",
   "finding": "Looking…",
   "found": "{count} models found",
+  "detected": "Found a model server on this machine and picked {model}.",
   "project": "Tickets go to",
   "noProject": "No project",
   "privacy": "Your browser turns speech into text; Chrome, Edge and Safari send the audio to their maker's speech service to do it. The text then goes only to the model server above, and tickets sync to wordsmith like anything you type.",
@@ -37,7 +38,7 @@
     "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press the mic again.",
     "mic": "Speech recognition stopped ({detail}). Press the mic to start again.",
     "model": "Could not reach your model ({detail}). Your words are kept and will be sent on Retry.",
-    "model-setup": "Set a model server and a model below, then Scribe can write tickets.",
+    "model-setup": "No model server was found on this machine. Start Ollama or LM Studio, or set a server and model below, then Scribe can write tickets.",
     "timeout": "Your model took too long to answer. Your words are kept and will be sent on Retry.",
     "cors": "If the server is running, it may be refusing this site. For Ollama, set OLLAMA_ORIGINS to this site's address and restart it.",
     "speech": "The speech model stopped ({detail}). Press the mic to start again."

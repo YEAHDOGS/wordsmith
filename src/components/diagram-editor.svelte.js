@@ -1,4 +1,4 @@
-// State and gestures of the architecture canvas (DiagramCanvas.svelte): the view (pan, zoom), what is selected, and
+// State and gestures of the design canvas (DiagramCanvas.svelte): the view (pan, zoom), what is selected, and
 // the one gesture in flight (panning, moving boxes, resizing one, pulling an arrow, pinching). Boxes being dragged
 // live in a draft and reach the store once, when the gesture ends, so a drag is one sync write and one undo step.
 import { store } from '../lib/store.svelte.js';

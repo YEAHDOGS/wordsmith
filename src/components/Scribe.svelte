@@ -46,13 +46,19 @@
   // A request the browser refused outright (server down, or the server not allowing this site) has no status to show.
   const blocked = $derived(scribe.problem === 'model' && scribe.ready && /failed to fetch|networkerror|load failed/i.test(scribe.detail));
 
-  // The panel opens by itself until a model is set.
+  // The panel opens by itself until a model is set. A model server already running on this machine is found and
+  // set without asking, and the panel closes again.
   let showSettings = $state(!scribe.ready);
   let typed = $state('');
   /** @type {string[]} */
   let models = $state([]);
   let finding = $state(false);
   let findNote = $state('');
+  scribe.detect().then((found) => {
+    if (!found) return;
+    showSettings = false;
+    findNote = TEXT.detected.replace('{model}', scribe.settings.model);
+  });
   /** @type {HTMLElement | undefined} */
   let transcriptBox = $state();
 

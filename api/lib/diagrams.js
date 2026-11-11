@@ -1,4 +1,4 @@
-// Architecture diagrams for agents (/api/v1/diagrams and the MCP diagram tools). The app edits the same rows through
+// Design diagrams for agents (/api/v1/diagrams and the MCP diagram tools). The app edits the same rows through
 // sync; here an agent sends boxes and arrows by name and the server fills in ids, positions and sizes.
 import { MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES, cleanRow, isId, newRow } from '../../src/lib/models.js';
 import { layout, liveEdges, toMermaid } from '../../src/lib/diagram.js';

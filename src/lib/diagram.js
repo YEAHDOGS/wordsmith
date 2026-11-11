@@ -1,4 +1,4 @@
-// Architecture diagrams, the parts with no DOM: grid snapping, where an arrow leaves and enters a box, automatic
+// Design diagrams (the Design page), the parts with no DOM: grid snapping, where an arrow leaves and enters a box, automatic
 // layout for boxes that come without a position (agents usually send none), and a Mermaid export.
 // Shared by the canvas (src/components/DiagramCanvas.svelte) and the Worker (api/lib/diagrams.js).
 import { DIAGRAM_GRID, NODE_SIZE, ZONE_SIZE } from './models.js';

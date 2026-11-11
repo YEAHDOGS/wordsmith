@@ -1,4 +1,4 @@
-/* Architecture canvas (src/components/DiagramCanvas.svelte). */
+/* Design canvas (src/components/DiagramCanvas.svelte). */
 
 /* The dotted grid behind the boxes: one dot per grid step (DIAGRAM_GRID in src/lib/models.js), drawn in the line
    token. --grid-step and --grid-x/--grid-y are set inline by the canvas so the dots pan and zoom with the boxes. */

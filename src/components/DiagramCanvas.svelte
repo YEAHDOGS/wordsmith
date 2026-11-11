@@ -1,5 +1,5 @@
 <script>
-  // The architecture canvas: one diagram's boxes on a dotted grid, joined by arrows. Drag the background to pan, the
+  // The design canvas: one diagram's boxes on a dotted grid, joined by arrows. Drag the background to pan, the
   // wheel or a pinch to zoom, a box to move it (a zone carries the boxes inside it), the dot on a box's right edge to
   // pull an arrow to another box, and the corner of a selected box to resize it. Phones and keyboards use the Connect
   // tool instead of the dot: pick the first box, then the second. Details are edited in the inspector, which floats
@@ -20,10 +20,11 @@
   import { KIND_ICON } from './diagram-kinds.js';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
+  import { byName } from '../lib/nav-order.js';
   import { RAIL_BORDER, TINT_BG } from '../lib/colors.js';
   import { center, edgeCurve } from '../lib/diagram.js';
   import { DIAGRAM_GRID, MAX_NAME, NODE_KINDS } from '../lib/models.js';
-  import TEXT from './architecture.json';
+  import TEXT from './design.json';
 
   /** @type {{ id: string }} */
   let { id } = $props();
@@ -41,6 +42,7 @@
 
   const editor = $derived(new DiagramEditor(id));
   const diagram = $derived(editor.diagram);
+  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const curves = $derived(editor.edges.map((edge) => {
     const from = editor.node(edge.from);
     const to = editor.node(edge.to);
@@ -139,9 +141,15 @@
   <p class="p-10 text-center text-ink-faint">{TEXT.missing}</p>
 {:else}
   <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5 sm:gap-1.5 sm:px-4 short:py-1">
-    <button class={TOOL} aria-label={TEXT.back} title={TEXT.back} onclick={() => router.go('architecture')}><ArrowLeft class="size-4" /></button>
+    <button class={TOOL} aria-label={TEXT.back} title={TEXT.back} onclick={() => router.go('design')}><ArrowLeft class="size-4" /></button>
     <input class="h-9 min-w-24 flex-1 border border-line bg-surface px-2 text-sm font-semibold text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none tv:h-12 tv:text-xl"
       value={diagram.name} maxlength={MAX_NAME} placeholder={TEXT.namePlaceholder} aria-label={TEXT.namePlaceholder} oninput={(event) => rename(event.currentTarget.value)} />
+    <!-- Linking to a project, one choice away on screens with the room; phones have it under Design details -->
+    <select class="spring h-9 w-40 shrink-0 truncate border border-line bg-surface px-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink focus:border-accent focus:outline-none max-md:hidden tv:h-12 tv:w-64 tv:text-xl"
+      aria-label={TEXT.project} title={TEXT.project} value={diagram.project_id ?? ''} onchange={(event) => store.update('diagrams', id, { project_id: event.currentTarget.value || null })}>
+      <option value="">{TEXT.noProject}</option>
+      {#each projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+    </select>
     <button class={TOOL} aria-label={TEXT.undo} title={TEXT.undo} disabled={!editor.canUndo} onclick={() => editor.undo()}><Undo2 class="size-4" /></button>
     <button class="{TOOL} {editor.connecting ? TOOL_ON : ''}" aria-label={TEXT.connect} title={TEXT.connect} aria-pressed={editor.connecting} onclick={() => editor.toggleConnect()}><Cable class="size-4" /></button>
     <!-- Phones pinch to zoom, so the two zoom buttons give their room to the name -->
