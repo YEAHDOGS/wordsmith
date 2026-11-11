@@ -92,6 +92,9 @@ const ROUTES = [
   ['/api/v1/context', v1Context, true],
   ['/api/v1/diagrams', v1Diagrams, true],
   ['/api/v1/diagrams/:id', v1Diagram, true],
+  // The app calls diagrams designs (the Design page): the same routes answer under that name too.
+  ['/api/v1/designs', v1Diagrams, true],
+  ['/api/v1/designs/:id', v1Diagram, true],
   ['/api/v1/projects/:project/context', v1ProjectContext, true],
   ['/api/mcp', mcp, false],
 ];

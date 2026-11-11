@@ -18,7 +18,7 @@ const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
-const HANDLERS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut' };
+const HANDLERS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onRequestPatch', PUT: 'onRequestPut', DELETE: 'onRequestDelete' };
 const INTERNAL_ORIGIN = 'https://mcp.internal';
 // Messages in one JSON-RPC batch, run one after another. A batch may hold one tool call at most: a write costs up to
 // eight D1 queries and the free plan allows 50 per request, so several could fail partway with some already saved.
@@ -29,13 +29,14 @@ const INSTRUCTIONS = [
   'wordsmith is the owner\'s notes and feature queue for agentic development.',
   'Start every session with get_context, then get_project_context for the project you work on.',
   'Loop: claim_next (or claim_note), update_note with status as you go, update_note pr_url once the PR is open. A merged PR completes the feature by itself.',
+  'A project can carry design diagrams of its system (list_diagrams with project, get_diagram): read them before changing what they document, and keep them true with create_diagram and update_diagram when your work changes the system.',
   'Triage with post_analysis. Prefer body_append and analysis_append over replacing text the owner wrote; every change is on the timeline under your token name.',
 ].join(' ');
 const TOOL_LIST = TOOLS.map((tool) => ({
   name: tool.name,
   description: tool.description,
   inputSchema: { type: 'object', properties: tool.properties ?? {}, required: tool.required ?? [], additionalProperties: false },
-  annotations: { readOnlyHint: tool.method === 'GET', destructiveHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: tool.method === 'GET', destructiveHint: tool.method === 'DELETE', openWorldHint: false },
 }));
 const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
 

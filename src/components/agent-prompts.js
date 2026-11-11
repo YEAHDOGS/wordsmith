@@ -46,7 +46,9 @@ Loop:
 5. Record what you did: POST ${url('/api/v1/notes/<id>/analysis')} with {"analysis_append":"Done: ..."}.
 6. Don't mark features complete yourself. Merging the PR completes them.
 7. Have a new idea? POST ${url('/api/v1/features')} with {"project":"...","title":"...","body":"..."}.
-8. Need a project that doesn't exist yet? POST ${url('/api/v1/projects')} with {"name":"...","repo":"owner/name"} (409 means it already exists; use that one).
+8. Designs: a project can carry diagrams of its system. Read them before changing what they show: GET ${url('/api/v1/diagrams?project=<project>')}, then GET ${url('/api/v1/diagrams/<id>')}.
+   Draw one: POST ${url('/api/v1/diagrams')} with {"name":"...","project":"...","nodes":[{"id":"api","title":"API","kind":"service"}],"edges":[{"from":"api","to":"db","label":"SQL"}]}. Keep one true: PATCH it with add_nodes, remove_nodes, add_edges, remove_edges.
+9. Need a project that doesn't exist yet? POST ${url('/api/v1/projects')} with {"name":"...","repo":"owner/name"} (409 means it already exists; use that one).
 Every call is timestamped on the feature's timeline under your token's name.`;
 }
 
