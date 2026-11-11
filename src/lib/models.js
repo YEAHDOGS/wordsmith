@@ -138,6 +138,9 @@ export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
 export const NODE_KINDS = ['client', 'service', 'worker', 'database', 'storage', 'queue', 'external', 'agent', 'zone', 'text'];
 export const DEFAULT_NODE_KIND = 'service';
 export const EDGE_STYLES = ['solid', 'dashed'];
+// Live diagrams per user: bounds the list query and what sync downloads.
+export const MAX_DIAGRAMS = 200;
+export const DIAGRAM_LIMIT = 'diagram_limit';
 export const MAX_DIAGRAM_NODES = 200;
 export const MAX_DIAGRAM_EDGES = 400;
 export const MAX_NODE_TEXT = 500;

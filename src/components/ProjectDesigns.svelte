@@ -10,12 +10,14 @@
   import Plus from '@lucide/svelte/icons/plus';
   import Network from '@lucide/svelte/icons/network';
   import DesignGrid from './DesignGrid.svelte';
+  import LazyPage from './LazyPage.svelte';
   import { store } from '../lib/store.svelte.js';
   import TEXT from './design.json';
 
   /** @type {{ project: any }} */
   let { project } = $props();
 
+  const loadCanvas = () => import('./DiagramCanvas.svelte');
   const OPEN_MS = 150;
   const BUTTON = 'spring press inline-flex min-h-9 items-center justify-center gap-2 border px-3 text-sm font-medium tv:min-h-14 tv:text-xl';
 
@@ -51,7 +53,7 @@
 {#if open}
   <div class="flex h-full min-h-0 flex-col border-x border-line" in:fade={{ duration: OPEN_MS }}>
     <!-- The canvas editor loads on first use (the Design page shares the same chunk), keeping it out of the start-up bundle -->
-    {#await import('./DiagramCanvas.svelte') then { default: DiagramCanvas }}<DiagramCanvas id={open.id} onback={() => (openId = '')} backLabel={TEXT.backToProject} />{/await}
+    <LazyPage load={loadCanvas} id={open.id} onback={() => (openId = '')} backLabel={TEXT.backToProject} />
   </div>
 {:else}
 <div class="flex h-full min-h-0 flex-col" in:fade={{ duration: OPEN_MS }}>

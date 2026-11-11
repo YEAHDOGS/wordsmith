@@ -82,11 +82,13 @@ export async function projectContext(env, userId, ref, query) {
     diagrams: drawn.map(toApi).map((diagram) => ({ id: diagram.id, name: diagram.name, description: diagram.description, mermaid: toMermaid(/** @type {any} */ (diagram)) })),
     features: features.map((note) => ({ ...note, attachments: files.filter((file) => file.note_id === note.id).map(presentAttachment) })),
     events: results.map(presentEvent).reverse(),
-    truncated: { events: 0, features: 0, attachments: cutAttachments },
+    truncated: { events: 0, features: 0, diagrams: 0, attachments: cutAttachments },
   };
-  // Over the cap: oldest events go first, then the features at the end of the claim order.
-  while (JSON.stringify(bundle).length > MAX_BUNDLE_CHARS && (bundle.events.length || bundle.features.length > 1)) {
-    if (bundle.events.length) bundle.events.shift(), bundle.truncated.events++;
+  // Over the cap: the least recently changed designs go first (GET /api/v1/diagrams still has them), then the oldest
+  // events, then the features at the end of the claim order.
+  while (JSON.stringify(bundle).length > MAX_BUNDLE_CHARS && (bundle.diagrams.length || bundle.events.length || bundle.features.length > 1)) {
+    if (bundle.diagrams.length) bundle.diagrams.pop(), bundle.truncated.diagrams++;
+    else if (bundle.events.length) bundle.events.shift(), bundle.truncated.events++;
     else bundle.features.pop(), bundle.truncated.features++;
   }
   return bundle;
@@ -106,6 +108,7 @@ export function projectContextMarkdown(bundle) {
   }
   if (truncated.attachments) lines.push('', '_Only the newest attachment links are listed; GET a feature to see all of its files._');
   if (truncated.events || truncated.features) lines.push('', `_Cut to fit: ${truncated.features} features and ${truncated.events} older events left out. Narrow with events_since or read features one by one._`);
+  if (truncated.diagrams) lines.push('', `_Cut to fit: ${truncated.diagrams} designs left out. GET /api/v1/diagrams?project= lists them._`);
   return lines.join('\n');
 }
 

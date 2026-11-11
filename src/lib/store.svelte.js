@@ -8,6 +8,7 @@
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
+import { diagramBase, mergeDiagram } from './diagram.js';
 import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, SYNCED_TABLES as SYNCED, newRow, projectKey } from './models.js';
 
 const SYNC_DEBOUNCE_MS = 2_500;
@@ -155,6 +156,12 @@ class Store {
    */
   #save(table, row) {
     const next = { ...plain(row), updated_at: Date.now() };
+    // A diagram's first edit since it synced notes what the server's copy looked like, and keeps that note until the
+    // edit is saved: the server merges against it when an agent or another device changed the diagram meanwhile.
+    if (table === 'diagrams' && !this.#outbox.has(`${table}:${next.id}`)) {
+      const synced = this.find(table, next.id);
+      next.base = synced ? diagramBase(synced) : undefined;
+    }
     this.#upsertLocal(table, next);
     this.#db?.put(table, [next]);
     this.#outbox.set(`${table}:${next.id}`, ++this.#version);
@@ -272,10 +279,14 @@ class Store {
       const batch = [...this.#outbox].slice(0, MAX_SYNC_BATCH);
       /** @type {Record<string, any[]>} */
       const body = Object.fromEntries(SYNCED.map((table) => [table, /** @type {any[]} */ ([])]));
+      /** The rows as sent, by outbox key. @type {Map<string, any>} */
+      const sentRows = new Map();
       for (const [key] of batch) {
         const [table, id] = key.split(':');
         const row = this.find(/** @type {Table} */ (table), id);
-        if (row) body[table].push(plain(row));
+        if (!row) continue;
+        sentRows.set(key, plain(row));
+        body[table].push(sentRows.get(key));
       }
       const result = await api('/api/sync', { method: 'POST', body });
       const saved = [];
@@ -284,8 +295,18 @@ class Store {
         for (const row of result.saved[table] || []) {
           const key = `${table}:${row.id}`;
           const sentVersion = batch.find(([sent]) => sent === key)?.[1];
-          // Edited again while this push was in flight? Keep the newer local copy queued.
-          if (this.#outbox.get(key) !== sentVersion) continue;
+          // Edited again while this push was in flight? Keep the newer local copy queued. A diagram also takes in what
+          // the server merged into the copy we sent, and starts its next merge from the saved row.
+          if (this.#outbox.get(key) !== sentVersion) {
+            const local = table === 'diagrams' ? this.find(table, row.id) : null;
+            const sentRow = sentRows.get(key);
+            if (local && sentRow && !row.deleted_at) {
+              const rebased = { ...mergeDiagram(row, plain(local), diagramBase(sentRow)), base: diagramBase(row) };
+              this.#upsertLocal(table, rebased);
+              this.#db?.put(table, [rebased]);
+            }
+            continue;
+          }
           this.#outbox.delete(key);
           this.#upsertLocal(table, row);
           saved.push([table, row]);

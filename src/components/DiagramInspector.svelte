@@ -38,7 +38,7 @@
   const many = $derived(editor.selected.length > 1);
   const mode = $derived(node ? 'node' : edge ? 'edge' : many ? 'many' : details ? 'diagram' : '');
   const diagram = $derived(editor.diagram);
-  const projects = $derived(byName(store.projects));
+  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
 
   let copied = $state('');
   let confirming = $state(false);

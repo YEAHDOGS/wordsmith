@@ -28,7 +28,9 @@ const SEARCH_LIMIT = 30;
 const PUBLIC_SEARCH_LIMIT = 20;
 const PUBLIC_SEARCH_CACHE_SECONDS = 600;
 const MIN_PUBLIC_QUERY = 2;
-const PRIVATE_REPO_MESSAGE = 'is private. Link GitHub in Settings so wordsmith can read it as you';
+// One answer for a repo that is missing and one the shared token could see but this account may not: saying "private"
+// would confirm to any account that the repo exists.
+const NOT_FOUND_MESSAGE = 'was not found. If it is private or belongs to an organization, link GitHub in Settings so wordsmith can read it as you';
 const MAX_SEARCH_QUERY = 256;
 const MAX_SEARCH_OWNERS = 8;
 const NEXT_LINK = /<([^>]+)>;\s*rel="next"/;
@@ -234,10 +236,10 @@ export async function getRepo(token, repo, publicOnly) {
   assertRepo(repo);
   const response = await fetch(`${GITHUB_API}/repos/${repo}`, { headers: headers(token) });
   // An organization that restricts OAuth apps answers 404 for its private repos, same as a missing repo.
-  if (response.status === 404) throw new HttpError(404, `${repo} was not found. If it is private or belongs to an organization, check that wordsmith has access to it`);
+  if (response.status === 404) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
   if (!response.ok) await fail(response);
   const data = await response.json();
-  if (publicOnly && data.private) throw new HttpError(404, `${repo} ${PRIVATE_REPO_MESSAGE}`);
+  if (publicOnly && data.private) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
   return { full_name: data.full_name, description: data.description || '', private: data.private, html_url: data.html_url, default_branch: data.default_branch };
 }
 
@@ -303,7 +305,7 @@ export async function repoPulls(token, userId, repo, publicOnly) {
       if (!response.ok) await fail(response);
       const { data, errors } = await response.json();
       if (!data?.repository) throw new HttpError(404, errors?.[0]?.message || 'GitHub repo not found');
-      if (publicOnly && data.repository.isPrivate) throw new HttpError(404, `${repo} ${PRIVATE_REPO_MESSAGE}`);
+      if (publicOnly && data.repository.isPrivate) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
       return { source: 'graphql', fetched_at: Date.now(), open: data.repository.open.nodes.map(fromGraphql), merged: data.repository.merged.nodes.map(fromGraphql) };
     }
     const [open, closed] = await Promise.all([

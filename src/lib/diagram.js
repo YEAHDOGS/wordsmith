@@ -122,11 +122,18 @@ export function layout(nodes, edges) {
     }
     x += Math.max(...members.map((node) => node.w)) + LAYOUT_GAP_X;
   }
-  for (const zone of sized.filter((node) => node.kind === 'zone' && !placed(node))) {
-    const members = sized.filter((node) => node.kind !== 'zone' && placed(node) && (node.inside === zone.id || (!sized.some((other) => other.inside === zone.id) && looseIds.has(node.id))));
+  const zones = sized.filter((node) => node.kind === 'zone' && !placed(node));
+  // A lone zone nobody was put in wraps everything placed here. With several zones that would stack them all around
+  // the same boxes, so a memberless zone then keeps its default size, set down beside the others.
+  let emptyX = LAYOUT_ORIGIN;
+  for (const zone of zones) {
+    const members = sized.filter((node) => node.kind !== 'zone' && placed(node) && (node.inside === zone.id || (zones.length === 1 && !sized.some((other) => other.inside === zone.id) && looseIds.has(node.id))));
     const box = bounds(/** @type {DiagramNode[]} */ (members));
     if (box) Object.assign(zone, { x: snap(box.x - ZONE_PADDING), y: snap(box.y - ZONE_HEADER), w: snap(box.w + ZONE_PADDING * 2), h: snap(box.h + ZONE_HEADER + ZONE_PADDING) });
-    else Object.assign(zone, { x: LAYOUT_ORIGIN, y: top });
+    else {
+      Object.assign(zone, { x: snap(emptyX), y: top });
+      emptyX += zone.w + LAYOUT_GAP_X;
+    }
   }
   return /** @type {DiagramNode[]} */ (sized.map(({ inside: _inside, ...node }) => node));
 }
@@ -163,4 +170,52 @@ export function toMermaid(diagram) {
     lines.push(`  ${ids.get(edge.from)} ${arrow}${edge.label ? `|${mermaidText(edge.label)}|` : ''} ${ids.get(edge.to)}`);
   }
   return lines.join('\n');
+}
+
+// Two sides can change one diagram between syncs: this device, and an agent or another device through the server.
+// A diagram is one row, so without care the later save would replace the other side's whole drawing. Instead a device
+// remembers what the server last gave it (the base) and the two copies are merged against that.
+const MERGED_LISTS = /** @type {const} */ (['nodes', 'edges']);
+const MERGED_FIELDS = ['name', 'description', 'project_id'];
+
+/**
+ * What a device needs to remember of the server's copy to merge later: when it was saved, which boxes and arrows it
+ * had, and its plain fields.
+ * @param {Record<string, any>} row a diagram as the server sent it
+ */
+export function diagramBase(row) {
+  return {
+    at: row.updated_at,
+    nodes: row.nodes.map((/** @type {DiagramNode} */ node) => node.id),
+    edges: row.edges.map((/** @type {DiagramEdge} */ edge) => edge.id),
+    name: row.name,
+    description: row.description,
+    project_id: row.project_id,
+  };
+}
+
+/**
+ * Merges a device's copy of a diagram into the stored one, given the base the device started from.
+ * Boxes and arrows: the device's own stay (its positions and text win), except those the other side removed since
+ * the base; those the other side added since the base are kept. Name, description and project: the device's value
+ * if it changed it, otherwise the stored one.
+ * @param {Record<string, any>} stored the server's current copy
+ * @param {Record<string, any>} sent the device's copy
+ * @param {Record<string, any>} base diagramBase of the copy the device last had
+ * @returns {Record<string, any>} the device's copy with the other side's changes folded in
+ */
+export function mergeDiagram(stored, sent, base) {
+  const merged = { ...sent };
+  for (const list of MERGED_LISTS) {
+    if (!Array.isArray(sent[list]) || !Array.isArray(stored[list])) continue;
+    const had = new Set(Array.isArray(base[list]) ? base[list] : []);
+    const mine = new Set(sent[list].map((/** @type {any} */ item) => item?.id));
+    const theirs = new Set(stored[list].map((/** @type {any} */ item) => item.id));
+    merged[list] = [
+      ...sent[list].filter((/** @type {any} */ item) => !had.has(item?.id) || theirs.has(item?.id)),
+      ...stored[list].filter((/** @type {any} */ item) => !mine.has(item.id) && !had.has(item.id)),
+    ];
+  }
+  for (const field of MERGED_FIELDS) if (sent[field] === base[field]) merged[field] = stored[field];
+  return merged;
 }
