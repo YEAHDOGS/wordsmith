@@ -41,7 +41,7 @@ class Store {
   /** @type {any[]} */ notes = $state([]);
   /** Custom feature boards, one per scope (models.js FEATURES_SCOPE or a project id). @type {any[]} */ boards = $state([]);
   /** Note groups in projects (src/lib/groups.js). @type {any[]} */ note_groups = $state([]);
-  /** Architecture diagrams (src/lib/diagram.js). @type {any[]} */ diagrams = $state([]);
+  /** Design diagrams (src/lib/diagram.js). @type {any[]} */ diagrams = $state([]);
   /** @type {any[]} */ events = $state([]);
   /** @type {any[]} */ attachments = $state([]);
   /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);

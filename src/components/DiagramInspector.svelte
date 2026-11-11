@@ -1,5 +1,5 @@
 <script>
-  // The panel that edits whatever is selected on the architecture canvas: one box (title, details, kind, color), one
+  // The panel that edits whatever is selected on the design canvas: one box (title, details, kind, color), one
   // arrow (label, line, direction), several boxes (duplicate, delete), or the diagram itself (project, description,
   // exports) when Details is on. It floats over the canvas, on the right on wide screens and along the bottom on
   // phones, and slides with transform and opacity only, so the canvas never moves.
@@ -19,7 +19,7 @@
   import { toMermaid } from '../lib/diagram.js';
   import { byName } from '../lib/nav-order.js';
   import { EDGE_STYLES, MAX_MISSION, MAX_NAME, MAX_NODE_TEXT, NODE_KINDS } from '../lib/models.js';
-  import TEXT from './architecture.json';
+  import TEXT from './design.json';
 
   /** @type {{ editor: import('./diagram-editor.svelte.js').DiagramEditor, details: boolean, focus: number, onclose: () => void }} */
   let { editor, details, focus, onclose } = $props();
@@ -67,7 +67,7 @@
       return;
     }
     store.remove('diagrams', editor.id);
-    router.replace('architecture');
+    router.replace('design');
   }
 
   function close() {

@@ -133,7 +133,7 @@ export const TRASH_DAYS = 30;
 export const DAY_MS = 86_400_000;
 export const TRASH_MS = TRASH_DAYS * DAY_MS;
 export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
-// Architecture diagrams (the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the
+// Design diagrams (the Design page; the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the
 // icon and shape. A zone is a boundary drawn behind other boxes (a cloud, a region, a device); text is a bare caption.
 export const NODE_KINDS = ['client', 'service', 'worker', 'database', 'storage', 'queue', 'external', 'agent', 'zone', 'text'];
 export const DEFAULT_NODE_KIND = 'service';
@@ -215,7 +215,7 @@ export const MODELS = {
     // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
     folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
-  // Architecture diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
+  // Design diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
   diagrams: {
     project_id: { type: 'id', nullable: true, default: null },
     name: { type: 'text', max: MAX_NAME, default: '' },

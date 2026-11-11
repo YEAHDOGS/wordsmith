@@ -12,6 +12,8 @@ const BODY_PREVIEW = 240;
 const REQUEST_TIMEOUT_MS = 90_000;
 const MAX_ACTIONS = 10;
 const OPS = ['create', 'update', 'none'];
+// Looking for a model server on this machine gives each address this long to answer.
+const PROBE_TIMEOUT_MS = 1_500;
 
 const SYSTEM = `You are Scribe. A developer is thinking out loud, and you turn what they say into tickets in their notes app while they keep talking.
 
@@ -142,9 +144,14 @@ export async function askModel({ endpoint, model }, messages) {
   }
 }
 
-/** The models the server offers, for the settings picker. @param {string} endpoint @returns {Promise<string[]>} */
-export async function listModels(endpoint) {
-  const response = await fetch(`${base(endpoint)}/models`);
+/**
+ * The models the server offers, for the settings picker.
+ * @param {string} endpoint
+ * @param {boolean} [quick] give up after PROBE_TIMEOUT_MS (used when looking for a server, not when asked to list one)
+ * @returns {Promise<string[]>}
+ */
+export async function listModels(endpoint, quick = false) {
+  const response = await fetch(`${base(endpoint)}/models`, quick ? { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) } : undefined);
   if (!response.ok) throw new Error(`The model server answered ${response.status}`);
   const { data } = await response.json();
   return Array.isArray(data) ? data.map((model) => String(model?.id ?? '')).filter(Boolean) : [];

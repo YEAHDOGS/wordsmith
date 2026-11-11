@@ -8,11 +8,16 @@
 // another machine.
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
-import { askModel, parseActions, scribeMessages } from './scribe-llm.js';
+import { askModel, listModels, parseActions, scribeMessages } from './scribe-llm.js';
 
 const SETTINGS_KEY = 'ws_scribe';
 // Ollama's OpenAI-compatible address; LM Studio uses http://localhost:1234/v1.
 const DEFAULT_ENDPOINT = 'http://localhost:11434/v1';
+// Where model servers listen by default on your own machine: Ollama, LM Studio, llama.cpp. Looked for when no model
+// is set, so a running server needs no setup at all.
+const LOCAL_ENDPOINTS = [DEFAULT_ENDPOINT, 'http://localhost:1234/v1', 'http://localhost:8080/v1'];
+// Models that can't write tickets: embedding and speech models listed beside the chat ones.
+const NOT_CHAT = /embed|whisper|rerank|tts/i;
 // A thought is sent this long after its last word, so a breath mid-sentence doesn't split it.
 const FLUSH_MS = 1_200;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
@@ -66,6 +71,25 @@ class Scribe {
 
   get ready() {
     return Boolean(this.settings.endpoint.trim() && this.settings.model.trim());
+  }
+
+  /**
+   * With no model chosen yet, looks for a model server already running on this machine and picks its first chat model,
+   * so Scribe works without typing an address. Leaves a chosen model alone.
+   * @returns {Promise<boolean>} true when one was found and set
+   */
+  async detect() {
+    if (this.settings.model.trim()) return false;
+    for (const endpoint of new Set([this.settings.endpoint, ...LOCAL_ENDPOINTS])) {
+      const models = await listModels(endpoint, true).catch(() => []);
+      const model = models.find((name) => !NOT_CHAT.test(name));
+      // Chosen by hand while we were looking: that wins.
+      if (this.settings.model.trim()) return false;
+      if (!model) continue;
+      this.configure({ endpoint, model });
+      return true;
+    }
+    return false;
   }
 
   /** @param {Partial<{ endpoint: string, model: string, projectId: string }>} patch */

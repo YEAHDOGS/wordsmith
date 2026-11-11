@@ -17,11 +17,11 @@
   import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
+  import ProjectDesigns from './ProjectDesigns.svelte';
   import SelectionBar from './SelectionBar.svelte';
   import Trash from './Trash.svelte';
   import Attention from './Attention.svelte';
-  import Architecture from './Architecture.svelte';
-  import ARCHITECTURE_TEXT from './architecture.json';
+  import DESIGN_TEXT from './design.json';
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import { scribe } from '../lib/scribe.svelte.js';
@@ -74,7 +74,7 @@
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
-      case 'architecture': return { title: ARCHITECTURE_TEXT.title, subtitle: ARCHITECTURE_TEXT.subtitle };
+      case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
       case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
@@ -96,7 +96,7 @@
   /** The cards on screen right now: what "select all" picks. */
   const visible = $derived.by(() => {
     if (route.view === 'features' || (project && projectTab === 'board')) return view.features ?? [];
-    if (project && (projectTab === 'prs' || projectTab === 'media')) return [];
+    if (project && (projectTab === 'prs' || projectTab === 'media' || projectTab === 'designs')) return [];
     return (view.notes ?? []).filter((note) => ui.showsState(note));
   });
 
@@ -168,8 +168,9 @@
             <Trash />
           {:else if route.view === 'attention'}
             <Attention />
-          {:else if route.view === 'architecture'}
-            <Architecture id={route.id} />
+          {:else if route.view === 'design'}
+            <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
+            {#await import('./Design.svelte') then { default: Design }}<Design id={route.id} />{/await}
           {:else if route.view === 'scribe'}
             <Scribe />
           {:else if route.view === 'features-settings'}
@@ -189,6 +190,8 @@
               </div>
             {:else if projectTab === 'media' && project}
               <div class="{CONTENT} min-h-0 flex-1 px-2 sm:px-4" in:fade={TAB_IN}><ProjectMedia notes={view.features ?? []} /></div>
+            {:else if projectTab === 'designs' && project}
+              <div class="{CONTENT} min-h-0 flex-1 px-2 sm:px-4" in:fade={TAB_IN}><ProjectDesigns {project} /></div>
             {:else if projectTab === 'prs' && project}
               <div class="{CONTENT} min-h-0 flex-1" in:fade={TAB_IN}>
                 {#if project.repo}

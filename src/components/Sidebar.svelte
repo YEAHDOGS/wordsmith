@@ -48,7 +48,7 @@
     { view: 'attention', label: 'Needs you', icon: BellDot },
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
-    { view: 'architecture', label: 'Architecture', icon: Network },
+    { view: 'design', label: 'Design', icon: Network },
     { view: 'scribe', label: 'Scribe (beta)', icon: Mic },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
