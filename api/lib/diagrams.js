@@ -69,10 +69,15 @@ function mergeEdges(nodes, current, incoming) {
     if (!node) throw new HttpError(BAD_REQUEST, `No node "${ref}" for an edge: use a node id or its exact title`);
     return node.id;
   };
+  // Pairs this request has already named: a second arrow the same way would silently overwrite the first one's label.
+  const sent = new Set();
   for (const raw of incoming) {
     if (!raw || typeof raw !== 'object') throw new HttpError(BAD_REQUEST, 'Each edge must be an object: { from, to, label?, style? }');
     const from = find(raw.from);
     const to = find(raw.to);
+    const pair = `${from}>${to}`;
+    if (sent.has(pair)) throw new HttpError(BAD_REQUEST, `Two edges from "${raw.from}" to "${raw.to}": two boxes take one arrow in each direction. Put both in one label, e.g. "reads / writes"`);
+    sent.add(pair);
     const known = edges.find((edge) => edge.id === raw.id) ?? edges.find((edge) => edge.from === from && edge.to === to);
     if (known) {
       Object.assign(known, { from, to }, raw.label !== undefined && { label: raw.label }, raw.style !== undefined && { style: raw.style });
@@ -102,14 +107,13 @@ async function projectNames(env, userId) {
  */
 export async function listDiagrams(env, userId, query) {
   const project = await resolveProject(env, userId, query.get('project'));
+  // Counted in SQL: reading every diagram's boxes just to count them would cost CPU on each list call.
   const { results } = await env.DB.prepare(
-    `SELECT * FROM diagrams WHERE user_id = ?1 AND deleted_at IS NULL AND (?2 IS NULL OR project_id = ?2) ORDER BY updated_at DESC LIMIT ?3`,
+    `SELECT id, project_id, name, description, created_at, updated_at, json_array_length(nodes) AS node_count, json_array_length(edges) AS edge_count
+     FROM diagrams WHERE user_id = ?1 AND deleted_at IS NULL AND (?2 IS NULL OR project_id = ?2) ORDER BY updated_at DESC LIMIT ?3`,
   ).bind(userId, project?.id ?? null, MAX_DIAGRAMS).all();
   const projects = await projectNames(env, userId);
-  return results.map((/** @type {any} */ row) => {
-    const diagram = present(toApi(row), projects);
-    return { ...diagram, nodes: diagram.nodes.length, edges: diagram.edges.length };
-  });
+  return results.map((/** @type {any} */ { node_count: nodes, edge_count: edges, ...row }) => ({ ...present(row, projects), nodes, edges }));
 }
 
 /** One live diagram row, API-shaped, or a 404. @param {Record<string, any>} env @param {string} userId @param {string} id */

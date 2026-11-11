@@ -21,6 +21,7 @@
   import SelectionBar from './SelectionBar.svelte';
   import Trash from './Trash.svelte';
   import Attention from './Attention.svelte';
+  import LazyPage from './LazyPage.svelte';
   import DESIGN_TEXT from './design.json';
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
@@ -37,6 +38,7 @@
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
+  const loadDesign = () => import('./Design.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
@@ -170,7 +172,7 @@
             <Attention />
           {:else if route.view === 'design'}
             <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
-            {#await import('./Design.svelte') then { default: Design }}<Design id={route.id} />{/await}
+            <LazyPage load={loadDesign} id={route.id} />
           {:else if route.view === 'scribe'}
             <Scribe />
           {:else if route.view === 'features-settings'}

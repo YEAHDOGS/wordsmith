@@ -122,11 +122,18 @@ export function layout(nodes, edges) {
     }
     x += Math.max(...members.map((node) => node.w)) + LAYOUT_GAP_X;
   }
-  for (const zone of sized.filter((node) => node.kind === 'zone' && !placed(node))) {
-    const members = sized.filter((node) => node.kind !== 'zone' && placed(node) && (node.inside === zone.id || (!sized.some((other) => other.inside === zone.id) && looseIds.has(node.id))));
+  const zones = sized.filter((node) => node.kind === 'zone' && !placed(node));
+  // A lone zone nobody was put in wraps everything placed here. With several zones that would stack them all around
+  // the same boxes, so a memberless zone then keeps its default size, set down beside the others.
+  let emptyX = LAYOUT_ORIGIN;
+  for (const zone of zones) {
+    const members = sized.filter((node) => node.kind !== 'zone' && placed(node) && (node.inside === zone.id || (zones.length === 1 && !sized.some((other) => other.inside === zone.id) && looseIds.has(node.id))));
     const box = bounds(/** @type {DiagramNode[]} */ (members));
     if (box) Object.assign(zone, { x: snap(box.x - ZONE_PADDING), y: snap(box.y - ZONE_HEADER), w: snap(box.w + ZONE_PADDING * 2), h: snap(box.h + ZONE_HEADER + ZONE_PADDING) });
-    else Object.assign(zone, { x: LAYOUT_ORIGIN, y: top });
+    else {
+      Object.assign(zone, { x: snap(emptyX), y: top });
+      emptyX += zone.w + LAYOUT_GAP_X;
+    }
   }
   return /** @type {DiagramNode[]} */ (sized.map(({ inside: _inside, ...node }) => node));
 }
