@@ -1,9 +1,10 @@
 // Hash router. Routes: #/attention (Needs you), #/notes, #/features, #/design and #/design/<design id>, #/scribe, #/project/<id>, #/label/<id>, #/archive, #/trash, #/settings, and the board
 // settings pages #/features-settings and #/project-settings/<id>.
 // An open note adds ?note=<id>, so the back button and mobile back-swipe close it.
+import { NEEDS_YOU_ENABLED } from './models.js';
 
 const DEFAULT_VIEW = 'notes';
-const VIEWS = ['attention', 'notes', 'features', 'design', 'scribe', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
+const VIEWS = [...(NEEDS_YOU_ENABLED ? ['attention'] : []), 'notes', 'features', 'design', 'scribe', 'project', 'label', 'archive', 'trash', 'settings', 'features-settings', 'project-settings'];
 const RETURN_VIEWS = new Set(['archive', 'trash', 'settings']);
 // The Design page was called Architecture: links and bookmarks from then still open it.
 const RENAMED_VIEWS = { architecture: 'design' };
