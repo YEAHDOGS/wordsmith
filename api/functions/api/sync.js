@@ -11,6 +11,7 @@ import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../.
 import { schedulePurge, settleTrash } from '../../lib/trash.js';
 import { DIAGRAM_LIMIT, MAX_DIAGRAMS, MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
 import { mergeDiagram } from '../../../src/lib/diagram.js';
+import { ERASED_DIAGRAM } from '../../lib/diagrams.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
@@ -124,25 +125,27 @@ export async function onRequestPost(context) {
     }
     for (const pushed of incoming) {
       const before = existing.get(pushed.id) ?? null;
-      const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
-      // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
-      if (!row) {
-        saved[table].push(before);
-        continue;
-      }
-      if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
-        rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first` });
-        continue;
-      }
       try {
+        const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
+        // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
+        if (!row) {
+          saved[table].push(before);
+          continue;
+        }
+        if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
+          rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first` });
+          continue;
+        }
         const base = before ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
         const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
+        // Diagrams have no Trash: a deleted one is erased at once, leaving only the marker other devices need.
+        if (table === 'diagrams' && next.deleted_at) Object.assign(next, structuredClone(ERASED_DIAGRAM));
         const upsert = upsertStatement(env, table, next, before);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
         saved[table].push(apiRow);
       } catch (error) {
-        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+        rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message });
       }
     }
     if (statements.length) await env.DB.batch(statements);
@@ -161,7 +164,8 @@ export async function onRequestPost(context) {
  */
 function reconcileDiagram(before, row) {
   const base = row.base;
-  if (!before || !base || typeof base !== 'object' || !(Number(before.updated_at) > Number(base.at))) return row;
+  // Anything but a plain base with a numeric time is treated as no base at all.
+  if (!before || !base || typeof base !== 'object' || Array.isArray(base) || typeof base.at !== 'number' || !(Number(before.updated_at) > base.at)) return row;
   if (before.deleted_at && !row.deleted_at) return null;
   return row.deleted_at ? row : mergeDiagram(before, row, base);
 }

@@ -177,17 +177,28 @@ export function toMermaid(diagram) {
 // remembers what the server last gave it (the base) and the two copies are merged against that.
 const MERGED_LISTS = /** @type {const} */ (['nodes', 'edges']);
 const MERGED_FIELDS = ['name', 'description', 'project_id'];
+// djb2, the usual small string hash: plenty to tell "this box is as the server sent it" from "this box was edited".
+const HASH_SEED = 5381;
+const HASH_FACTOR = 33;
+
+/** A short fingerprint of one box or arrow. @param {unknown} item */
+function fingerprint(item) {
+  const text = JSON.stringify(item);
+  let hash = HASH_SEED;
+  for (let index = 0; index < text.length; index++) hash = ((hash * HASH_FACTOR) ^ text.charCodeAt(index)) >>> 0;
+  return hash;
+}
 
 /**
- * What a device needs to remember of the server's copy to merge later: when it was saved, which boxes and arrows it
- * had, and its plain fields.
+ * What a device needs to remember of the server's copy to merge later: when it was saved, a fingerprint of each box
+ * and arrow by id, and its plain fields.
  * @param {Record<string, any>} row a diagram as the server sent it
  */
 export function diagramBase(row) {
   return {
     at: row.updated_at,
-    nodes: row.nodes.map((/** @type {DiagramNode} */ node) => node.id),
-    edges: row.edges.map((/** @type {DiagramEdge} */ edge) => edge.id),
+    nodes: Object.fromEntries(row.nodes.map((/** @type {DiagramNode} */ node) => [node.id, fingerprint(node)])),
+    edges: Object.fromEntries(row.edges.map((/** @type {DiagramEdge} */ edge) => [edge.id, fingerprint(edge)])),
     name: row.name,
     description: row.description,
     project_id: row.project_id,
@@ -195,10 +206,15 @@ export function diagramBase(row) {
 }
 
 /**
- * Merges a device's copy of a diagram into the stored one, given the base the device started from.
- * Boxes and arrows: the device's own stay (its positions and text win), except those the other side removed since
- * the base; those the other side added since the base are kept. Name, description and project: the device's value
- * if it changed it, otherwise the stored one.
+ * Merges a device's copy of a diagram into the stored one, given the base the device started from. For each box and
+ * arrow:
+ * - the device never touched it (same fingerprint as the base): the stored one stands, with whatever the other side
+ *   changed on it;
+ * - the device changed it, or added it: the device's stands;
+ * - the other side removed it since the base: it stays removed; the device removed it: it stays removed;
+ * - the other side added it since the base: it is kept.
+ * Name, description and project: the device's value if it changed it, otherwise the stored one.
+ * A base that isn't the expected shape counts as empty, which keeps everything both sides have.
  * @param {Record<string, any>} stored the server's current copy
  * @param {Record<string, any>} sent the device's copy
  * @param {Record<string, any>} base diagramBase of the copy the device last had
@@ -208,11 +224,13 @@ export function mergeDiagram(stored, sent, base) {
   const merged = { ...sent };
   for (const list of MERGED_LISTS) {
     if (!Array.isArray(sent[list]) || !Array.isArray(stored[list])) continue;
-    const had = new Set(Array.isArray(base[list]) ? base[list] : []);
+    const had = new Map(base[list] && typeof base[list] === 'object' && !Array.isArray(base[list]) ? Object.entries(base[list]) : []);
     const mine = new Set(sent[list].map((/** @type {any} */ item) => item?.id));
-    const theirs = new Set(stored[list].map((/** @type {any} */ item) => item.id));
+    const theirs = new Map(stored[list].map((/** @type {any} */ item) => [item.id, item]));
     merged[list] = [
-      ...sent[list].filter((/** @type {any} */ item) => !had.has(item?.id) || theirs.has(item?.id)),
+      ...sent[list]
+        .filter((/** @type {any} */ item) => !had.has(item?.id) || theirs.has(item?.id))
+        .map((/** @type {any} */ item) => (had.has(item?.id) && had.get(item.id) === fingerprint(item) ? theirs.get(item.id) : item)),
       ...stored[list].filter((/** @type {any} */ item) => !mine.has(item.id) && !had.has(item.id)),
     ];
   }

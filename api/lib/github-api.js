@@ -303,8 +303,9 @@ export async function repoPulls(token, userId, repo, publicOnly) {
         body: JSON.stringify({ query: PULLS_QUERY, variables: { owner, name, open: OPEN_LIMIT, merged: MERGED_LIMIT } }),
       });
       if (!response.ok) await fail(response);
-      const { data, errors } = await response.json();
-      if (!data?.repository) throw new HttpError(404, errors?.[0]?.message || 'GitHub repo not found');
+      const { data } = await response.json();
+      // The same words whether the repo is missing or private and out of reach (GitHub's own message tells them apart).
+      if (!data?.repository) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
       if (publicOnly && data.repository.isPrivate) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
       return { source: 'graphql', fetched_at: Date.now(), open: data.repository.open.nodes.map(fromGraphql), merged: data.repository.merged.nodes.map(fromGraphql) };
     }
