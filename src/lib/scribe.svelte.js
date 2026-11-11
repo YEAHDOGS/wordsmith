@@ -8,7 +8,7 @@
 // another machine.
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
-import { askModel, listModels, parseActions, scribeMessages } from './scribe-llm.js';
+import { NOT_CHAT, askModel, listModels, parseActions, scribeMessages } from './scribe-llm.js';
 
 const SETTINGS_KEY = 'ws_scribe';
 // Ollama's OpenAI-compatible address; LM Studio uses http://localhost:1234/v1.
@@ -16,8 +16,6 @@ const DEFAULT_ENDPOINT = 'http://localhost:11434/v1';
 // Where model servers listen by default on your own machine: Ollama, LM Studio, llama.cpp. Looked for when no model
 // is set, so a running server needs no setup at all.
 const LOCAL_ENDPOINTS = [DEFAULT_ENDPOINT, 'http://localhost:1234/v1', 'http://localhost:8080/v1'];
-// Models that can't write tickets: embedding and speech models listed beside the chat ones.
-const NOT_CHAT = /embed|whisper|rerank|tts/i;
 // A thought is sent this long after its last word, so a breath mid-sentence doesn't split it.
 const FLUSH_MS = 1_200;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
@@ -215,7 +213,10 @@ class Scribe {
     this.thinking = true;
     try {
       const tickets = this.#tickets();
-      const project = this.settings.projectId ? store.find('projects', this.settings.projectId)?.name ?? '' : '';
+      const target = this.settings.projectId ? store.find('projects', this.settings.projectId) : null;
+      // A project trashed since it was picked takes no more tickets.
+      if (this.settings.projectId && (!target || target.deleted_at)) this.configure({ projectId: '' });
+      const project = target && !target.deleted_at ? target.name : '';
       const answer = await askModel(this.settings, scribeMessages({ project, tickets, earlier: this.#earlier, speech }), request.signal);
       // The session was reset while the model was thinking: this answer is for a session that is gone.
       if (run !== this.#run) return;

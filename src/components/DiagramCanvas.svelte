@@ -55,6 +55,7 @@
   const linkFrom = $derived(editor.link ? editor.node(editor.link.from) : null);
   const hint = $derived.by(() => {
     if (editor.notice === 'limit') return TEXT.limit;
+    if (editor.notice === 'taken') return TEXT.arrowTaken;
     if (editor.connecting) return editor.connectFrom ? TEXT.connectHintTo : TEXT.connectHint;
     return editor.nodes.length ? '' : TEXT.emptyCanvas;
   });

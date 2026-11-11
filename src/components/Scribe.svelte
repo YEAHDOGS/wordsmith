@@ -15,7 +15,7 @@
   import Eraser from '@lucide/svelte/icons/eraser';
   import X from '@lucide/svelte/icons/x';
   import { scribe } from '../lib/scribe.svelte.js';
-  import { listModels } from '../lib/scribe-llm.js';
+  import { NOT_CHAT, listModels } from '../lib/scribe-llm.js';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { byName } from '../lib/nav-order.js';
@@ -32,7 +32,7 @@
   const POP = { start: 0.7, duration: 200, easing: backOut };
   const FLIP_MS = 200;
 
-  const projects = $derived(byName(store.projects));
+  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? TEXT.listening : scribe.canListen ? TEXT.idle : TEXT.idleNoMic);
   const problem = $derived.by(() => {
     if (!scribe.problem) return '';
@@ -79,7 +79,8 @@
     try {
       models = await listModels(scribe.settings.endpoint);
       findNote = TEXT.found.replace('{count}', String(models.length));
-      if (!scribe.settings.model && models.length) scribe.configure({ model: models[0] });
+      const chat = models.find((name) => !NOT_CHAT.test(name));
+      if (!scribe.settings.model && chat) scribe.configure({ model: chat });
     } catch (error) {
       models = [];
       findNote = `${/** @type {Error} */ (error).message}. ${TEXT.problems.cors}`;

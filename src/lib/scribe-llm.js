@@ -12,6 +12,8 @@ const BODY_PREVIEW = 240;
 const REQUEST_TIMEOUT_MS = 90_000;
 const MAX_ACTIONS = 10;
 const OPS = ['create', 'update', 'none'];
+// Models that can't write tickets: embedding and speech models that servers list beside the chat ones.
+export const NOT_CHAT = /embed|whisper|rerank|tts/i;
 // Looking for a model server on this machine gives each address this long to answer.
 const PROBE_TIMEOUT_MS = 1_500;
 

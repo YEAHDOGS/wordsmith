@@ -133,7 +133,7 @@ export async function onRequestPost(context) {
           continue;
         }
         if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
-          rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first` });
+          rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first`, current: null });
           continue;
         }
         const base = before ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
@@ -145,7 +145,7 @@ export async function onRequestPost(context) {
         const { user_id: _owner, ...apiRow } = next;
         saved[table].push(apiRow);
       } catch (error) {
-        rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message });
+        rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message, ...(table === 'diagrams' && { table, current: before }) });
       }
     }
     if (statements.length) await env.DB.batch(statements);

@@ -38,10 +38,11 @@ export class DiagramEditor {
   /** Tap-to-connect: on while the Connect tool is armed; connectFrom is the first box tapped. */ connecting = $state(false);
   connectFrom = $state('');
   canUndo = $state(false);
-  /** Why the last action did nothing (a limit), for the status line. */ notice = $state('');
+  /** Why the last action did nothing ('limit', or 'taken': the arrow already exists), for the status line. */ notice = $state('');
 
   /** @type {{ nodes: DiagramNode[], edges: DiagramEdge[] }[]} */ #undo = [];
   /** What the last commit edited ("<id>:<field>" while typing in one field), so a run of keystrokes is one undo step. */ #merge = '';
+  /** The drawing as this editor last left it. If it is something else now, an agent or another device changed it. */ #left = '';
   /** @type {any} the gesture in flight */ #gesture = null;
   /** Pointers on the canvas, for pinch. @type {Map<number, Point>} */ #pointers = new Map();
   /** The canvas viewport element, set by the canvas. @type {HTMLElement | null} */ element = null;
@@ -89,19 +90,35 @@ export class DiagramEditor {
   commit(nodes, edges = this.diagram?.edges ?? [], merge = '') {
     const current = this.diagram;
     if (!current) return;
+    this.#forgetIfChangedElsewhere();
     if (!merge || merge !== this.#merge) this.#undo.push(plain({ nodes: current.nodes, edges: current.edges }));
     this.#merge = merge;
     if (this.#undo.length > MAX_UNDO) this.#undo.shift();
     this.canUndo = true;
-    store.update('diagrams', this.id, { nodes: plain(nodes), edges: liveEdges(nodes, plain(edges)) });
+    const saved = store.update('diagrams', this.id, { nodes: plain(nodes), edges: liveEdges(nodes, plain(edges)) });
+    this.#left = JSON.stringify([saved?.nodes, saved?.edges]);
+  }
+
+  /**
+   * Undo steps are whole earlier drawings. Once someone else's boxes have arrived, going back to one would delete
+   * them, so the steps taken before that are dropped.
+   */
+  #forgetIfChangedElsewhere() {
+    const current = this.diagram;
+    if (!this.#undo.length || !current || JSON.stringify([current.nodes, current.edges]) === this.#left) return;
+    this.#undo = [];
+    this.#merge = '';
+    this.canUndo = false;
   }
 
   undo() {
+    this.#forgetIfChangedElsewhere();
     const last = this.#undo.pop();
     this.#merge = '';
     this.canUndo = this.#undo.length > 0;
     if (!last) return;
-    store.update('diagrams', this.id, last);
+    const saved = store.update('diagrams', this.id, last);
+    this.#left = JSON.stringify([saved?.nodes, saved?.edges]);
     this.selected = this.selected.filter((id) => last.nodes.some((node) => node.id === id));
     this.selectedEdge = '';
   }
@@ -150,6 +167,18 @@ export class DiagramEditor {
   /** Changes fields of one arrow. @param {string} id @param {Partial<DiagramEdge>} patch @param {string} [field] */
   patchEdge(id, patch, field = '') {
     this.commit(this.nodes, (this.diagram?.edges ?? []).map((/** @type {DiagramEdge} */ edge) => (edge.id === id ? { ...edge, ...patch } : edge)), field && `${id}:${field}`);
+  }
+
+  /** Turns an arrow round, unless its boxes already have one that way (the status line says so). @param {string} id */
+  reverseEdge(id) {
+    const edges = this.diagram?.edges ?? [];
+    const edge = edges.find((/** @type {DiagramEdge} */ candidate) => candidate.id === id);
+    if (!edge) return;
+    if (edges.some((/** @type {DiagramEdge} */ other) => other.from === edge.to && other.to === edge.from)) {
+      this.notice = 'taken';
+      return;
+    }
+    this.patchEdge(id, { from: edge.to, to: edge.from });
   }
 
   /** Joins two boxes with an arrow (once per direction) and selects it. @param {string} from @param {string} to */

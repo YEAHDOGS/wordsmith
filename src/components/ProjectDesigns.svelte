@@ -12,6 +12,7 @@
   import DesignGrid from './DesignGrid.svelte';
   import LazyPage from './LazyPage.svelte';
   import { store } from '../lib/store.svelte.js';
+  import { MAX_DIAGRAMS } from '../lib/models.js';
   import TEXT from './design.json';
 
   /** @type {{ project: any }} */
@@ -58,7 +59,7 @@
 {:else}
 <div class="flex h-full min-h-0 flex-col" in:fade={{ duration: OPEN_MS }}>
   <div class="flex shrink-0 flex-wrap items-center gap-2 py-2 sm:py-3 short:py-1">
-    <button class="{BUTTON} border-accent bg-accent text-accent-ink hover:bg-accent-hover" onclick={create}><Plus class="size-4" />{TEXT.new}</button>
+    <button class="{BUTTON} border-accent bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-40" disabled={live.length >= MAX_DIAGRAMS} title={live.length >= MAX_DIAGRAMS ? TEXT.atLimit : undefined} onclick={create}><Plus class="size-4" />{TEXT.new}</button>
     {#if others.length}
       <select class="spring min-h-9 max-w-full min-w-0 flex-1 border border-line bg-surface px-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink focus:border-accent focus:outline-none sm:max-w-xs sm:flex-none tv:min-h-14 tv:text-xl"
         aria-label={TEXT.linkExistingLabel} onchange={linkExisting}>
