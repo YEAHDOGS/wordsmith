@@ -45,7 +45,8 @@
   const PILL = { start: 0.6, duration: 200, easing: backOut };
 
   // Signing out unmounts the shell: the microphone goes off with it.
-  onDestroy(() => scribe.stop());
+  // The Shell goes when the account does (sign-out, session ended): the Scribe session and all it heard go with it.
+  onDestroy(() => scribe.reset());
 
   let projectTab = $state('board');
   const route = $derived(router.route);

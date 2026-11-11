@@ -9,6 +9,8 @@ const GITHUB_ACTOR = /** @type {const} */ ({ type: 'github', name: 'github' });
 // Open PRs are re-checked at most this often per note, and at most MAX_NOTES_PER_REFRESH notes per call.
 const RECHECK_MS = 120_000;
 const MAX_NOTES_PER_REFRESH = 10;
+// A private repo's webhook checks each account's own access with one GitHub call; at most this many accounts per event.
+const MAX_PRIVATE_WEBHOOK_USERS = 20;
 
 /**
  * The GitHub credential for a user and where it came from: their own sign-in token ('sign-in'), else the Worker's shared
@@ -111,6 +113,18 @@ export async function applyPullRequestWebhook(env, payload) {
     list.push({ before, patch: { pull_requests: prs, prs_checked_at: Date.now() } });
     byUser.set(row.user_id, list);
   }
-  for (const [userId, changes] of byUser) await saveNotes(env, userId, GITHUB_ACTOR, changes);
-  return results.length;
+  // Knowing a pull request's URL is not permission to see it. For a private repo (or one the payload doesn't mark
+  // public), an account gets the update only if its own GitHub sign-in can read that pull request.
+  const isPrivate = payload.repository?.private !== false;
+  const pr = { repo: String(pull.base?.repo?.full_name || payload.repository?.full_name || ''), number: Number(pull.number) };
+  let applied = 0;
+  for (const [userId, changes] of [...byUser].slice(0, isPrivate ? MAX_PRIVATE_WEBHOOK_USERS : byUser.size)) {
+    if (isPrivate) {
+      const { token, source } = await githubCredential(env, userId);
+      if (source !== 'sign-in' || !(await fetchPullRequest(token, pr, false))) continue;
+    }
+    await saveNotes(env, userId, GITHUB_ACTOR, changes);
+    applied += changes.length;
+  }
+  return applied;
 }

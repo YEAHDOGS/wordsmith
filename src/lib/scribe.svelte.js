@@ -59,6 +59,8 @@ class Scribe {
   detail = $state('');
 
   /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
+  /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
+  /** The model request in flight. @type {AbortController | null} */ #request = null;
   /** Speech waiting to go to the model. */ #pending = '';
   /** Speech already handled, for context. */ #earlier = '';
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
@@ -107,18 +109,25 @@ class Scribe {
     this.problem = '';
     this.detail = '';
     this.listening = true;
+    // Words, problems and endings still arriving from a session that was reset belong to nobody now.
+    const run = this.#run;
     this.#session = listen({
-      onInterim: (text) => (this.interim = text),
+      onInterim: (text) => {
+        if (run === this.#run) this.interim = text;
+      },
       onFinal: (text) => {
+        if (run !== this.#run) return;
         this.interim = '';
         this.hear(text);
       },
       onProblem: (kind, detail) => {
+        if (run !== this.#run) return;
         this.problem = kind;
         this.detail = detail;
       },
       // Also reached when the engine gives up by itself (microphone refused, model failed to load).
       onEnd: () => {
+        if (run !== this.#run) return;
         this.#session = null;
         this.listening = false;
         this.interim = '';
@@ -133,6 +142,24 @@ class Scribe {
     // A local model still hands over the sentence it was hearing; onEnd then sends it on.
     this.#session?.stop();
     this.#flush();
+  }
+
+  /**
+   * Ends the session for good and forgets it: signing out, or the account changing. Unlike stop(), nothing heard is
+   * sent on; a request in flight is given up and its answer ignored, so one account's speech can never become a ticket
+   * in the next one's notes, and its transcript and activity are gone.
+   */
+  reset() {
+    this.#run++;
+    this.#request?.abort();
+    this.#request = null;
+    clearTimeout(this.#timer);
+    this.listening = false;
+    this.thinking = false;
+    this.interim = '';
+    this.#session?.stop();
+    this.#session = null;
+    this.clear();
   }
 
   /** Takes one finished line of speech (or typed text) and queues it for the model. @param {string} text */
@@ -167,24 +194,30 @@ class Scribe {
     }
     const speech = this.#pending;
     const lines = this.transcript.filter((line) => !line.handled).map((line) => line.id);
+    const run = this.#run;
+    const request = new AbortController();
+    this.#request = request;
     this.#pending = '';
     this.thinking = true;
     try {
       const tickets = this.#tickets();
       const project = this.settings.projectId ? store.find('projects', this.settings.projectId)?.name ?? '' : '';
-      const answer = await askModel(this.settings, scribeMessages({ project, tickets, earlier: this.#earlier, speech }));
+      const answer = await askModel(this.settings, scribeMessages({ project, tickets, earlier: this.#earlier, speech }), request.signal);
+      // The session was reset while the model was thinking: this answer is for a session that is gone.
+      if (run !== this.#run) return;
       this.#apply(parseActions(answer, tickets), tickets);
       this.#earlier = `${this.#earlier} ${speech}`.trim().slice(-EARLIER_CHARS);
       for (const line of this.transcript) if (lines.includes(line.id)) line.handled = true;
       this.problem = '';
       this.detail = '';
     } catch (error) {
+      if (run !== this.#run) return;
       // Keep the speech: it goes out again with whatever is said next, or on Retry.
       this.#pending = `${speech} ${this.#pending}`.trim();
       this.problem = 'model';
       this.detail = /** @type {Error} */ (error).name === 'AbortError' ? 'timeout' : /** @type {Error} */ (error).message;
     } finally {
-      this.thinking = false;
+      if (run === this.#run) this.thinking = false;
     }
     if (this.#pending && !this.problem) this.#flush();
   }

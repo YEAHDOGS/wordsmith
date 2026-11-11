@@ -11,12 +11,17 @@ const NOT_FOUND = 404;
 const MAX_ID = 64;
 // Ids made from a title keep this much of it, leaving room for a "-2" style suffix.
 const SLUG_LENGTH = 40;
+/** What a deleted diagram keeps: nothing. Diagrams have no Trash, so deleting one erases its drawing at once and leaves only the marker that tells other devices to drop it. */
+export const ERASED_DIAGRAM = { name: '', description: '', nodes: [], edges: [] };
 const NODE_FIELDS = ['kind', 'title', 'text', 'color', 'x', 'y', 'w', 'h', 'inside'];
 
 /** A list from the request, or a 400 naming the field. @param {Record<string, any>} input @param {string} field */
 function listOf(input, field) {
   if (input[field] === undefined) return null;
   if (!Array.isArray(input[field])) throw new HttpError(BAD_REQUEST, `${field} must be a list`);
+  // Checked before any merging or layout: an oversized list must cost nothing but this comparison.
+  const max = field.includes('edges') ? MAX_DIAGRAM_EDGES : MAX_DIAGRAM_NODES;
+  if (input[field].length > max) throw new HttpError(BAD_REQUEST, `${field} takes at most ${max} items`);
   return /** @type {any[]} */ (input[field]);
 }
 
@@ -197,10 +202,11 @@ export async function updateDiagram(env, userId, id, input) {
   return save(env, userId, { ...next, nodes, edges }, before);
 }
 
-/** Deletes a diagram on every device (a tombstone, like any synced row). @param {Record<string, any>} env @param {string} userId @param {string} id */
+/** Deletes a diagram on every device and erases its drawing (the row stays as a marker, like any synced row). @param {Record<string, any>} env @param {string} userId @param {string} id */
 export async function deleteDiagram(env, userId, id) {
   const before = await load(env, userId, id);
   const now = Date.now();
-  await env.DB.prepare('UPDATE diagrams SET deleted_at = ?, updated_at = ? WHERE user_id = ? AND id = ?').bind(now, now, userId, before.id).run();
+  await env.DB.prepare('UPDATE diagrams SET deleted_at = ?, updated_at = ?, name = ?, description = ?, nodes = ?, edges = ? WHERE user_id = ? AND id = ?')
+    .bind(now, now, ERASED_DIAGRAM.name, ERASED_DIAGRAM.description, JSON.stringify(ERASED_DIAGRAM.nodes), JSON.stringify(ERASED_DIAGRAM.edges), userId, before.id).run();
   return { id: before.id, deleted_at: now };
 }

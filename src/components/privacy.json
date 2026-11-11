@@ -226,7 +226,7 @@
       "title": "Exporting and deleting",
       "paragraphs": [
         "Export: select notes and copy them as Markdown. The agent API can also read notes and features as JSON.",
-        "Delete: delete any note, project, label or group in the app. It waits 30 days in Trash, then is erased along with its attachments and history. Delete forever in Trash erases it right away.",
+        "Delete: delete any note, project, label or group in the app. It waits 30 days in Trash, then is erased along with its attachments and history. Delete forever in Trash erases it right away. A deleted design skips the Trash: its drawing is erased at once.",
         "Your account: to delete your whole account and everything in it, contact us at dogs.red. We delete it within 30 days, and it ages out of database history 30 days after that.",
         "Signing out in Settings wipes this device's offline copy. You can also revoke your GitHub access in GitHub's settings at any time."
       ]

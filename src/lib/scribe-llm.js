@@ -123,11 +123,13 @@ const base = (endpoint) => endpoint.trim().replace(/\/+$/, '');
  * Asks the model what to do with a stretch of speech.
  * @param {{ endpoint: string, model: string }} settings
  * @param {{ role: string, content: string }[]} messages
+ * @param {AbortSignal} [cancel] gives the request up early (the session ended)
  * @returns {Promise<string>} the assistant's message
  */
-export async function askModel({ endpoint, model }, messages) {
+export async function askModel({ endpoint, model }, messages, cancel) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  cancel?.addEventListener('abort', () => controller.abort(), { once: true });
   try {
     const response = await fetch(`${base(endpoint)}/chat/completions`, {
       method: 'POST',
