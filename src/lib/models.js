@@ -10,6 +10,9 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 // Card and label tints. Each maps to a --color-tint-* token in src/styles/theme.css.
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
+// The Needs you page (agent questions and the review queue) is switched off for now: no navigation entry, and its
+// address opens All notes. The page, its data and the agent API (ask, snooze) are untouched, so true brings it back.
+export const NEEDS_YOU_ENABLED = false;
 // Longest Preview or beta password the sign-in screen accepts and the server checks.
 export const MAX_PASSWORD_LENGTH = 200;
 // Timeline entries in note_events, written by the server on every interaction.
