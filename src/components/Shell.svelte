@@ -20,7 +20,6 @@
   import SelectionBar from './SelectionBar.svelte';
   import Trash from './Trash.svelte';
   import Attention from './Attention.svelte';
-  import Architecture from './Architecture.svelte';
   import ARCHITECTURE_TEXT from './architecture.json';
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
@@ -169,7 +168,8 @@
           {:else if route.view === 'attention'}
             <Attention />
           {:else if route.view === 'architecture'}
-            <Architecture id={route.id} />
+            <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
+            {#await import('./Architecture.svelte') then { default: Architecture }}<Architecture id={route.id} />{/await}
           {:else if route.view === 'scribe'}
             <Scribe />
           {:else if route.view === 'features-settings'}

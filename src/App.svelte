@@ -5,7 +5,6 @@
   import { cubicIn } from 'svelte/easing';
   import Login from './components/Login.svelte';
   import Shell from './components/Shell.svelte';
-  import Privacy from './components/Privacy.svelte';
   import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
@@ -47,7 +46,10 @@
      The policy comes first so /privacy reads the same signed in or out. -->
 <div class="grid h-dvh w-full overflow-hidden bg-app">
   {#if privacy.open}
-    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Privacy /></div>
+    <!-- Loaded on demand: few visits read the policy, and its text is a tenth of the app -->
+    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}>
+      {#await import('./components/Privacy.svelte') then { default: Privacy }}<Privacy />{/await}
+    </div>
   {:else if auth.status === 'loading'}
     <div class="col-start-1 row-start-1 flex min-h-0 items-center justify-center" out:fade={SCREEN_OUT}>
       <span class="text-fluid-xl font-black tracking-tight text-ink">word<span class="text-accent">smith</span></span>

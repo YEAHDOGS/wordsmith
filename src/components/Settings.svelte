@@ -6,7 +6,7 @@
 </script>
 
 <script>
-  // Account, linked providers, agent API tokens, appearance, the app version and installers, the step-by-step guide to
+  // Account, linked providers, agent API tokens, appearance, the app version and installers, local speech models, the step-by-step guide to
   // connecting an agent (T3 Code or any other), its two copy-paste prompts, and webhook help. One stacked column on phones, a 1px grid of cards from lg up.
   import KeyRound from '@lucide/svelte/icons/key-round';
   import Copy from '@lucide/svelte/icons/copy';
@@ -16,6 +16,7 @@
   import { fade, slide } from 'svelte/transition';
   import ProviderIcon from './ProviderIcon.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
+  import SpeechSettings from './SpeechSettings.svelte';
   import InstallApp from './InstallApp.svelte';
   import StandingContext from './StandingContext.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
@@ -238,6 +239,10 @@
 
     <section class={CARD} use:reveal={3}>
       <InstallApp />
+    </section>
+
+    <section class="{CARD} lg:col-span-2" use:reveal={4}>
+      <SpeechSettings />
     </section>
 
     <section class="{CARD} lg:col-span-2" use:reveal={4}>

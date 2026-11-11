@@ -1,5 +1,6 @@
 // Scribe (beta): talk, and tickets write themselves while you are still talking. One press starts the microphone;
-// the browser's own speech recognition turns speech into text; every finished thought goes straight to a language
+// speech becomes text on this machine where a local speech model is downloaded (desktop apps), otherwise through the
+// browser's own speech recognition (src/lib/listen.js picks); every finished thought goes straight to a language
 // model on the owner's machine (src/lib/scribe-llm.js), which answers with tickets to create or update; those are
 // applied to the store at once, so they show on the board and sync like any other edit. Nothing waits for the
 // microphone to stop.
@@ -9,6 +10,7 @@
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
 import { askModel, parseActions, scribeMessages } from './scribe-llm.js';
+import { listen, listenEngine } from './listen.js';
 
 const SETTINGS_KEY = 'ws_scribe';
 // Ollama's OpenAI-compatible address; LM Studio uses http://localhost:1234/v1.
@@ -23,14 +25,9 @@ const MAX_TICKETS = 25;
 const EARLIER_CHARS = 600;
 const MAX_LOG = 100;
 const MAX_TRANSCRIPT = 200;
-// Recognition errors that are part of normal use: silence, and our own stop().
-const QUIET_ERRORS = ['no-speech', 'aborted'];
-const DENIED_ERRORS = ['not-allowed', 'service-not-allowed'];
 const UNDO_FIELDS = ['title', 'body', 'priority_level', 'state'];
 
 /** @typedef {{ id: string, kind: 'created' | 'updated', noteId: string, title: string, at: number, before: Record<string, any> | null, undone: boolean }} LogEntry */
-
-const Recognition = typeof window === 'undefined' ? null : /** @type {any} */ (window).SpeechRecognition || /** @type {any} */ (window).webkitSpeechRecognition || null;
 
 /** @returns {{ endpoint: string, model: string, projectId: string }} */
 function loadSettings() {
@@ -42,8 +39,6 @@ function loadSettings() {
 }
 
 class Scribe {
-  /** False where the browser has no speech recognition (Firefox, some WebViews); typing still works. */
-  canListen = Boolean(Recognition);
   settings = $state(loadSettings());
   listening = $state(false);
   /** A request to the model is in flight. */
@@ -54,15 +49,20 @@ class Scribe {
   interim = $state('');
   /** What Scribe did, newest first. @type {LogEntry[]} */
   log = $state([]);
-  /** 'mic-denied', 'mic', 'model' or ''; `detail` carries the model's message. */
+  /** 'mic-denied', 'mic', 'speech' (the local speech model failed), 'model' or ''; `detail` carries the message. */
   problem = $state('');
   detail = $state('');
 
-  /** @type {any} */ #recognition = null;
+  /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
   /** Speech waiting to go to the model. */ #pending = '';
   /** Speech already handled, for context. */ #earlier = '';
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
+
+  /** 'local', 'browser', or '' where this device has no speech recognition at all (typing still works). */
+  get engine() {
+    return listenEngine();
+  }
 
   get ready() {
     return Boolean(this.settings.endpoint.trim() && this.settings.model.trim());
@@ -79,54 +79,36 @@ class Scribe {
   /** One press: start listening, or stop. Speech already heard is still sent after a stop. */
   toggle() {
     if (this.listening) return this.stop();
-    if (!Recognition) return;
+    if (!this.engine) return;
     this.problem = '';
     this.detail = '';
     this.listening = true;
-    this.#listen();
+    this.#session = listen({
+      onInterim: (text) => (this.interim = text),
+      onFinal: (text) => {
+        this.interim = '';
+        this.hear(text);
+      },
+      onProblem: (kind, detail) => {
+        this.problem = kind;
+        this.detail = detail;
+      },
+      // Also reached when the engine gives up by itself (microphone refused, model failed to load).
+      onEnd: () => {
+        this.#session = null;
+        this.listening = false;
+        this.interim = '';
+        this.#flush();
+      },
+    });
   }
 
   stop() {
     this.listening = false;
     this.interim = '';
-    this.#recognition?.stop();
-    this.#recognition = null;
+    // A local model still hands over the sentence it was hearing; onEnd then sends it on.
+    this.#session?.stop();
     this.#flush();
-  }
-
-  #listen() {
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || 'en-US';
-    recognition.onresult = (/** @type {any} */ event) => {
-      let interim = '';
-      for (let index = event.resultIndex; index < event.results.length; index++) {
-        const result = event.results[index];
-        if (result.isFinal) this.hear(result[0].transcript);
-        else interim += result[0].transcript;
-      }
-      this.interim = interim.trim();
-    };
-    recognition.onerror = (/** @type {any} */ event) => {
-      if (QUIET_ERRORS.includes(event.error)) return;
-      this.problem = DENIED_ERRORS.includes(event.error) ? 'mic-denied' : 'mic';
-      this.detail = event.error;
-      this.listening = false;
-    };
-    // Browsers end a session after a silence or a few minutes: carry straight on while the mic is meant to be on.
-    recognition.onend = () => {
-      if (this.#recognition !== recognition) return;
-      this.#recognition = null;
-      if (this.listening) this.#listen();
-    };
-    this.#recognition = recognition;
-    try {
-      recognition.start();
-    } catch {
-      this.problem = 'mic';
-      this.listening = false;
-    }
   }
 
   /** Takes one finished line of speech (or typed text) and queues it for the model. @param {string} text */

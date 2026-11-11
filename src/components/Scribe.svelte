@@ -15,6 +15,7 @@
   import Eraser from '@lucide/svelte/icons/eraser';
   import X from '@lucide/svelte/icons/x';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { speech } from '../lib/speech.svelte.js';
   import { listModels } from '../lib/scribe-llm.js';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
@@ -33,12 +34,14 @@
   const FLIP_MS = 200;
 
   const projects = $derived(byName(store.projects));
-  const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? TEXT.listening : scribe.canListen ? TEXT.idle : TEXT.idleNoMic);
+  const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? (speech.phase === 'loading' ? TEXT.loadingSpeech : TEXT.listening) : scribe.engine ? TEXT.idle : TEXT.idleNoMic);
+  // Which engine hears you: a model on this device (desktop apps), or the browser's recognition.
+  const engineNote = $derived(scribe.engine === 'local' ? TEXT.engineLocal.replace('{model}', speech.model?.name ?? '') : scribe.engine === 'browser' ? TEXT.engineBrowser : '');
   const problem = $derived.by(() => {
     if (!scribe.problem) return '';
     if (scribe.problem === 'model' && !scribe.ready) return TEXT.problems['model-setup'];
     if (scribe.problem === 'model' && scribe.detail === 'timeout') return TEXT.problems.timeout;
-    return TEXT.problems[/** @type {'mic-denied' | 'mic' | 'model'} */ (scribe.problem)].replace('{detail}', scribe.detail);
+    return TEXT.problems[/** @type {'mic-denied' | 'mic' | 'speech' | 'model'} */ (scribe.problem)].replace('{detail}', scribe.detail);
   });
   // A request the browser refused outright (server down, or the server not allowing this site) has no status to show.
   const blocked = $derived(scribe.problem === 'model' && scribe.ready && /failed to fetch|networkerror|load failed/i.test(scribe.detail));
@@ -106,7 +109,12 @@
     <button class="{SMALL_BUTTON} min-h-9 shrink-0" disabled={finding || !scribe.settings.endpoint.trim()} onclick={findModels}>{finding ? TEXT.finding : TEXT.find}</button>
   </div>
   {#if findNote}<p class="text-xs leading-relaxed text-ink-muted" role="status" in:fade>{findNote}</p>{/if}
-  <p class="border-t border-line pt-3 text-xs leading-relaxed text-ink-faint">{TEXT.privacy}</p>
+  <!-- Fixed height for the engine line, so finding a local model after start-up doesn't move what's under it -->
+  <p class="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted">
+    <span class="min-w-0 truncate">{engineNote}</span>
+    {#if speech.available}<button class="spring press shrink-0 font-semibold text-accent hover:text-accent-hover" onclick={() => router.go('settings')}>{TEXT.speechSettings}</button>{/if}
+  </p>
+  <p class="text-xs leading-relaxed text-ink-faint">{scribe.engine === 'local' ? TEXT.privacyLocal : TEXT.privacy}</p>
 {/snippet}
 
 <div class="relative flex min-h-0 flex-1 flex-col">
@@ -114,7 +122,7 @@
   <section class="relative flex shrink-0 flex-col items-center gap-2 border-b border-line px-3 py-4 short:flex-row short:justify-center short:gap-4 short:py-2 sm:py-6">
     <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line short:hidden" aria-hidden="true"></div>
     <button class="spring press relative flex size-20 shrink-0 items-center justify-center border-2 short:size-12 tv:size-28 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-surface text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
-      aria-label={scribe.listening ? TEXT.stop : TEXT.start} aria-pressed={scribe.listening} disabled={!scribe.canListen} onclick={() => scribe.toggle()}>
+      aria-label={scribe.listening ? TEXT.stop : TEXT.start} aria-pressed={scribe.listening} disabled={!scribe.engine} onclick={() => scribe.toggle()}>
       {#if scribe.listening}
         <span class="live-dot pointer-events-none absolute inset-0 border border-accent" aria-hidden="true"></span>
         <span in:scale={POP}><Square class="size-7 short:size-5 tv:size-10" /></span>
