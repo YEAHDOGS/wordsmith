@@ -32,6 +32,13 @@ const FLUSH_CHARS = 600;
 // ("and the login page" on its own asks for nothing yet). Stopping the mic sends it anyway.
 const MIN_WORDS = 4;
 const MAX_LOG = 100;
+// A ticket Scribe just wrote stays announced (beside the mic, on the pill) this long.
+const RECENT_MS = 5_000;
+const MAX_RECENT = 3;
+// A short buzz for each ticket, on phones that let pages vibrate (not iPhones).
+const BUZZ_MS = 35;
+// The live caption beside the mic: the newest words, this many characters at most.
+const CAPTION_CHARS = 160;
 const MAX_TRANSCRIPT = 200;
 // Recognition errors that are part of normal use: silence, and our own stop().
 const QUIET_ERRORS = ['no-speech', 'aborted'];
@@ -96,6 +103,8 @@ class Scribe {
   interim = $state('');
   /** What Scribe did, newest first. @type {LogEntry[]} */
   log = $state([]);
+  /** Tickets written in the last few seconds, newest first, for the announcements beside the mic and on the pill. @type {LogEntry[]} */
+  recent = $state([]);
   /** 'mic-denied', 'mic', 'model', 'allowance' (wordsmith cloud's daily allowance is used up) or ''; `detail` carries the message. */
   problem = $state('');
   detail = $state('');
@@ -400,8 +409,27 @@ class Scribe {
   /** @param {'created' | 'updated'} kind @param {any} note @param {Record<string, any> | null} before */
   #record(kind, note, before) {
     this.#touched = [...this.#touched.filter((id) => id !== note.id), note.id];
-    this.log.unshift({ id: crypto.randomUUID(), kind, noteId: note.id, title: note.title, at: Date.now(), before, undone: false });
+    const entry = { id: crypto.randomUUID(), kind, noteId: note.id, title: note.title, at: Date.now(), before, undone: false };
+    this.log.unshift(entry);
     if (this.log.length > MAX_LOG) this.log.pop();
+    // Announced at once, so a ticket appearing is impossible to miss while you talk.
+    this.recent = [entry, ...this.recent].slice(0, MAX_RECENT);
+    setTimeout(() => {
+      this.recent = this.recent.filter((shown) => shown.id !== entry.id);
+    }, RECENT_MS);
+    navigator.vibrate?.(BUZZ_MS);
+  }
+
+  /** Tickets this session created or changed, not counting undone ones. */
+  get made() {
+    return this.log.filter((entry) => !entry.undone).length;
+  }
+
+  /** The newest words for the caption beside the mic: the last finished line, then what is being heard now. */
+  get caption() {
+    const last = this.transcript.at(-1)?.text ?? '';
+    const said = this.interim ? `${last} ${this.interim}`.trim() : last;
+    return said.length > CAPTION_CHARS ? `…${said.slice(-CAPTION_CHARS)}` : said;
   }
 
   /** Takes one action back: a created ticket goes to the trash, an updated one gets its old text back. @param {string} entryId */
@@ -417,6 +445,7 @@ class Scribe {
   clear() {
     this.transcript = [];
     this.log = [];
+    this.recent = [];
     this.#pending = '';
     this.#earlier = '';
     this.#touched = [];

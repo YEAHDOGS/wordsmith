@@ -29,6 +29,8 @@
   const PANEL_IN = { y: 16, duration: 200, easing: quintOut };
   const PANEL_OUT = { y: 16, duration: 120 };
   const POP = { start: 0.7, duration: 200, easing: backOut };
+  const ANNOUNCE_IN = { y: -10, duration: 240, easing: backOut };
+  const ANNOUNCE_OUT = { duration: 180 };
   const FLIP_MS = 200;
 
   const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? TEXT.listening : scribe.canListen ? TEXT.idle : TEXT.idleNoMic);
@@ -86,6 +88,12 @@
       {:else}
         <span in:scale={POP}><Mic class="size-8 short:size-5 tv:size-12" /></span>
       {/if}
+      <!-- How many tickets this session wrote; pops each time it grows -->
+      {#if scribe.made}
+        {#key scribe.made}
+          <span class="absolute -top-2 -right-2 flex min-w-6 items-center justify-center border border-complete bg-app px-1 font-mono text-xs text-complete tv:min-w-9 tv:text-lg" title={TEXT.made.replace('{count}', String(scribe.made))} in:scale={POP}>{scribe.made}</span>
+        {/key}
+      {/if}
     </button>
     <div class="relative flex min-w-0 flex-col items-center gap-2 bg-app px-2 short:items-start">
       <p class="flex items-center gap-2 text-center text-fluid-sm text-ink-muted" role="status">
@@ -93,12 +101,27 @@
         {#key status}<span in:fade={{ duration: 150 }}>{status}</span>{/key}
         <span class="border border-line px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-widest text-accent">{TEXT.beta}</span>
       </p>
+      <!-- Your words, live, right under the stop button. Two lines are always kept for them, so nothing moves as they come and go. -->
+      <p class="h-[2.75em] w-full max-w-md overflow-hidden text-center text-fluid-sm leading-snug text-ink short:hidden sm:w-96" aria-hidden="true">
+        {#if scribe.listening || scribe.interim}{scribe.interim ? scribe.caption.slice(0, scribe.caption.length - scribe.interim.length) : scribe.caption}<span class="text-ink-faint">{scribe.interim ? scribe.caption.slice(-scribe.interim.length) : ''}</span>{/if}
+      </p>
       <form class="flex w-full max-w-md gap-px sm:w-96" onsubmit={send}>
         <input class="{FIELD} min-w-0 flex-1" bind:value={typed} placeholder={TEXT.typePlaceholder} aria-label={TEXT.typePlaceholder} />
         <button type="submit" class="{SMALL_BUTTON} min-h-9" disabled={!typed.trim()} aria-label={TEXT.send}><Send class="size-4" /></button>
         <button type="button" class="{SMALL_BUTTON} min-h-9 xl:hidden {showSettings ? 'border-accent text-ink' : ''}" aria-label={TEXT.settings} aria-pressed={showSettings} onclick={() => (showSettings = !showSettings)}><Settings2 class="size-4" /></button>
       </form>
     </div>
+    <!-- Tickets the moment they are written: they float over the lists below the mic, so nothing shifts, and open on a tap -->
+    <ol class="pointer-events-none absolute inset-x-0 top-full z-20 flex flex-col items-center gap-1 px-3 pt-2" aria-live="polite">
+      {#each scribe.recent as entry (entry.id)}
+        <li class="pointer-events-auto w-full max-w-md" in:fly={ANNOUNCE_IN} out:fade={ANNOUNCE_OUT} animate:flip={{ duration: FLIP_MS }}>
+          <button class="spring press flex w-full items-center gap-2 border bg-surface px-3 py-2 text-left shadow-lg {entry.kind === 'created' ? 'border-complete' : 'border-progress'}" onclick={() => router.openNote(entry.noteId)}>
+            <span class="shrink-0 font-mono text-[0.6875rem] uppercase tracking-wider {entry.kind === 'created' ? 'text-complete' : 'text-progress'} tv:text-sm">{TEXT[entry.kind]}</span>
+            <span class="min-w-0 flex-1 truncate text-sm text-ink tv:text-xl">{store.find('notes', entry.noteId)?.title || entry.title || TEXT.untitled}</span>
+          </button>
+        </li>
+      {/each}
+    </ol>
   </section>
 
   {#if problem}

@@ -69,5 +69,6 @@
     "checking": "Checking…",
     "copy": "Copy",
     "copied": "Copied"
-  }
+  },
+  "made": "{count} tickets written this session"
 }

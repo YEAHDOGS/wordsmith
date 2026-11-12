@@ -246,7 +246,16 @@
   {#if scribe.listening && route.view !== 'scribe'}
     <button class="spring press fixed top-14 right-2 z-30 flex items-center gap-2 border border-accent bg-accent-soft px-2.5 py-1.5 text-xs text-ink sm:top-16 sm:right-4 tv:top-24 tv:text-lg"
       aria-label={SCRIBE_TEXT.pill} title={SCRIBE_TEXT.pill} onclick={() => router.go('scribe')} transition:scale={PILL}>
-      <span class="live-dot size-2 rounded-full bg-accent" aria-hidden="true"></span><Mic class="size-3.5" />{scribe.thinking ? SCRIBE_TEXT.thinking : SCRIBE_TEXT.listening}
+      <span class="live-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true"></span><Mic class="size-3.5 shrink-0" />
+      <!-- A ticket just written takes over the pill for a moment; otherwise it shows your words as you speak -->
+      <span class="min-w-0 max-w-[60vw] truncate sm:max-w-80">
+        {#if scribe.recent[0]}
+          {#key scribe.recent[0].id}<span class="text-complete" in:fade={{ duration: 150 }}>{SCRIBE_TEXT[scribe.recent[0].kind]}: {scribe.recent[0].title}</span>{/key}
+        {:else}
+          {scribe.interim || (scribe.thinking ? SCRIBE_TEXT.thinking : SCRIBE_TEXT.listening)}
+        {/if}
+      </span>
+      {#if scribe.made}<span class="shrink-0 font-mono text-complete">{scribe.made}</span>{/if}
     </button>
   {/if}
 
