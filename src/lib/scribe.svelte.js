@@ -1,5 +1,6 @@
 // Scribe (beta): talk, and tickets write themselves while you are still talking. One press starts the microphone;
-// the browser's own speech recognition turns speech into text; every finished thought goes straight to a language
+// speech becomes text on this machine where a local speech model is downloaded (desktop apps), otherwise through the
+// browser's own speech recognition (src/lib/listen.js picks); every finished thought goes straight to a language
 // model on the owner's machine (src/lib/scribe-llm.js), which answers with tickets to create or update; those are
 // applied to the store at once, so they show on the board and sync like any other edit. Nothing waits for the
 // microphone to stop.
@@ -13,6 +14,7 @@ import { api } from './api.js';
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
 import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
+import { listen, listenEngine } from './listen.js';
 import PROVIDERS from './scribe-providers.json';
 
 const SETTINGS_KEY = 'ws_scribe';
@@ -40,14 +42,9 @@ const BUZZ_MS = 35;
 // The live caption beside the mic: the newest words, this many characters at most.
 const CAPTION_CHARS = 160;
 const MAX_TRANSCRIPT = 200;
-// Recognition errors that are part of normal use: silence, and our own stop().
-const QUIET_ERRORS = ['no-speech', 'aborted'];
-const DENIED_ERRORS = ['not-allowed', 'service-not-allowed'];
 const UNDO_FIELDS = ['title', 'body', 'priority_level', 'state'];
 
 /** @typedef {{ id: string, kind: 'created' | 'updated', noteId: string, title: string, at: number, before: Record<string, any> | null, undone: boolean }} LogEntry */
-
-const Recognition = typeof window === 'undefined' ? null : /** @type {any} */ (window).SpeechRecognition || /** @type {any} */ (window).webkitSpeechRecognition || null;
 
 /**
  * @typedef {{ id: string, kind: 'wordsmith' | 'openai', name: string, note: string, endpoint?: string, local?: boolean, key?: boolean }} Provider
@@ -91,8 +88,6 @@ function loadSettings() {
 }
 
 class Scribe {
-  /** False where the browser has no speech recognition (Firefox, some WebViews); typing still works. */
-  canListen = Boolean(Recognition);
   settings = $state(loadSettings());
   listening = $state(false);
   /** A request to the model is in flight. */
@@ -105,7 +100,7 @@ class Scribe {
   log = $state([]);
   /** Tickets written in the last few seconds, newest first, for the announcements beside the mic and on the pill. @type {LogEntry[]} */
   recent = $state([]);
-  /** 'mic-denied', 'mic', 'model', 'allowance' (wordsmith cloud's daily allowance is used up) or ''; `detail` carries the message. */
+  /** 'mic-denied', 'mic', 'speech' (the local speech model failed), 'model', 'allowance' (wordsmith cloud's daily allowance is used up) or ''; `detail` carries the message. */
   problem = $state('');
   detail = $state('');
   /**
@@ -114,7 +109,7 @@ class Scribe {
    */
   cloud = $state(null);
 
-  /** @type {any} */ #recognition = null;
+  /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
   /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
   /** The model request in flight. @type {AbortController | null} */ #request = null;
   /** The account this session belongs to (see claim). @type {string | undefined} */ #owner;
@@ -122,6 +117,11 @@ class Scribe {
   /** Speech already handled, for context. */ #earlier = '';
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
+
+  /** 'local', 'browser', or '' where this device has no speech recognition at all (typing still works). */
+  get engine() {
+    return listenEngine();
+  }
 
   /** The provider Scribe sends speech to. */
   get provider() {
@@ -204,18 +204,42 @@ class Scribe {
   /** One press: start listening, or stop. Speech already heard is still sent after a stop. */
   toggle() {
     if (this.listening) return this.stop();
-    if (!Recognition) return;
+    if (!this.engine) return;
     this.problem = '';
     this.detail = '';
     this.listening = true;
-    this.#listen();
+    // Words, problems and endings still arriving from a session that was reset belong to nobody now.
+    const run = this.#run;
+    this.#session = listen({
+      onInterim: (text) => {
+        if (run === this.#run) this.interim = text;
+      },
+      onFinal: (text) => {
+        if (run !== this.#run) return;
+        this.interim = '';
+        this.hear(text);
+      },
+      onProblem: (kind, detail) => {
+        if (run !== this.#run) return;
+        this.problem = kind;
+        this.detail = detail;
+      },
+      // Also reached when the engine gives up by itself (microphone refused, model failed to load).
+      onEnd: () => {
+        if (run !== this.#run) return;
+        this.#session = null;
+        this.listening = false;
+        this.interim = '';
+        this.#flush();
+      },
+    });
   }
 
   stop() {
     this.listening = false;
     this.interim = '';
-    this.#recognition?.stop();
-    this.#recognition = null;
+    // A local model still hands over the sentence it was hearing; onEnd then sends it on.
+    this.#session?.stop();
     this.#flush();
   }
 
@@ -243,49 +267,9 @@ class Scribe {
     this.listening = false;
     this.thinking = false;
     this.interim = '';
-    this.#recognition?.stop();
-    this.#recognition = null;
+    this.#session?.stop();
+    this.#session = null;
     this.clear();
-  }
-
-  #listen() {
-    const run = this.#run;
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || 'en-US';
-    recognition.onresult = (/** @type {any} */ event) => {
-      // Words still arriving from a session that was reset belong to nobody now.
-      if (run !== this.#run) return;
-      let interim = '';
-      for (let index = event.resultIndex; index < event.results.length; index++) {
-        const result = event.results[index];
-        if (result.isFinal) this.hear(result[0].transcript);
-        else interim += result[0].transcript;
-      }
-      this.interim = interim.trim();
-    };
-    recognition.onerror = (/** @type {any} */ event) => {
-      // An error from a recognizer that is no longer the one listening (reset, or replaced) is nobody's problem.
-      if (run !== this.#run || this.#recognition !== recognition) return;
-      if (QUIET_ERRORS.includes(event.error)) return;
-      this.problem = DENIED_ERRORS.includes(event.error) ? 'mic-denied' : 'mic';
-      this.detail = event.error;
-      this.listening = false;
-    };
-    // Browsers end a session after a silence or a few minutes: carry straight on while the mic is meant to be on.
-    recognition.onend = () => {
-      if (this.#recognition !== recognition) return;
-      this.#recognition = null;
-      if (this.listening) this.#listen();
-    };
-    this.#recognition = recognition;
-    try {
-      recognition.start();
-    } catch {
-      this.problem = 'mic';
-      this.listening = false;
-    }
   }
 
   /**

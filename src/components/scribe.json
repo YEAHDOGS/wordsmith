@@ -7,7 +7,7 @@
   "listening": "Listening",
   "thinking": "Writing tickets",
   "idle": "Press the mic and start talking",
-  "idleNoMic": "This browser has no speech recognition. Type below instead, or open wordsmith in Chrome, Edge or Safari.",
+  "idleNoMic": "No speech recognition here. Type below instead, download a speech model in Settings (desktop app), or open wordsmith in Chrome, Edge or Safari.",
   "typePlaceholder": "Or type a thought and press Enter",
   "send": "Send",
   "transcript": "What you said",
@@ -34,15 +34,21 @@
   "noProject": "No project",
   "privacy": "Your browser turns speech into text; Chrome, Edge and Safari send the audio to their maker's speech service to do it. The text then goes only to the model server above, and tickets sync to wordsmith like anything you type.",
   "problems": {
-    "mic-denied": "The microphone is blocked. Allow it for this site in your browser, then press the mic again.",
+    "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press the mic again.",
     "mic": "Speech recognition stopped ({detail}). Press the mic to start again.",
     "model": "Could not reach your model ({detail}). Your words are kept and will be sent on Retry.",
     "model-setup": "No model server was found on this machine. Start Ollama or LM Studio, or set a server and model below, then Scribe can write tickets.",
     "timeout": "Your model took too long to answer. Your words are kept and will be sent on Retry.",
     "cors": "If the server is running, it may be refusing this site: see \"Can't connect\" under the model settings.",
+    "speech": "The speech model stopped ({detail}). Press the mic to start again.",
     "allowance": "{detail}"
   },
   "pill": "Scribe is listening. Open Scribe",
+  "loadingSpeech": "Loading the speech model",
+  "engineLocal": "Speech: {model}, on this device",
+  "engineBrowser": "Speech: your browser",
+  "speechSettings": "Speech models",
+  "privacyLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. The text then goes only to the model server above, and tickets sync to wordsmith like anything you type.",
   "provider": "Model from",
   "cloudModel": "Cloud model",
   "cloudUsage": "Today: {used} of {limit} neurons",
@@ -70,5 +76,6 @@
     "copy": "Copy",
     "copied": "Copied"
   },
-  "made": "{count} tickets written this session"
+  "made": "{count} tickets written this session",
+  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type."
 }

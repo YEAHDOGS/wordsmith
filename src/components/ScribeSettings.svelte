@@ -9,6 +9,8 @@
   import { SCRIBE_PROVIDERS, scribe } from '../lib/scribe.svelte.js';
   import { NOT_CHAT, listModels } from '../lib/scribe-llm.js';
   import { auth } from '../lib/auth.svelte.js';
+  import { speech } from '../lib/speech.svelte.js';
+  import { router } from '../lib/router.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { byName } from '../lib/nav-order.js';
   import TEXT from './scribe.json';
@@ -36,6 +38,10 @@
   const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const provider = $derived(scribe.provider);
   const cloud = $derived(provider.kind === CLOUD_KIND);
+  // Which engine hears you: a model on this device (desktop apps), or the browser's recognition.
+  const engineNote = $derived(scribe.engine === 'local' ? TEXT.engineLocal.replace('{model}', speech.model?.name ?? '') : scribe.engine === 'browser' ? TEXT.engineBrowser : '');
+  // Where your words go: speech on this device or in the browser, then text to the cloud or to your server.
+  const privacy = $derived(cloud ? (scribe.engine === 'local' ? TEXT.privacyCloudLocal : TEXT.privacyCloud) : scribe.engine === 'local' ? TEXT.privacyLocal : TEXT.privacy);
   /** @type {string[]} */
   let models = $state([]);
   let finding = $state(false);
@@ -125,7 +131,6 @@
       <p class="text-xs leading-relaxed text-ink-faint short:hidden">{TEXT.cloudUsageHint}</p>
     </div>
   {/if}
-  <p class="border-t border-line pt-3 text-xs leading-relaxed text-ink-faint">{TEXT.privacyCloud}</p>
 {:else}
   <label class={label}>{TEXT.endpoint}
     <input class="{field} font-mono" type="url" value={scribe.settings.endpoint} spellcheck="false" autocomplete="off" oninput={(event) => scribe.configure({ endpoint: event.currentTarget.value })} />
@@ -174,5 +179,11 @@
       </div>{/if}
     </details>
   {/if}
-  <p class="border-t border-line pt-3 text-xs leading-relaxed text-ink-faint">{TEXT.privacy}</p>
 {/if}
+
+<!-- Fixed height for the engine line, so finding a local model after start-up doesn't move what's under it -->
+<p class="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted">
+  <span class="min-w-0 truncate">{engineNote}</span>
+  {#if speech.available}<button class="spring press shrink-0 font-semibold text-accent hover:text-accent-hover" onclick={() => router.go('settings')}>{TEXT.speechSettings}</button>{/if}
+</p>
+<p class="text-xs leading-relaxed text-ink-faint">{privacy}</p>

@@ -4,6 +4,8 @@
   // each opening its options in a small row above it, so the toolbar stays narrow and the Preview switch always fits.
   // Buttons keep the textarea's focus and selection (mousedown is cancelled), so a tap formats what you selected.
   // With `preview` bound, an extra toggle switches the field to its rendered view.
+  // Where this device can hear (a local speech model, or the browser's recognition: src/lib/listen.js), a mic button
+  // dictates into the field at the caret, one finished sentence at a time.
   import Bold from '@lucide/svelte/icons/bold';
   import Italic from '@lucide/svelte/icons/italic';
   import Heading from '@lucide/svelte/icons/heading';
@@ -14,9 +16,13 @@
   import Type from '@lucide/svelte/icons/type';
   import Eye from '@lucide/svelte/icons/eye';
   import Pencil from '@lucide/svelte/icons/pencil';
+  import Mic from '@lucide/svelte/icons/mic';
+  import { onDestroy } from 'svelte';
   import { scale } from 'svelte/transition';
   import { backOut } from 'svelte/easing';
   import { MARKERS, applyEdit, cycleHeading, toggleList, wrap } from '../lib/markdown-input.js';
+  import { listen, listenEngine } from '../lib/listen.js';
+  import SPEECH_TEXT from './speech.json';
 
   /** @type {{ textarea: HTMLTextAreaElement | undefined, preview?: boolean, showPreview?: boolean, class?: string }} */
   let { textarea, preview = $bindable(false), showPreview = false, class: className = '' } = $props();
@@ -28,6 +34,10 @@
   const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
   const MENU_IN = { start: 0.9, duration: 160, easing: backOut };
   const MENU_OUT = { start: 0.95, duration: 100 };
+  const DICTATE = 'Dictate';
+  const DICTATE_STOP = 'Stop dictating';
+  // Text before the caret that a dictated sentence can follow without a space in between.
+  const NO_SPACE_AFTER = /(^|\s)$/;
   const GROUPS = [
     {
       key: 'text', label: 'Text style', icon: Type, actions: [
@@ -55,6 +65,44 @@
   function apply(action) {
     if (textarea) action.run(textarea);
     open = '';
+  }
+
+  let dictating = $state(false);
+  /** Why the last dictation stopped by itself (microphone refused, model failed), shown on the button until the next. */
+  let dictationProblem = $state('');
+  /** @type {{ stop: () => void } | null} */
+  let dictation = null;
+  onDestroy(() => dictation?.stop());
+
+  /**
+   * Types one heard sentence at the caret, as if it were typed (undo works). While you are typing somewhere else (the
+   * title, say), it still lands in the field but leaves your focus where it is.
+   * @param {string} text
+   */
+  function typeHeard(text) {
+    if (!textarea || preview) return;
+    const { selectionStart: from, selectionEnd: to, value } = textarea;
+    const insert = `${NO_SPACE_AFTER.test(value.slice(0, from)) ? '' : ' '}${text}`;
+    if (document.activeElement === textarea) {
+      return applyEdit(textarea, { from, to, insert, selStart: from + insert.length, selEnd: from + insert.length });
+    }
+    textarea.setRangeText(insert, from, to, 'end');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function toggleDictation() {
+    if (dictating) return dictation?.stop();
+    dictating = true;
+    dictationProblem = '';
+    dictation = listen({
+      onInterim: () => {},
+      onFinal: typeHeard,
+      onProblem: (kind, detail) => (dictationProblem = SPEECH_TEXT.problems[kind].replace('{detail}', detail)),
+      onEnd: () => {
+        dictating = false;
+        dictation = null;
+      },
+    });
   }
 
   /** Taps outside close the menu. Escape closes it too; the note editor sees [data-popover] and stays open. @param {PointerEvent} event */
@@ -88,6 +136,13 @@
       {/if}
     </div>
   {/each}
+  {#if listenEngine()}
+    <button type="button" class="{BUTTON} relative {dictating ? 'text-accent' : ''}" title={dictating ? DICTATE_STOP : dictationProblem || DICTATE} aria-label={dictating ? DICTATE_STOP : DICTATE} aria-pressed={dictating}
+      disabled={preview || !textarea} onmousedown={(event) => event.preventDefault()} onclick={toggleDictation}>
+      {#if dictating}<span class="live-dot pointer-events-none absolute inset-1 border border-accent" aria-hidden="true"></span>{/if}
+      <Mic class="size-4" />
+    </button>
+  {/if}
   {#if showPreview}
     <span class="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true"></span>
     <button type="button" class="{BUTTON} w-auto shrink-0 sm:w-auto tv:w-auto gap-1 px-1.5 text-xs whitespace-nowrap sm:gap-1.5 sm:px-2 {preview ? 'text-accent' : ''}" aria-pressed={preview} aria-label={preview ? 'Back to editing' : 'Preview formatting'} onclick={() => { preview = !preview; open = ''; }}
