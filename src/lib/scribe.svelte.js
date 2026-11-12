@@ -209,20 +209,26 @@ class Scribe {
   /** Asks the Worker for wordsmith cloud's models and today's allowance. Signed out, there is nothing to ask. */
   loadCloud() {
     if (!auth.user) return Promise.resolve();
-    this.#loadingCloud ??= api(CLOUD_PATH)
+    if (this.#loadingCloud) return this.#loadingCloud;
+    // The answer belongs to the account asking: after a reset (the account changed) it is dropped.
+    const run = this.#run;
+    const loading = api(CLOUD_PATH)
       .then((cloud) => {
+        if (run !== this.#run) return;
         this.cloud = cloud;
         this.cloudError = false;
       })
       .catch(() => {
+        if (run !== this.#run) return;
         // A network blip: the settings say so and offer to ask again.
         this.cloud = null;
         this.cloudError = true;
       })
       .finally(() => {
-        this.#loadingCloud = null;
+        if (this.#loadingCloud === loading) this.#loadingCloud = null;
       });
-    return this.#loadingCloud;
+    this.#loadingCloud = loading;
+    return loading;
   }
 
   /**
@@ -318,9 +324,11 @@ class Scribe {
     this.#live = null;
     clearTimeout(this.#retryTimer);
     this.#failures = 0;
-    // The allowance shown belongs to the account that is leaving; the next one loads its own.
+    // The allowance shown belongs to the account that is leaving; the next one loads its own, and a check still in
+    // flight for the old one is no longer shared.
     this.cloud = null;
     this.cloudError = false;
+    this.#loadingCloud = null;
     this.#request?.abort();
     this.#request = null;
     clearTimeout(this.#timer);
