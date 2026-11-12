@@ -243,6 +243,9 @@ class Scribe {
     const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body: body.slice(0, MAX_TICKET_BODY), state, priority_level }));
     // Once per page: the model list, so a saved model that is no longer offered falls back to the default (cloudModel).
     if (!this.cloud) await this.loadCloud();
+    // Reset while the list loaded (the account changed): this speech belongs to nobody now, and must not go out
+    // under the next account. The abort already happened, so a listener added now would never hear it.
+    if (cancel.aborted) throw new DOMException('The session ended', 'AbortError');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
     const giveUp = () => controller.abort();
