@@ -210,10 +210,15 @@ export async function askModel({ endpoint, model, key }, messages, cancel) {
  * @returns {Promise<string[]>}
  */
 export async function listModels(endpoint, quick = false, key = '') {
-  const response = await fetch(`${base(endpoint)}/models`, {
-    headers: key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {},
-    ...(quick ? { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) } : {}),
-  });
+  // A timer rather than AbortSignal.timeout, which Chrome 99, Firefox 97 and Safari 15.4 don't have.
+  const controller = new AbortController();
+  const timer = quick ? setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS) : undefined;
+  let response;
+  try {
+    response = await fetch(`${base(endpoint)}/models`, { headers: key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {}, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) throw new Error(`The model server answered ${response.status}`);
   const { data } = await response.json();
   return Array.isArray(data) ? data.map((model) => String(model?.id ?? '')).filter(Boolean) : [];
