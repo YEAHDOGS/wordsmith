@@ -141,8 +141,15 @@
           <p class="text-fluid-sm leading-relaxed text-ink-faint">{TEXT.transcriptEmpty}</p>
         {/if}
         {#each scribe.transcript as line (line.id)}
-          <p class="mb-2 border-l-2 pl-3 text-fluid-sm leading-relaxed transition-colors duration-300 {line.handled ? 'border-complete text-ink-muted' : 'border-progress text-ink'}" in:fly={ROW_IN}>{line.text}</p>
+          <p class="mb-2 border-l-2 pl-3 text-fluid-sm leading-relaxed transition-colors duration-300 {line.skipped ? 'border-line text-ink-faint italic' : line.handled ? 'border-complete text-ink-muted' : 'border-progress text-ink'}" in:fly={ROW_IN}>{line.text}</p>
         {/each}
+        <!-- Speech the work check kept on this device: said so once, with a way to send it after all -->
+        {#if scribe.skipped}
+          <div class="mb-2 flex flex-wrap items-center gap-2 pl-3.5 text-xs text-ink-faint tv:text-lg" in:fade={{ duration: 150 }}>
+            <span>{TEXT.skipped}</span>
+            <button class={SMALL_BUTTON} onclick={() => scribe.sendSkipped()}><Send class="size-3.5" />{TEXT.sendSkipped}</button>
+          </div>
+        {/if}
         {#if scribe.interim}<p class="border-l-2 border-line pl-3 text-fluid-sm leading-relaxed text-ink-faint" aria-hidden="true">{scribe.interim}</p>{/if}
       </div>
     </section>
