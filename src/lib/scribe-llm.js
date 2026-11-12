@@ -173,7 +173,8 @@ export function meaningfulWords(text) {
 export async function askModel({ endpoint, model, key }, messages, cancel) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  cancel?.addEventListener('abort', () => controller.abort(), { once: true });
+  const giveUp = () => controller.abort();
+  cancel?.addEventListener('abort', giveUp, { once: true });
   const known = `${base(endpoint)} ${model}`;
   /** @type {Record<string, string>} */
   const headers = { 'Content-Type': 'application/json' };
@@ -199,6 +200,7 @@ export async function askModel({ endpoint, model, key }, messages, cancel) {
     return content;
   } finally {
     clearTimeout(timer);
+    cancel?.removeEventListener('abort', giveUp);
   }
 }
 

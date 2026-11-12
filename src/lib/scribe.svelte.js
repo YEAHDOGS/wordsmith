@@ -32,6 +32,9 @@ export const ALLOWANCE_CODE = 'scribe_allowance';
 const FLUSH_MS = 2_500;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
 const FLUSH_CHARS = 600;
+// After a failed request, speech is kept and tried again after these waits (then the last one, over and over), so an
+// outage doesn't turn every pause into another failed request. Retry sends at once.
+const RETRY_BACKOFF_MS = [5_000, 15_000, 45_000, 120_000];
 // Speech with fewer meaningful words than this waits, however long the pause, and goes out with whatever is said next
 // ("and the login page" on its own asks for nothing yet). Stopping the mic sends it anyway.
 const MIN_WORDS = 4;
@@ -110,6 +113,8 @@ class Scribe {
    * @type {{ available: boolean, models: { id: string, name: string, note: string }[], default: string, used: number, limit: number } | null}
    */
   cloud = $state(null);
+  /** The last allowance check failed (offline, say). */
+  cloudError = $state(false);
 
   /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
   /**
@@ -125,6 +130,9 @@ class Scribe {
   /** Speech already handled, for context. */ #earlier = '';
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
+  /** The next automatic try after a failure. @type {ReturnType<typeof setTimeout> | undefined} */ #retryTimer;
+  /** Failed requests in a row, for the backoff. */ #failures = 0;
+  /** The allowance request in flight, so two callers share it. @type {Promise<void> | null} */ #loadingCloud = null;
 
   /** 'local', 'browser', or '' where this device has no speech recognition at all (typing still works). */
   get engine() {
@@ -185,14 +193,22 @@ class Scribe {
   }
 
   /** Asks the Worker for wordsmith cloud's models and today's allowance. Signed out, there is nothing to ask. */
-  async loadCloud() {
-    if (!auth.user) return;
-    try {
-      this.cloud = await api(CLOUD_PATH);
-    } catch {
-      // A network blip: ask again the next time the settings open.
-      this.cloud = null;
-    }
+  loadCloud() {
+    if (!auth.user) return Promise.resolve();
+    this.#loadingCloud ??= api(CLOUD_PATH)
+      .then((cloud) => {
+        this.cloud = cloud;
+        this.cloudError = false;
+      })
+      .catch(() => {
+        // A network blip: the settings say so and offer to ask again.
+        this.cloud = null;
+        this.cloudError = true;
+      })
+      .finally(() => {
+        this.#loadingCloud = null;
+      });
+    return this.#loadingCloud;
   }
 
   /**
@@ -206,13 +222,15 @@ class Scribe {
     const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body: body.slice(0, MAX_TICKET_BODY), state, priority_level }));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
-    cancel.addEventListener('abort', () => controller.abort(), { once: true });
+    const giveUp = () => controller.abort();
+    cancel.addEventListener('abort', giveUp, { once: true });
     /** @type {{ content: string, used: number, limit: number }} */
     let answer;
     try {
       answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.settings.model || undefined }, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      cancel.removeEventListener('abort', giveUp);
     }
     // A session reset while this was in flight drops the answer by itself (#flush checks its run).
     if (this.cloud) this.cloud = { ...this.cloud, used: answer.used, limit: answer.limit };
@@ -284,6 +302,8 @@ class Scribe {
   reset() {
     this.#run++;
     this.#live = null;
+    clearTimeout(this.#retryTimer);
+    this.#failures = 0;
     this.#request?.abort();
     this.#request = null;
     clearTimeout(this.#timer);
@@ -330,6 +350,8 @@ class Scribe {
   async #flush(force = false) {
     clearTimeout(this.#timer);
     if (this.thinking || !this.#pending) return;
+    // While the model is failing or the allowance is spent, speech only queues: the backoff or Retry sends it.
+    if (!force && (this.problem === 'model' || this.problem === 'allowance')) return;
     if (!force && this.listening && meaningfulWords(this.#pending) < MIN_WORDS) return;
     if (!this.ready) {
       this.problem = 'model';
@@ -362,6 +384,7 @@ class Scribe {
       for (const line of this.transcript) if (lines.includes(line.id)) line.handled = true;
       this.problem = '';
       this.detail = '';
+      this.#failures = 0;
     } catch (error) {
       if (run !== this.#run) return;
       // Keep the speech: it goes out again with whatever is said next, or on Retry.
@@ -369,6 +392,15 @@ class Scribe {
       const failure = /** @type {Error & { code?: string }} */ (error);
       this.problem = failure.code === ALLOWANCE_CODE ? 'allowance' : 'model';
       this.detail = failure.name === 'AbortError' ? 'timeout' : failure.message;
+      // A spent allowance won't come back before midnight UTC; anything else is tried again, waiting longer each time.
+      if (this.problem === 'model') {
+        const wait = RETRY_BACKOFF_MS[Math.min(this.#failures, RETRY_BACKOFF_MS.length - 1)];
+        this.#failures++;
+        clearTimeout(this.#retryTimer);
+        this.#retryTimer = setTimeout(() => {
+          if (run === this.#run && this.problem === 'model') this.retry();
+        }, wait);
+      }
     } finally {
       if (run === this.#run) this.thinking = false;
     }
@@ -378,6 +410,7 @@ class Scribe {
 
   /** Sends speech that is still waiting after a failed request. */
   retry() {
+    clearTimeout(this.#retryTimer);
     this.problem = '';
     this.#flush(true);
   }

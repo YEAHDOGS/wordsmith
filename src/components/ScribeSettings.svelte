@@ -51,7 +51,8 @@
   let copied = $state('');
 
   $effect(() => {
-    if (cloud && auth.user && !scribe.cloud) scribe.loadCloud();
+    // Asked once when shown; after a failure, the Check again button asks.
+    if (cloud && auth.user && !scribe.cloud && !scribe.cloudError) scribe.loadCloud();
   });
 
   async function findModels() {
@@ -115,6 +116,10 @@
 {#if cloud}
   {#if !auth.user}
     <p class="text-xs leading-relaxed text-ink-muted">{TEXT.cloudSignIn}</p>
+  {:else if scribe.cloudError}
+    <p class="flex flex-wrap items-center gap-2 text-xs leading-relaxed text-ink-muted" role="status">{TEXT.cloudOffline}
+      <button class={button} onclick={() => scribe.loadCloud()}>{TEXT.help.check}</button>
+    </p>
   {:else if scribe.cloud && !scribe.cloud.available}
     <p class="text-xs leading-relaxed text-ink-muted">{TEXT.cloudUnavailable}</p>
   {:else if scribe.cloud}

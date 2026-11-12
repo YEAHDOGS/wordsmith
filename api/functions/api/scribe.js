@@ -34,6 +34,9 @@ const USED_UP_EVERYONE = 'wordsmith cloud is out of allowance for today. It rese
 const REQUEST_LIMIT = 30;
 const REQUEST_WINDOW_MS = 60_000;
 const KEEP_DAYS = 7;
+// A model call that fails this fast did no work (a retired model, a full queue): its reservation goes back. A slower
+// failure may have read the input, so that share stays counted.
+const FAST_FAILURE_MS = 1_000;
 // Old days are swept now and then rather than on every request, to keep writes down.
 const CLEANUP_CHANCE = 0.02;
 const DAY_MS = 86_400_000;
@@ -108,7 +111,7 @@ export async function onRequestGet(context) {
   });
 }
 
-/** @param {{ request: Request, env: Record<string, any> }} context */
+/** @param {{ request: Request, env: Record<string, any>, waitUntil: (promise: Promise<any>) => void }} context */
 export async function onRequestPost(context) {
   const { user } = await requireAuth(context);
   const { env, request } = context;
@@ -132,29 +135,40 @@ export async function onRequestPost(context) {
   const worst = (maxTokensIn * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
   const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
   const cap = limits(env);
+  if (worst > Math.min(cap.user, cap.everyone)) throw new HttpError(413, 'This is more than one request may carry. Say less at once, or use fewer tickets.');
   if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
   if (!(await reserve(env, day, user.id, worst, cap.user))) {
     await env.DB.prepare(ADJUST).bind(day, EVERYONE, -worst, -1).run();
     throw new HttpError(429, USED_UP_MINE, ALLOWANCE_CODE);
   }
 
-  let answer;
-  try {
-    answer = await env.AI.run(model.id, {
-      messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
-    });
-  } catch (error) {
-    // The model may have worked before failing (a timeout, say), so the reservation stays counted: the count may run
-    // high, never low.
-    throw error;
-  }
+  // The model call and the count it settles run under waitUntil, so the count is put right even if the app hangs up
+  // or gives up first.
+  const started = Date.now();
+  const settled = (async () => {
+    try {
+      const answer = await env.AI.run(model.id, {
+        messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
+      });
+      const tokensIn = Number(answer?.usage?.prompt_tokens) || 0;
+      const tokensOut = Number(answer?.usage?.completion_tokens) || 0;
+      // An answer that doesn't say what it used counts as its whole reservation, so the count never runs low.
+      const neurons = Number(answer?.usage?.neurons) || (tokensIn || tokensOut ? (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION : worst);
+      // The reservation becomes what the request really cost.
+      await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, neurons - worst, 0), env.DB.prepare(ADJUST).bind(day, user.id, neurons - worst, 0)]);
+      return answer;
+    } catch (error) {
+      // A fast failure did no work and gives everything back; a slow one keeps the input's share.
+      const fast = Date.now() - started < FAST_FAILURE_MS;
+      const back = fast ? worst : (MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
+      const requests = fast ? -1 : 0;
+      await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, -back, requests), env.DB.prepare(ADJUST).bind(day, user.id, -back, requests)]);
+      throw error;
+    }
+  })();
+  context.waitUntil(settled.catch(() => {}));
+  const answer = await settled;
   const content = answer?.choices?.[0]?.message?.content ?? answer?.response ?? '';
-  const tokensIn = Number(answer?.usage?.prompt_tokens) || 0;
-  const tokensOut = Number(answer?.usage?.completion_tokens) || 0;
-  // An answer that doesn't say what it used counts as its whole reservation, so the count never runs low.
-  const neurons = Number(answer?.usage?.neurons) || (tokensIn || tokensOut ? (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION : worst);
-  // The reservation becomes what the request really cost.
-  await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, neurons - worst, 0), env.DB.prepare(ADJUST).bind(day, user.id, neurons - worst, 0)]);
   if (Math.random() < CLEANUP_CHANCE) {
     const oldest = new Date(Date.now() - KEEP_DAYS * DAY_MS).toISOString().slice(0, ISO_DATE_LENGTH);
     await env.DB.prepare('DELETE FROM scribe_usage WHERE day < ?').bind(oldest).run();

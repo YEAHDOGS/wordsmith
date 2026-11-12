@@ -77,5 +77,6 @@
     "copied": "Copied"
   },
   "made": "{count} tickets written this session",
-  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type."
+  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "cloudOffline": "Could not reach wordsmith cloud to check your allowance."
 }
