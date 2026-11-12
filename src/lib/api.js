@@ -28,9 +28,9 @@ export const sessionToken = {
 /**
  * Calls the API and returns parsed JSON (null for 204).
  * @param {string} path
- * @param {{ method?: string, body?: any }} [options]
+ * @param {{ method?: string, body?: any, signal?: AbortSignal }} [options] `signal` gives the request up early
  */
-export async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body, signal } = {}) {
   /** @type {Record<string, string>} */
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -41,6 +41,7 @@ export async function api(path, { method = 'GET', body } = {}) {
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: API_BASE ? 'omit' : 'same-origin',
+    signal,
   });
   if (response.status === NO_CONTENT) return null;
   const data = await response.json().catch(() => ({}));

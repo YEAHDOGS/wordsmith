@@ -20,6 +20,8 @@ import PROVIDERS from './scribe-providers.json';
 const SETTINGS_KEY = 'ws_scribe';
 const CLOUD_PATH = '/api/scribe';
 const CLOUD_KIND = 'wordsmith';
+// A wordsmith cloud answer that hasn't come by now won't: the speech stays queued for the next try.
+const CLOUD_TIMEOUT_MS = 90_000;
 // New setups start on wordsmith cloud: it needs nothing installed and works on phones.
 const DEFAULT_PROVIDER = 'cloud';
 const CUSTOM_PROVIDER = 'custom';
@@ -195,7 +197,16 @@ class Scribe {
   async #ask(turn, cancel) {
     if (this.provider.kind !== CLOUD_KIND) return askModel(this.settings, scribeMessages(turn), cancel);
     const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body, state, priority_level }));
-    const answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.settings.model || undefined } });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
+    cancel.addEventListener('abort', () => controller.abort(), { once: true });
+    /** @type {{ content: string, used: number, limit: number }} */
+    let answer;
+    try {
+      answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.settings.model || undefined }, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     // A session reset while this was in flight drops the answer by itself (#flush checks its run).
     if (this.cloud) this.cloud = { ...this.cloud, used: answer.used, limit: answer.limit };
     return answer.content;

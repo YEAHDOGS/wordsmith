@@ -7,11 +7,12 @@
 // reservation is then corrected to what the request really used, and given back if it fails.
 // GET  /api/scribe -> { available, models: [{ id, name, note }], default, used, limit }
 // POST /api/scribe { model?, project, tickets: [{ ref, title, body, state, priority_level }], earlier, speech }
-//   -> { content, used, limit }   429 { code: 'scribe_allowance' } once today's allowance is spent
+//   -> { content: '{"actions":[...]}', used, limit }: only checked ticket actions, never the model's own text, so the
+//   route can't be used as a general-purpose model   429 { code: 'scribe_allowance' } once today's allowance is spent
 import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
-import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, TEMPERATURE, scribeMessages } from '../../../src/lib/scribe-llm.js';
+import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
 import { FEATURE_STATES, MAX_PRIORITY } from '../../../src/lib/models.js';
 import CLOUD from '../../../src/lib/scribe-cloud-models.json';
 
@@ -121,7 +122,8 @@ export async function onRequestPost(context) {
   const speech = text(body.speech, MAX_SPEECH_CHARS).trim();
   if (!speech) throw new HttpError(400, 'Send some speech');
 
-  const messages = scribeMessages({ project: text(body.project, MAX_NAME_CHARS), tickets: tickets(body.tickets), earlier: text(body.earlier, EARLIER_CHARS), speech });
+  const listed = tickets(body.tickets);
+  const messages = scribeMessages({ project: text(body.project, MAX_NAME_CHARS), tickets: listed, earlier: text(body.earlier, EARLIER_CHARS), speech });
   // The switch that turns this model's hidden reasoning off, where it is a few words at the end of the request.
   if (model.suffix) messages[messages.length - 1].content += model.suffix;
 
@@ -159,6 +161,12 @@ export async function onRequestPost(context) {
     await env.DB.prepare('DELETE FROM scribe_usage WHERE day < ?').bind(oldest).run();
   }
   if (typeof content !== 'string' || !content) throw new HttpError(502, 'The model sent no answer; your words are kept for the next try');
+  let actions;
+  try {
+    actions = parseActions(content, listed);
+  } catch (error) {
+    throw new HttpError(502, `${/** @type {Error} */ (error).message}; your words are kept for the next try`);
+  }
   const { mine } = await usage(env, user.id, day);
-  return json({ content, used: Math.round(mine), limit: cap.user });
+  return json({ content: JSON.stringify({ actions }), used: Math.round(mine), limit: cap.user });
 }

@@ -67,8 +67,8 @@ const APPLE_GPU_SHARE = 0.7;
 // How deep the home folder is searched for Ollama model folders and projects that use Ollama.
 const SCAN_DEPTH = 5;
 const SKIP_DIRS = new Set(['node_modules', '.git', 'AppData', 'Library', '.cache', '.npm', '.cargo', '.rustup', 'target', 'dist', '.wrangler', '.venv', 'venv', '__pycache__', '$Recycle.Bin']);
-// Files that show a project runs its own models through Ollama.
-const PROJECT_FILES = /^(Modelfile|.*\.Modelfile|stack\.json|\.env|docker-compose\.ya?ml|compose\.ya?ml|opencode.*\.json)$/i;
+// Files that show a project runs its own models through Ollama. .env files are never opened: they hold secrets.
+const PROJECT_FILES = /^(Modelfile|.*\.Modelfile|stack\.json|docker-compose\.ya?ml|compose\.ya?ml|opencode.*\.json)$/i;
 const USES_OLLAMA = /ollama|:11434/i;
 const MAX_CONFIG_BYTES = 200_000;
 const IS_WINDOWS = process.platform === 'win32';
