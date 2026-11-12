@@ -22,6 +22,7 @@
   import { backOut } from 'svelte/easing';
   import { MARKERS, applyEdit, cycleHeading, toggleList, wrap } from '../lib/markdown-input.js';
   import { listen, listenEngine } from '../lib/listen.js';
+  import SPEECH_TEXT from './speech.json';
 
   /** @type {{ textarea: HTMLTextAreaElement | undefined, preview?: boolean, showPreview?: boolean, class?: string }} */
   let { textarea, preview = $bindable(false), showPreview = false, class: className = '' } = $props();
@@ -67,25 +68,36 @@
   }
 
   let dictating = $state(false);
+  /** Why the last dictation stopped by itself (microphone refused, model failed), shown on the button until the next. */
+  let dictationProblem = $state('');
   /** @type {{ stop: () => void } | null} */
   let dictation = null;
   onDestroy(() => dictation?.stop());
 
-  /** Types one heard sentence at the caret, as if it were typed (undo works). @param {string} text */
+  /**
+   * Types one heard sentence at the caret, as if it were typed (undo works). While you are typing somewhere else (the
+   * title, say), it still lands in the field but leaves your focus where it is.
+   * @param {string} text
+   */
   function typeHeard(text) {
     if (!textarea || preview) return;
     const { selectionStart: from, selectionEnd: to, value } = textarea;
     const insert = `${NO_SPACE_AFTER.test(value.slice(0, from)) ? '' : ' '}${text}`;
-    applyEdit(textarea, { from, to, insert, selStart: from + insert.length, selEnd: from + insert.length });
+    if (document.activeElement === textarea) {
+      return applyEdit(textarea, { from, to, insert, selStart: from + insert.length, selEnd: from + insert.length });
+    }
+    textarea.setRangeText(insert, from, to, 'end');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function toggleDictation() {
     if (dictating) return dictation?.stop();
     dictating = true;
+    dictationProblem = '';
     dictation = listen({
       onInterim: () => {},
       onFinal: typeHeard,
-      onProblem: () => {},
+      onProblem: (kind, detail) => (dictationProblem = SPEECH_TEXT.problems[kind].replace('{detail}', detail)),
       onEnd: () => {
         dictating = false;
         dictation = null;
@@ -125,7 +137,7 @@
     </div>
   {/each}
   {#if listenEngine()}
-    <button type="button" class="{BUTTON} relative {dictating ? 'text-accent' : ''}" title={dictating ? DICTATE_STOP : DICTATE} aria-label={dictating ? DICTATE_STOP : DICTATE} aria-pressed={dictating}
+    <button type="button" class="{BUTTON} relative {dictating ? 'text-accent' : ''}" title={dictating ? DICTATE_STOP : dictationProblem || DICTATE} aria-label={dictating ? DICTATE_STOP : DICTATE} aria-pressed={dictating}
       disabled={preview || !textarea} onmousedown={(event) => event.preventDefault()} onclick={toggleDictation}>
       {#if dictating}<span class="live-dot pointer-events-none absolute inset-1 border border-accent" aria-hidden="true"></span>{/if}
       <Mic class="size-4" />

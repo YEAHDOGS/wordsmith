@@ -135,7 +135,7 @@ class Speech {
    * @param {ModelFile} file @param {number} before bytes of this download already done @param {AbortSignal} signal
    */
   async #fetchFile(file, before, signal) {
-    await invoke('speech_download_begin', { file: file.file, sha256: file.sha256 });
+    await invoke('speech_download_begin', { file: file.file });
     const response = await fetch(`${MODEL_HOST}/${file.repo}/resolve/main/${file.file}`, { signal });
     if (!response.ok || !response.body) throw new Error(`The model host answered ${response.status}`);
     const reader = response.body.getReader();
@@ -247,6 +247,7 @@ class Speech {
   }
 
   #finish() {
+    this.#stopped = this.#run;
     this.#closeMic?.();
     this.#closeMic = null;
     this.phase = 'idle';

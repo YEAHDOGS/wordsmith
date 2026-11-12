@@ -1,7 +1,8 @@
 // Regenerates src/lib/speech-models.json: the local speech models wordsmith can download, read from the transcribe.cpp
-// model catalog (the engine in src/tauri/src/speech.rs) at the release the app is built against. The catalog is the
+// model catalog (the engine in src/tauri/src/speech/) at the release the app is built against. The catalog is the
 // source of truth; this file only picks what the app needs and adds each file's SHA-256 from Hugging Face, which the
-// app checks after a download. Run it when TRANSCRIBE_CPP_VERSION changes: `node scripts/speech-catalog.js`.
+// desktop app builds in (src/tauri/src/speech/mod.rs) and checks after a download. Run it when TRANSCRIBE_CPP_VERSION
+// changes: `node scripts/speech-catalog.js`.
 import { writeFile } from 'node:fs/promises';
 
 // Keep in step with the transcribe-cpp version in src/tauri/Cargo.toml.

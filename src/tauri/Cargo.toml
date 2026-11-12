@@ -21,10 +21,12 @@ serde = { version = "1", features = ["derive"] }
 # Local speech-to-text (src/speech/), desktop only for now: phones need their own native builds of the engine.
 # transcribe-cpp: the ggml speech engine (60+ models, MIT), compiled from source by CMake; no smaller library runs
 # these models. Keep its version in step with TRANSCRIBE_CPP_VERSION in scripts/speech-catalog.js.
-# sha2 (already in the tree through Tauri) checks each downloaded model file against the catalog.
+# sha2 and serde_json (both already in the tree through Tauri) check each downloaded model file against the catalog
+# built into the app.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 transcribe-cpp = { version = "0.4.1", default-features = false }
 sha2 = "0.10"
+serde_json = "1"
 
 # Apple GPUs through Metal. Windows and Linux run on the CPU until their builds carry the Vulkan SDK
 # (the speech-vulkan feature below).
