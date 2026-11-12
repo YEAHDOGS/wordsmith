@@ -12,6 +12,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
+use std::thread::JoinHandle;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -49,18 +50,29 @@ struct Loaded {
 
 struct Download {
     file: String,
+    /// The SHA-256 the catalog lists for `file`, given when the download began.
+    expected: String,
     part: PathBuf,
     out: File,
     hash: Sha256,
     written: u64,
 }
 
+impl Download {
+    /// Closes the partial file and removes it.
+    fn discard(self) {
+        drop(self.out);
+        let _ = fs::remove_file(self.part);
+    }
+}
+
 #[derive(Default)]
 pub struct Speech {
     model: Mutex<Option<Loaded>>,
     vad: Mutex<Option<(String, Model)>>,
-    /// The running listening session's audio input.
-    input: Mutex<Option<Sender<engine::Input>>>,
+    /// The running listening session's audio input, and the thread it runs on. A new session waits for the one
+    /// before it to finish, so two never share a model.
+    session: Mutex<Option<(Sender<engine::Input>, JoinHandle<()>)>>,
     download: Mutex<Option<Download>>,
 }
 
@@ -105,15 +117,17 @@ fn speech_models<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Starts (or restarts) a download: the bytes that follow go to `<file>.part`.
+/// Starts (or restarts) a download of `file`, whose catalog SHA-256 is `sha256`: the bytes that follow go to
+/// `<file>.part`. A download still in progress is dropped first.
 #[tauri::command]
-fn speech_download_begin<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
+fn speech_download_begin<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String, sha256: String) -> Result<(), String> {
     let part = models_dir(&app)?.join(format!("{}{PARTIAL_EXTENSION}", safe_name(&file)?));
-    let out = OpenOptions::new().write(true).create(true).truncate(true).open(&part).map_err(|error| error.to_string())?;
-    let previous = state.download.lock().unwrap().replace(Download { file, part, out, hash: Sha256::new(), written: 0 });
-    if let Some(previous) = previous {
-        let _ = fs::remove_file(previous.part);
+    let mut download = state.download.lock().unwrap();
+    if let Some(previous) = download.take() {
+        previous.discard();
     }
+    let out = OpenOptions::new().write(true).create(true).truncate(true).open(&part).map_err(|error| error.to_string())?;
+    *download = Some(Download { file, expected: sha256, part, out, hash: Sha256::new(), written: 0 });
     Ok(())
 }
 
@@ -131,26 +145,35 @@ fn speech_download_chunk(request: Request<'_>, state: State<'_, Speech>) -> Resu
     Ok(download.written)
 }
 
-/// Ends the download: the file is kept only if its SHA-256 is the one the catalog lists.
+/// Ends the download of `file`: it is kept only if its SHA-256 is the one given when it began.
 #[tauri::command]
-fn speech_download_finish<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, sha256: String) -> Result<(), String> {
-    let download = state.download.lock().unwrap().take().ok_or("No download in progress")?;
-    let Download { file, part, out, hash, .. } = download;
-    out.sync_all().map_err(|error| error.to_string())?;
+fn speech_download_finish<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
+    let dir = models_dir(&app)?;
+    let mut guard = state.download.lock().unwrap();
+    if guard.as_ref().is_none_or(|download| download.file != file) {
+        return Err(format!("No download of {file} in progress"));
+    }
+    let Some(Download { file, expected, part, out, hash, .. }) = guard.take() else {
+        return Err("No download in progress".into());
+    };
+    let synced = out.sync_all();
     drop(out);
     let actual: String = hash.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
-    if !actual.eq_ignore_ascii_case(&sha256) {
+    if let Err(error) = synced {
+        let _ = fs::remove_file(&part);
+        return Err(error.to_string());
+    }
+    if !actual.eq_ignore_ascii_case(&expected) {
         let _ = fs::remove_file(&part);
         return Err("The download was damaged on the way (checksum mismatch). Try again.".into());
     }
-    fs::rename(&part, models_dir(&app)?.join(&file)).map_err(|error| error.to_string())
+    fs::rename(&part, dir.join(&file)).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn speech_download_cancel(state: State<'_, Speech>) {
     if let Some(download) = state.download.lock().unwrap().take() {
-        drop(download.out);
-        let _ = fs::remove_file(download.part);
+        download.discard();
     }
 }
 
@@ -208,10 +231,16 @@ fn speech_start<R: Runtime>(
     safe_name(&vad)?;
     let dir = models_dir(&app)?;
     let (sender, receiver) = channel();
-    if let Some(previous) = state.input.lock().unwrap().replace(sender) {
-        let _ = previous.send(engine::Input::Stop);
-    }
-    std::thread::spawn(move || {
+    let mut session = state.session.lock().unwrap();
+    let previous = session.take().map(|(input, worker)| {
+        let _ = input.send(engine::Input::Stop);
+        worker
+    });
+    let worker = std::thread::spawn(move || {
+        // The session this one replaces finishes the speech it already heard first, then lets go of its model.
+        if let Some(previous) = previous {
+            let _ = previous.join();
+        }
         let state = app.state::<Speech>();
         let _ = on_event.send(SpeechEvent::Loading);
         let outcome = (|| -> Result<(), String> {
@@ -238,6 +267,7 @@ fn speech_start<R: Runtime>(
             Err(message) => SpeechEvent::Error { message },
         });
     });
+    *session = Some((sender, worker));
     Ok(())
 }
 
@@ -248,7 +278,7 @@ fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(), Str
         return Err("Expected audio bytes".into());
     };
     let samples = bytes.chunks_exact(BYTES_PER_SAMPLE).map(|sample| f32::from_le_bytes([sample[0], sample[1], sample[2], sample[3]])).collect();
-    if let Some(input) = state.input.lock().unwrap().as_ref() {
+    if let Some((input, _)) = state.session.lock().unwrap().as_ref() {
         let _ = input.send(engine::Input::Audio(samples));
     }
     Ok(())
@@ -257,7 +287,7 @@ fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(), Str
 /// Stops listening. Speech already heard is still transcribed and reported before Stopped.
 #[tauri::command]
 fn speech_stop(state: State<'_, Speech>) {
-    if let Some(input) = state.input.lock().unwrap().take() {
+    if let Some((input, _)) = state.session.lock().unwrap().as_ref() {
         let _ = input.send(engine::Input::Stop);
     }
 }

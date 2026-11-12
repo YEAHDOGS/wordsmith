@@ -60,7 +60,8 @@ class Speech {
   /** @type {AbortController | null} */ #abort = null;
   /** @type {(() => void) | null} */ #closeMic = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #unloadTimer;
-  /** Counts sessions, so answers from one that was replaced are ignored. */ #run = 0;
+  /** Counts sessions, so a session that was replaced can't change the state of the one after it. */ #run = 0;
+  /** The session stop() was last called for, so a microphone that finishes opening after it is closed again. */ #stopped = 0;
 
   /** Finds out whether the engine is here and what is downloaded. Safe to call often; the work happens once. */
   init() {
@@ -134,7 +135,7 @@ class Speech {
    * @param {ModelFile} file @param {number} before bytes of this download already done @param {AbortSignal} signal
    */
   async #fetchFile(file, before, signal) {
-    await invoke('speech_download_begin', { file: file.file });
+    await invoke('speech_download_begin', { file: file.file, sha256: file.sha256 });
     const response = await fetch(`${MODEL_HOST}/${file.repo}/resolve/main/${file.file}`, { signal });
     if (!response.ok || !response.body) throw new Error(`The model host answered ${response.status}`);
     const reader = response.body.getReader();
@@ -162,7 +163,7 @@ class Speech {
       if (held >= DOWNLOAD_CHUNK_BYTES || (done && held)) await flush();
       if (done) break;
     }
-    await invoke('speech_download_finish', { sha256: file.sha256 });
+    await invoke('speech_download_finish', { file: file.file });
   }
 
   cancelInstall() {
@@ -176,12 +177,16 @@ class Speech {
   }
 
   /**
-   * Starts listening with the chosen model. One session at a time: starting again replaces the one running.
+   * Starts listening with the chosen model. One session at a time: starting again replaces the one running, which
+   * still hands its listener the speech it already heard, then onEnd.
    * @param {Listener} listener
    */
   async start(listener) {
     const model = this.model;
-    if (!this.usable || !model || !this.catalog) return listener.onProblem('speech', 'No speech model is downloaded');
+    if (!this.usable || !model || !this.catalog) {
+      listener.onProblem('speech', 'No speech model is downloaded');
+      return listener.onEnd();
+    }
     const run = ++this.#run;
     clearTimeout(this.#unloadTimer);
     this.#closeMic?.();
@@ -189,21 +194,22 @@ class Speech {
     this.phase = 'loading';
     this.speaking = false;
     const events = new Channel();
+    // Words and the ending always reach this session's own listener; only the current session moves the shared state.
     events.onmessage = (/** @type {any} */ event) => {
-      if (run !== this.#run) return;
-      if (event.kind === 'listening') {
+      const current = run === this.#run;
+      if (event.kind === 'listening' && current) {
         this.phase = 'listening';
         this.backend = event.backend;
-      } else if (event.kind === 'speaking') {
+      } else if (event.kind === 'speaking' && current) {
         this.speaking = true;
       } else if (event.kind === 'interim') {
         listener.onInterim(event.text);
       } else if (event.kind === 'final') {
-        this.speaking = false;
+        if (current) this.speaking = false;
         listener.onFinal(event.text);
       } else if (event.kind === 'stopped' || event.kind === 'error') {
         if (event.kind === 'error') listener.onProblem('speech', event.message);
-        this.#finish();
+        if (current) this.#finish();
         listener.onEnd();
       }
     };
@@ -213,9 +219,16 @@ class Speech {
         language: model.languages.includes(this.settings.language) ? this.settings.language : null,
         vocabulary: this.settings.words, onEvent: events,
       });
+    } catch (error) {
+      // The engine never started, so no Stopped will come.
+      listener.onProblem('speech', /** @type {Error} */ (error).message || String(error));
+      if (run === this.#run) this.#finish();
+      return listener.onEnd();
+    }
+    try {
       const close = await openMic((audio) => invoke('speech_feed', audio).catch(() => {}));
-      // Stopped while the microphone was still opening.
-      if (run !== this.#run) return close();
+      // Stopped or replaced while the microphone was still opening.
+      if (run !== this.#run || this.#stopped === run) return close();
       this.#closeMic = close;
     } catch (error) {
       if (run !== this.#run) return;
@@ -227,6 +240,7 @@ class Speech {
 
   /** Stops listening. Speech already heard still arrives (onFinal), then onEnd. */
   stop() {
+    this.#stopped = this.#run;
     this.#closeMic?.();
     this.#closeMic = null;
     if (this.phase !== 'idle') invoke('speech_stop').catch(() => {});

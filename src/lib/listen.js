@@ -84,18 +84,25 @@ function browserSession(listener) {
  */
 export function listen(listener) {
   active?.stop();
-  /** @type {{ stop: () => void }} */
-  let session;
+  // An engine can end before it hands back its session (no model, recognition refused): then nothing is active.
+  let ended = false;
+  /** @type {{ stop: () => void } | null} */
+  let session = null;
   const wrapped = { ...listener, onEnd: () => {
-    if (active === session) active = null;
+    ended = true;
+    if (session && active === session) active = null;
     listener.onEnd();
   } };
   if (listenEngine() === 'local') {
+    // Once a newer session has replaced this one, stopping this one must not stop that one.
+    const local = { stop: () => {
+      if (active === local) speech.stop();
+    } };
+    session = local;
     speech.start(wrapped);
-    session = { stop: () => speech.stop() };
   } else {
     session = browserSession(wrapped);
   }
-  active = session;
-  return session;
+  if (!ended) active = session;
+  return /** @type {{ stop: () => void }} */ (session);
 }
