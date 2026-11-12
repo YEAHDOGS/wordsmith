@@ -13,7 +13,7 @@ import { auth } from './auth.svelte.js';
 import { api } from './api.js';
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
-import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
+import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages, soundsLikeWork } from './scribe-llm.js';
 import { listen, listenEngine } from './listen.js';
 import PROVIDERS from './scribe-providers.json';
 
@@ -27,9 +27,12 @@ const DEFAULT_PROVIDER = 'cloud';
 const CUSTOM_PROVIDER = 'custom';
 // What the Worker answers when this account's (or everyone's) wordsmith cloud allowance for today is used up.
 export const ALLOWANCE_CODE = 'scribe_allowance';
-// A thought is sent this long after its last word, so a breath mid-sentence doesn't split it, and each request carries
-// a whole thought rather than a phrase.
-const FLUSH_MS = 2_500;
+// A thought is sent this long after its last word, so a pause to think doesn't split it, and each request carries a
+// whole thought rather than a phrase: every request pays for the instructions and the ticket list again, so fewer,
+// fuller ones cost less and read better.
+const FLUSH_MS = 4_000;
+// Once the mic is off, words still arriving (a speech engine finishing its last sentence) go this soon, together.
+const LAST_WORDS_MS = 600;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
 const FLUSH_CHARS = 600;
 // After a failed request, speech is kept and tried again by itself after each of these waits, then only on Retry: an
@@ -42,7 +45,10 @@ const TOO_MANY_REQUESTS = 429;
 const SERVER_ERROR = 500;
 // Speech with fewer meaningful words than this waits, however long the pause, and goes out with whatever is said next
 // ("and the login page" on its own asks for nothing yet). Stopping the mic sends it anyway.
-const MIN_WORDS = 4;
+const MIN_WORDS = 6;
+// Before speech goes to wordsmith cloud, a check on this device holds back what isn't about work (soundsLikeWork), so
+// "I need to get to a dentist" spends no neurons. Its words are English, so it only runs where speech is.
+const WORK_CHECK_LANGUAGE = /^en\b/i;
 const MAX_LOG = 100;
 // A ticket Scribe just wrote stays announced (beside the mic, on the pill) this long.
 const RECENT_MS = 5_000;
@@ -102,7 +108,10 @@ class Scribe {
   listening = $state(false);
   /** A request to the model is in flight. */
   thinking = $state(false);
-  /** Finished lines of speech, oldest first. @type {{ id: string, text: string, handled: boolean }[]} */
+  /**
+   * Finished lines of speech, oldest first. `handled`: sent (or filler, never sent). `skipped`: held back on this device
+   * as not about work, until Send anyway. @type {{ id: string, text: string, handled: boolean, skipped: boolean }[]}
+   */
   transcript = $state([]);
   /** Words heard but not yet final. */
   interim = $state('');
@@ -133,6 +142,8 @@ class Scribe {
   /** The account this session belongs to (see claim). @type {string | undefined} */ #owner;
   /** Speech waiting to go to the model. */ #pending = '';
   /** Speech already handled, for context. */ #earlier = '';
+  /** Speech held back as not about work, for Send anyway. */ #skipped = '';
+  /** The speech waiting was typed, or sent anyway: it goes out without the work check. */ #vouched = false;
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
   /** The next automatic try after a failure. @type {ReturnType<typeof setTimeout> | undefined} */ #retryTimer;
@@ -356,13 +367,15 @@ class Scribe {
     const line = text.trim();
     if (!line) return;
     const meaningful = meaningfulWords(line) > 0;
-    this.transcript.push({ id: crypto.randomUUID(), text: line, handled: !meaningful });
+    this.transcript.push({ id: crypto.randomUUID(), text: line, handled: !meaningful, skipped: false });
     if (this.transcript.length > MAX_TRANSCRIPT) this.transcript.shift();
     if (!meaningful) return;
     this.#pending = `${this.#pending} ${line}`.trim();
+    if (typed) this.#vouched = true;
     clearTimeout(this.#timer);
     if (typed || this.#pending.length >= FLUSH_CHARS) this.#flush(true);
-    else this.#timer = setTimeout(() => this.#flush(), FLUSH_MS);
+    // After a stop (the last sentence arriving late) there is no more to wait for.
+    else this.#timer = setTimeout(() => this.#flush(), this.listening ? FLUSH_MS : LAST_WORDS_MS);
   }
 
   /** The tickets the model may update, under short refs (T1, T2...). @returns {import('./scribe-llm.js').Ticket[]} */
@@ -377,6 +390,7 @@ class Scribe {
   /**
    * Sends the waiting speech to the model, one request at a time; speech that arrives meanwhile goes in the next.
    * While listening, too few meaningful words wait for more; `force` (stopped, typed, retried) sends them anyway.
+   * On wordsmith cloud, speech that isn't about work is held back instead (#skip).
    * @param {boolean} [force]
    */
   async #flush(force = false) {
@@ -385,6 +399,10 @@ class Scribe {
     // While the model is failing or the allowance is spent, speech only queues: the backoff or Retry sends it.
     if (!force && (this.problem === 'model' || this.problem === 'allowance')) return;
     if (!force && this.listening && meaningfulWords(this.#pending) < MIN_WORDS) return;
+    // Checked before anything else can happen to it: speech that isn't about work never needs a model at all.
+    const checked = this.provider.kind === CLOUD_KIND && !this.#vouched && WORK_CHECK_LANGUAGE.test(navigator.language || '');
+    const names = checked ? [store.find('projects', this.settings.projectId)?.name ?? '', ...this.#tickets().map((ticket) => ticket.title)] : [];
+    if (checked && !soundsLikeWork(this.#pending, names)) return this.#skip();
     if (!this.ready) {
       this.problem = 'model';
       this.detail = '';
@@ -394,8 +412,11 @@ class Scribe {
     const cut = this.#pending.length <= MAX_SPEECH_CHARS ? this.#pending.length : this.#pending.lastIndexOf(' ', MAX_SPEECH_CHARS) + 1 || MAX_SPEECH_CHARS;
     const speech = this.#pending.slice(0, cut).trim();
     this.#pending = this.#pending.slice(cut).trim();
+    // Vouched-for speech stays vouched for until all of it has gone out; a failure puts it back below.
+    const vouched = this.#vouched;
+    if (!this.#pending) this.#vouched = false;
     // Lines are marked sent once nothing of them is left waiting.
-    const lines = this.#pending ? [] : this.transcript.filter((line) => !line.handled).map((line) => line.id);
+    const lines = this.#pending ? [] : this.transcript.filter((line) => !line.handled && !line.skipped).map((line) => line.id);
     const run = this.#run;
     // The account the speech belongs to: its answer is only ever written while that account is still the one signed in.
     const owner = auth.user?.id;
@@ -421,6 +442,7 @@ class Scribe {
       if (run !== this.#run) return;
       // Keep the speech: it goes out again with whatever is said next, or on Retry.
       this.#pending = `${speech} ${this.#pending}`.trim();
+      this.#vouched ||= vouched;
       const failure = /** @type {Error & { code?: string, status?: number }} */ (error);
       this.problem = failure.code === ALLOWANCE_CODE ? 'allowance' : 'model';
       this.detail = failure.name === 'AbortError' ? 'timeout' : failure.message;
@@ -446,6 +468,31 @@ class Scribe {
     if (this.#pending && !this.problem) this.#flush(!this.listening);
   }
 
+  /**
+   * Holds back the waiting speech as not about work: it never leaves this device, costs nothing and shows as not
+   * sent, until Send anyway sends it.
+   */
+  #skip() {
+    this.#skipped = `${this.#skipped} ${this.#pending}`.trim().slice(-MAX_SPEECH_CHARS);
+    this.#pending = '';
+    for (const line of this.transcript) if (!line.handled) line.skipped = true;
+  }
+
+  /** Lines held back as not about work. */
+  get skipped() {
+    return this.transcript.filter((line) => line.skipped).length;
+  }
+
+  /** Sends the speech held back as not about work, without the check. */
+  sendSkipped() {
+    if (!this.#skipped) return;
+    this.#pending = `${this.#skipped} ${this.#pending}`.trim();
+    this.#skipped = '';
+    this.#vouched = true;
+    for (const line of this.transcript) line.skipped = false;
+    this.#flush(true);
+  }
+
   /** Sends speech that is still waiting after a failed request. */
   retry() {
     clearTimeout(this.#retryTimer);
@@ -456,7 +503,7 @@ class Scribe {
 
   /** True while speech is waiting on a failed request. */
   get waiting() {
-    return this.transcript.some((line) => !line.handled);
+    return this.transcript.some((line) => !line.handled && !line.skipped);
   }
 
   /**
@@ -527,6 +574,8 @@ class Scribe {
     this.recent = [];
     this.#pending = '';
     this.#earlier = '';
+    this.#skipped = '';
+    this.#vouched = false;
     this.#touched = [];
     this.problem = '';
     this.detail = '';

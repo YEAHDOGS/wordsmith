@@ -5,7 +5,9 @@
   "start": "Start listening",
   "stop": "Stop listening",
   "listening": "Listening",
-  "thinking": "Writing tickets",
+  "thinking": "Looking for tickets",
+  "skipped": "Not sent: that didn't sound like work, so it stayed on this device.",
+  "sendSkipped": "Send anyway",
   "idle": "Press the mic and start talking",
   "idleNoMic": "No speech recognition here. Type below instead, download a speech model in Settings (desktop app), or open wordsmith in Chrome, Edge or Safari.",
   "typePlaceholder": "Or type a thought and press Enter",
@@ -57,7 +59,7 @@
   "cloudUnavailable": "wordsmith cloud is not set up on this server.",
   "key": "API key",
   "keyPlaceholder": "Only if the server needs one",
-  "privacyCloud": "Your browser turns speech into text (Chrome, Edge and Safari use their maker's speech service for that). With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "privacyCloud": "Your browser turns speech into text (Chrome, Edge and Safari use their maker's speech service for that). With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else (speech that doesn't sound like work stays here); tickets sync to wordsmith like anything you type.",
   "help": {
     "title": "Can't connect to a model on this computer?",
     "intro": "Your browser only lets a website talk to a model server on your computer if that server allows the site. Ollama allows only the sites listed in its OLLAMA_ORIGINS setting, so add this one and restart Ollama.",
@@ -77,6 +79,6 @@
     "copied": "Copied"
   },
   "made": "{count} tickets written this session",
-  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else (speech that doesn't sound like work stays here); tickets sync to wordsmith like anything you type.",
   "cloudOffline": "Could not reach wordsmith cloud to check your allowance."
 }
