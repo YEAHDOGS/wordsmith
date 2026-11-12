@@ -21,8 +21,10 @@ const ALLOWANCE_CODE = 'scribe_allowance';
 const DEFAULT_USER_NEURONS = 1_500;
 const DEFAULT_DAILY_NEURONS = 4_000;
 const TOKENS_PER_MILLION = 1_000_000;
-// Fewer characters per token than any model really uses, so the input estimate is never too low.
-const CHARS_PER_TOKEN = 3;
+// The models here tokenize bytes (byte-level BPE, or SentencePiece with byte fallback), so a text never has more
+// tokens than UTF-8 bytes, in any language. Each message adds a few tokens of chat template; this covers them.
+const TEMPLATE_TOKENS_PER_MESSAGE = 32;
+const UTF8 = new TextEncoder();
 // Changes a row of today's usage by ?3 neurons and ?4 requests: negative gives a reservation back.
 const ADJUST = 'UPDATE scribe_usage SET neurons = MAX(0, neurons + ?3), requests = MAX(0, requests + ?4) WHERE day = ?1 AND user_id = ?2';
 const USED_UP_MINE = 'Today\'s wordsmith cloud allowance is used up. It resets at midnight UTC; a local model keeps working meanwhile.';
@@ -123,9 +125,11 @@ export async function onRequestPost(context) {
   // The switch that turns this model's hidden reasoning off, where it is a few words at the end of the request.
   if (model.suffix) messages[messages.length - 1].content += model.suffix;
 
-  // The most this request can cost: every character a token and the longest answer allowed.
-  const chars = messages.reduce((sum, message) => sum + message.content.length, 0);
-  const worst = (Math.ceil(chars / CHARS_PER_TOKEN) * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
+  // The most this request can cost: a token for every byte of input (the most any of these tokenizers makes), and
+  // the longest answer allowed. Real use is far lower, and the reservation is corrected to it afterwards, so a
+  // request can never cost more than it reserved and the caps hold whatever the language.
+  const maxTokensIn = messages.reduce((sum, message) => sum + UTF8.encode(message.content).length + TEMPLATE_TOKENS_PER_MESSAGE, 0);
+  const worst = (maxTokensIn * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
   const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
   const cap = limits(env);
   if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
