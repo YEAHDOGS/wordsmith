@@ -35,8 +35,9 @@ const FLUSH_CHARS = 600;
 // After a failed request, speech is kept and tried again by itself after each of these waits, then only on Retry: an
 // outage costs at most this many tries per device, never one for every pause. Retry sends at once and starts over.
 const RETRY_BACKOFF_MS = [5_000, 15_000, 45_000, 120_000];
-// Failures worth trying again by themselves: a model that is busy, down or rate limited. Other refusals (a model that
-// is no longer offered, a request too large, a server not set up) answer the same every time, so they wait for Retry.
+// Failures worth trying again by themselves: no answer at all, a model that is busy, down or rate limited (429, 5xx,
+// including a server without wordsmith cloud set up, within the four tries). Other refusals (a model no longer
+// offered, a request too large, no permission) answer the same every time, so they wait for Retry.
 const TOO_MANY_REQUESTS = 429;
 const SERVER_ERROR = 500;
 // Speech with fewer meaningful words than this waits, however long the pause, and goes out with whatever is said next
@@ -240,6 +241,8 @@ class Scribe {
   async #ask(turn, cancel) {
     if (this.provider.kind !== CLOUD_KIND) return askModel(this.settings, scribeMessages(turn), cancel);
     const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body: body.slice(0, MAX_TICKET_BODY), state, priority_level }));
+    // Once per page: the model list, so a saved model that is no longer offered falls back to the default (cloudModel).
+    if (!this.cloud) await this.loadCloud();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
     const giveUp = () => controller.abort();
@@ -421,10 +424,11 @@ class Scribe {
       const passing = !failure.status || failure.status === TOO_MANY_REQUESTS || failure.status >= SERVER_ERROR;
       // A spent allowance won't come back before midnight UTC; a passing failure is tried again a few times, waiting
       // longer each time, then waits for Retry.
+      // This failure decides what happens next: an automatic try still waiting from an earlier one is dropped.
+      clearTimeout(this.#retryTimer);
       if (this.problem === 'model' && passing && this.#failures < RETRY_BACKOFF_MS.length) {
         const wait = RETRY_BACKOFF_MS[this.#failures];
         this.#failures++;
-        clearTimeout(this.#retryTimer);
         this.#retryTimer = setTimeout(() => {
           if (run !== this.#run || this.problem !== 'model') return;
           this.problem = '';
