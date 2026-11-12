@@ -15,10 +15,9 @@
   import Eraser from '@lucide/svelte/icons/eraser';
   import X from '@lucide/svelte/icons/x';
   import { scribe } from '../lib/scribe.svelte.js';
-  import { NOT_CHAT, listModels } from '../lib/scribe-llm.js';
+  import ScribeSettings from './ScribeSettings.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
-  import { byName } from '../lib/nav-order.js';
   import { clockTime } from '../lib/time.js';
   import TEXT from './scribe.json';
 
@@ -32,13 +31,12 @@
   const POP = { start: 0.7, duration: 200, easing: backOut };
   const FLIP_MS = 200;
 
-  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const status = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? TEXT.listening : scribe.canListen ? TEXT.idle : TEXT.idleNoMic);
   const problem = $derived.by(() => {
     if (!scribe.problem) return '';
     if (scribe.problem === 'model' && !scribe.ready) return TEXT.problems['model-setup'];
     if (scribe.problem === 'model' && scribe.detail === 'timeout') return TEXT.problems.timeout;
-    return TEXT.problems[/** @type {'mic-denied' | 'mic' | 'model'} */ (scribe.problem)].replace('{detail}', scribe.detail);
+    return TEXT.problems[/** @type {'mic-denied' | 'mic' | 'model' | 'allowance'} */ (scribe.problem)].replace('{detail}', scribe.detail);
   });
   // A request the browser refused outright (server down, or the server not allowing this site) has no status to show.
   const blocked = $derived(scribe.problem === 'model' && scribe.ready && /failed to fetch|networkerror|load failed/i.test(scribe.detail));
@@ -47,14 +45,11 @@
   // set without asking, and the panel closes again.
   let showSettings = $state(!scribe.ready);
   let typed = $state('');
-  /** @type {string[]} */
-  let models = $state([]);
-  let finding = $state(false);
-  let findNote = $state('');
+  let detected = $state('');
   scribe.detect().then((found) => {
     if (!found) return;
     showSettings = false;
-    findNote = TEXT.detected.replace('{model}', scribe.settings.model);
+    detected = TEXT.detected.replace('{model}', scribe.settings.model);
   });
   /** @type {HTMLElement | undefined} */
   let transcriptBox = $state();
@@ -69,51 +64,14 @@
   /** @param {SubmitEvent} event */
   function send(event) {
     event.preventDefault();
-    scribe.hear(typed);
+    scribe.hear(typed, true);
     typed = '';
-  }
-
-  async function findModels() {
-    finding = true;
-    findNote = '';
-    try {
-      models = await listModels(scribe.settings.endpoint);
-      findNote = TEXT.found.replace('{count}', String(models.length));
-      const chat = models.find((name) => !NOT_CHAT.test(name));
-      if (!scribe.settings.model && chat) scribe.configure({ model: chat });
-    } catch (error) {
-      models = [];
-      findNote = `${/** @type {Error} */ (error).message}. ${TEXT.problems.cors}`;
-    }
-    finding = false;
   }
 </script>
 
 {#snippet settings()}
-  <label class={LABEL}>{TEXT.project}
-    <select class={FIELD} value={scribe.settings.projectId} onchange={(event) => scribe.configure({ projectId: event.currentTarget.value })}>
-      <option value="">{TEXT.noProject}</option>
-      {#each projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
-    </select>
-  </label>
-  <label class={LABEL}>{TEXT.endpoint}
-    <input class="{FIELD} font-mono" type="url" value={scribe.settings.endpoint} spellcheck="false" autocomplete="off" oninput={(event) => scribe.configure({ endpoint: event.currentTarget.value })} />
-  </label>
-  <p class="text-xs leading-relaxed text-ink-faint short:hidden">{TEXT.endpointHint}</p>
-  <div class="flex items-end gap-1">
-    <label class="{LABEL} min-w-0 flex-1">{TEXT.model}
-      {#if models.length}
-        <select class={FIELD} value={scribe.settings.model} onchange={(event) => scribe.configure({ model: event.currentTarget.value })}>
-          {#each models as model (model)}<option value={model}>{model}</option>{/each}
-        </select>
-      {:else}
-        <input class="{FIELD} font-mono" value={scribe.settings.model} placeholder={TEXT.modelPlaceholder} spellcheck="false" autocomplete="off" oninput={(event) => scribe.configure({ model: event.currentTarget.value })} />
-      {/if}
-    </label>
-    <button class="{SMALL_BUTTON} min-h-9 shrink-0" disabled={finding || !scribe.settings.endpoint.trim()} onclick={findModels}>{finding ? TEXT.finding : TEXT.find}</button>
-  </div>
-  {#if findNote}<p class="text-xs leading-relaxed text-ink-muted" role="status" in:fade>{findNote}</p>{/if}
-  <p class="border-t border-line pt-3 text-xs leading-relaxed text-ink-faint">{TEXT.privacy}</p>
+  <ScribeSettings field={FIELD} label={LABEL} button={SMALL_BUTTON} />
+  {#if detected}<p class="text-xs leading-relaxed text-ink-muted" role="status" in:fade>{detected}</p>{/if}
 {/snippet}
 
 <div class="relative flex min-h-0 flex-1 flex-col">

@@ -1,0 +1,43 @@
+{
+  "$comment": "Where Scribe can send speech to be turned into tickets (src/lib/scribe.svelte.js). kind 'wordsmith' is wordsmith's own Worker running Workers AI (api/functions/api/scribe.js, models in scribe-cloud-models.json); kind 'openai' is any server that speaks OpenAI's chat API, on this machine (local: true, looked for at its default address) or anywhere else. A new provider is one more entry here.",
+  "providers": [
+    {
+      "id": "cloud",
+      "kind": "wordsmith",
+      "name": "wordsmith cloud",
+      "note": "No setup. What you say goes as text to Cloudflare Workers AI through wordsmith, within a daily allowance."
+    },
+    {
+      "id": "ollama",
+      "kind": "openai",
+      "name": "Ollama",
+      "endpoint": "http://localhost:11434/v1",
+      "local": true,
+      "note": "A model on this computer. Set up with `npm run scribe:ollama`, or install Ollama from ollama.com."
+    },
+    {
+      "id": "lmstudio",
+      "kind": "openai",
+      "name": "LM Studio",
+      "endpoint": "http://localhost:1234/v1",
+      "local": true,
+      "note": "A model on this computer: start LM Studio's server and turn on CORS in its settings."
+    },
+    {
+      "id": "llamacpp",
+      "kind": "openai",
+      "name": "llama.cpp",
+      "endpoint": "http://localhost:8080/v1",
+      "local": true,
+      "note": "A model on this computer: llama-server at its default address."
+    },
+    {
+      "id": "custom",
+      "kind": "openai",
+      "name": "Other",
+      "endpoint": "",
+      "key": true,
+      "note": "Any server with an OpenAI-compatible chat API, here or online. An API key, if it needs one, stays on this device and goes only to that server."
+    }
+  ]
+}

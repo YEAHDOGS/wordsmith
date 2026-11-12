@@ -10,7 +10,8 @@
 // 5. Pulls the one you pick, wraps it as `wordsmith-scribe` (a longer context and steady answers; it shares the
 //    downloaded weights, so it costs no disk), and tries it on a sample sentence.
 // Flags: --scan only reports what is here; --list also shows the models you could pick, changing nothing;
-// --yes takes every recommended answer without asking.
+// --yes takes every recommended answer without asking; --preview=<url of one PR preview> lets every preview of that
+// Cloudflare account use Ollama too.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -42,6 +43,9 @@ const ALIAS = 'wordsmith-scribe';
 const ALIAS_CONTEXT = 16_384;
 // Matches TEMPERATURE in src/lib/scribe-llm.js.
 const ALIAS_TEMPERATURE = 0.2;
+// Scribe's request options (src/lib/scribe-llm.js): skip hidden reasoning, keep the answer short.
+const NO_REASONING = 'none';
+const MAX_ANSWER_TOKENS = 800;
 // Models that can't write tickets (NOT_CHAT in src/lib/scribe-llm.js).
 const NOT_CHAT = /embed|whisper|rerank|tts/i;
 // New models that only hear or speak; Scribe needs one that writes.
@@ -82,6 +86,8 @@ const FLAGS = new Set(process.argv.slice(2));
 const SCAN_ONLY = FLAGS.has('--scan');
 const LIST_ONLY = FLAGS.has('--list');
 const ASSUME_YES = FLAGS.has('--yes');
+const PREVIEW_FLAG = '--preview=';
+const PREVIEW_URL = process.argv.find((arg) => arg.startsWith(PREVIEW_FLAG))?.slice(PREVIEW_FLAG.length) ?? '';
 
 const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -398,7 +404,7 @@ async function scan() {
 
 /** Makes sure Ollama answers wordsmith's web and desktop app, restarting it when its allowed sites change. @param {string} program @param {string} host */
 async function allowWordsmith(program, host) {
-  const preview = await ask('\nPaste one PR preview URL to let previews use Ollama too (Enter to skip):', '');
+  const preview = PREVIEW_URL || await ask('\nPaste one PR preview URL to let previews use Ollama too (Enter to skip):', '');
   // A preview lives at <branch>-wordsmith.<account>.workers.dev: allow that account's previews, not every workers.dev site.
   const previewOrigin = preview ? `https://*.${new URL(preview).hostname.split('.').slice(1).join('.')}` : '';
   const wanted = [...APP_ORIGINS, ...(previewOrigin ? [previewOrigin] : [])];
@@ -478,7 +484,8 @@ async function makeAlias(program, model) {
 async function tryModel(host, model) {
   console.log(`\nTrying ${model} on: "${SAMPLE_SPEECH}"`);
   const started = Date.now();
-  const body = { model, temperature: ALIAS_TEMPERATURE, stream: false, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SAMPLE_SYSTEM }, { role: 'user', content: SAMPLE_SPEECH }] };
+  // As Scribe asks (src/lib/scribe-llm.js): no hidden reasoning, a short answer.
+  const body = { model, temperature: ALIAS_TEMPERATURE, stream: false, response_format: { type: 'json_object' }, reasoning_effort: NO_REASONING, max_tokens: MAX_ANSWER_TOKENS, messages: [{ role: 'system', content: SAMPLE_SYSTEM }, { role: 'user', content: SAMPLE_SPEECH }] };
   const reply = await getJson(`${host}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, TEST_TIMEOUT_MS);
   const content = reply?.choices?.[0]?.message?.content;
   if (!content) return console.log('  No answer. Check `ollama ps` and the Ollama log.');

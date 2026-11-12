@@ -24,7 +24,6 @@
   "retry": "Retry",
   "settings": "Model",
   "endpoint": "Model server address",
-  "endpointHint": "Any OpenAI-compatible server on your machine. Ollama: http://localhost:11434/v1. LM Studio: http://localhost:1234/v1.",
   "model": "Model",
   "modelPlaceholder": "e.g. qwen3:8b",
   "find": "Find models",
@@ -40,7 +39,35 @@
     "model": "Could not reach your model ({detail}). Your words are kept and will be sent on Retry.",
     "model-setup": "No model server was found on this machine. Start Ollama or LM Studio, or set a server and model below, then Scribe can write tickets.",
     "timeout": "Your model took too long to answer. Your words are kept and will be sent on Retry.",
-    "cors": "If the server is running, it may be refusing this site. For Ollama, set OLLAMA_ORIGINS to this site's address and restart it."
+    "cors": "If the server is running, it may be refusing this site: see \"Can't connect\" under the model settings.",
+    "allowance": "{detail}"
   },
-  "pill": "Scribe is listening. Open Scribe"
+  "pill": "Scribe is listening. Open Scribe",
+  "provider": "Model from",
+  "cloudModel": "Cloud model",
+  "cloudUsage": "Today: {used} of {limit} neurons",
+  "cloudUsageHint": "Your daily allowance resets at midnight UTC. A request usually costs 3 to 8 neurons.",
+  "cloudSignIn": "Sign in to use wordsmith cloud.",
+  "cloudUnavailable": "wordsmith cloud is not set up on this server.",
+  "key": "API key",
+  "keyPlaceholder": "Only if the server needs one",
+  "privacyCloud": "Your browser turns speech into text (Chrome, Edge and Safari use their maker's speech service for that). With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "help": {
+    "title": "Can't connect to a model on this computer?",
+    "intro": "Your browser only lets a website talk to a model server on your computer if that server allows the site. Ollama allows only the sites listed in its OLLAMA_ORIGINS setting, so add this one and restart Ollama.",
+    "site": "This site",
+    "allow": "Allow",
+    "windows": "Windows: run in PowerShell, then quit Ollama from the tray and open it again",
+    "mac": "macOS: run in Terminal, then quit Ollama from the menu bar and open it again",
+    "linux": "Linux: add this to the service, then restart it",
+    "keep": "This replaces what OLLAMA_ORIGINS held before: keep any sites you had listed, separated by commas.",
+    "script": "Or, from a copy of the wordsmith repo, one command sets up Ollama, a model and this setting:",
+    "chrome": "Chrome and Edge may ask to let this site reach devices on your local network: allow it.",
+    "lmstudio": "LM Studio: in the Developer tab, open Server Settings and turn on Enable CORS.",
+    "llamacpp": "llama.cpp: llama-server answers any site unless started with its own --cors settings.",
+    "check": "Check again",
+    "checking": "Checking…",
+    "copy": "Copy",
+    "copied": "Copied"
+  }
 }

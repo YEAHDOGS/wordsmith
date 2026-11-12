@@ -47,6 +47,18 @@ For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api`
 - Login, token creation, uploads, PR refreshes and agent writes are rate limited. Queries and sync batches are bounded. The app polls once a minute, and only while visible.
 - If the `ATTACHMENTS` binding is missing, attachments switch off (503) and nothing else changes.
 
+## Scribe: talk, and tickets write themselves
+
+Scribe (beta, the mic page) turns what you say into tickets while you talk. Speech becomes text in the browser (or, in the desktop apps, on a local speech model). Each finished thought then goes to a language model, which answers in JSON with the tickets to create or update; the app makes those changes like any edit, so the model never needs wordsmith's API. Pick where the model runs under **Model from** in Scribe's settings (the list is `src/lib/scribe-providers.json`):
+
+- **wordsmith cloud**: Cloudflare Workers AI through `POST /api/scribe`. No setup beyond signing in. The Worker builds the prompt itself (`src/lib/scribe-llm.js`, shared with the app), runs only the models in `src/lib/scribe-cloud-models.json`, and keeps a daily allowance per person and for everyone in D1 (`scribe_usage`), sized in `wrangler.jsonc` so every environment together stays under the 10,000 free neurons a day.
+- **Ollama, LM Studio, llama.cpp**: a model on your own computer. `npm run scribe:ollama` installs Ollama if needed, finds what is already on the machine (other projects' models included), recommends a model that fits it, downloads it and wraps it as `wordsmith-scribe`. `--scan` and `--list` only report.
+- **Other**: any OpenAI-compatible chat server, with an optional API key that stays on the device.
+
+A website can only reach a model server on your computer if that server allows the site (CORS). Ollama allows localhost and the sites in `OLLAMA_ORIGINS`: add `https://wordsmith.dogs.red`, `http://tauri.localhost` for the Windows desktop app, and `https://*.<account>.workers.dev` for PR previews, then restart Ollama. `npm run scribe:ollama -- --preview=<a preview URL>` does all of it, and Scribe's settings show the exact commands for the site you are on under **Can't connect**.
+
+Requests stay small: filler and recognizer noise are never sent, fewer than four meaningful words wait for more, a thought goes out after a 2.5 second pause, each request carries at most 12 tickets with short previews, and models are asked to skip hidden reasoning (about 50 times fewer tokens) and to answer in at most 800 tokens.
+
 ## Layout
 
 - `src/`: the Svelte web app (the product).

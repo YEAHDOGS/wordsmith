@@ -1,13 +1,32 @@
 // Scribe's conversation with the language model, the parts with no state: the instructions, the message for one
 // stretch of speech, the request to an OpenAI-compatible endpoint (Ollama, LM Studio, llama.cpp and others serve
-// /v1/chat/completions on the owner's own machine), and reading the answer back into checked actions.
+// /v1/chat/completions), and reading the answer back into checked actions. wordsmith's Worker builds the same
+// messages for wordsmith cloud (api/functions/api/scribe.js), so the prompt and its limits live only here.
 // The model answers in JSON rather than tool calls, because small local models follow a JSON shape far more reliably.
+// It is never told about wordsmith's API: it only says what to create or update, and the app makes those changes.
 import { FEATURE_STATES, MAX_BODY, MAX_PRIORITY, MAX_TITLE, PRIORITY_LABELS } from './models.js';
 
 // Low, so the same speech gives the same tickets.
-const TEMPERATURE = 0.2;
-// How much of a ticket's body the model sees when deciding whether to update it.
-const BODY_PREVIEW = 240;
+export const TEMPERATURE = 0.2;
+// How much of a ticket's body the model sees when deciding whether to update it: enough to tell tickets apart.
+const BODY_PREVIEW = 120;
+// Tickets the model may update. Every request carries them, so they are most of its size.
+export const MAX_TICKETS = 12;
+// How much already-handled speech rides along as context.
+export const EARLIER_CHARS = 300;
+// The most speech one request carries; more waits for the next.
+export const MAX_SPEECH_CHARS = 2_000;
+// The longest a ticket title or project name may be in a request (the model only needs to recognize them).
+export const MAX_NAME_CHARS = 200;
+// The longest answer a request may produce. Ten tickets of JSON fit well inside; a model that rambles is cut off
+// rather than running up a bill.
+export const MAX_ANSWER_TOKENS = 800;
+// Tickets need no hidden reasoning first: asking for none answered about 40 times faster with about 50 times fewer
+// tokens in testing, and the tickets came out the same.
+const NO_REASONING = 'none';
+const BAD_REQUEST = 400;
+// Hesitations and thinking-aloud openers: a line made only of these asks for nothing.
+const FILLER = /^(u+[hm]+|e+r+m+|h+m+|m{2,}|a+h+|o+h+|ok(ay)?|so|yeah|well)$/i;
 // A local model that hasn't answered by now is stuck or still loading; the speech stays queued for the next try.
 const REQUEST_TIMEOUT_MS = 90_000;
 const MAX_ACTIONS = 10;
@@ -121,24 +140,55 @@ export function parseActions(content, tickets) {
 /** The endpoint's base without a trailing slash: "http://localhost:11434/v1". @param {string} endpoint */
 const base = (endpoint) => endpoint.trim().replace(/\/+$/, '');
 
+/** Servers and models that refused the reasoning and length options ("endpoint model"), so they are asked plainly. */
+const plain = new Set();
+
 /**
- * Asks the model what to do with a stretch of speech.
- * @param {{ endpoint: string, model: string }} settings
+ * How many words in a stretch of speech carry meaning: not filler, not a stray letter or recognizer noise. Uses the
+ * browser's word breaking where it has one, so languages written without spaces count too.
+ * @param {string} text
+ */
+export function meaningfulWords(text) {
+  const words = typeof Intl !== 'undefined' && 'Segmenter' in Intl
+    ? [...new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)].filter((part) => part.isWordLike).map((part) => part.segment)
+    : text.split(/\s+/);
+  return words.filter((word) => {
+    const bare = word.replace(/[^\p{L}\p{N}]/gu, '');
+    return bare.length > 1 && !FILLER.test(bare);
+  }).length;
+}
+
+/**
+ * Asks a model on an OpenAI-compatible server what to do with a stretch of speech. It is asked to skip hidden
+ * reasoning and keep its answer short; a server or model that refuses those options is asked again without them.
+ * @param {{ endpoint: string, model: string, key?: string }} settings `key` is sent as a bearer token when set
  * @param {{ role: string, content: string }[]} messages
  * @param {AbortSignal} [cancel] gives the request up early (the session ended)
  * @returns {Promise<string>} the assistant's message
  */
-export async function askModel({ endpoint, model }, messages, cancel) {
+export async function askModel({ endpoint, model, key }, messages, cancel) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   cancel?.addEventListener('abort', () => controller.abort(), { once: true });
+  const known = `${base(endpoint)} ${model}`;
+  /** @type {Record<string, string>} */
+  const headers = { 'Content-Type': 'application/json' };
+  if (key?.trim()) headers.Authorization = `Bearer ${key.trim()}`;
+  const ask = (/** @type {boolean} */ lean) => fetch(`${base(endpoint)}/chat/completions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model, messages, temperature: TEMPERATURE, stream: false, response_format: { type: 'json_object' },
+      ...(lean ? { reasoning_effort: NO_REASONING, max_tokens: MAX_ANSWER_TOKENS } : {}),
+    }),
+    signal: controller.signal,
+  });
   try {
-    const response = await fetch(`${base(endpoint)}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, temperature: TEMPERATURE, stream: false, response_format: { type: 'json_object' } }),
-      signal: controller.signal,
-    });
+    let response = await ask(!plain.has(known));
+    if (response.status === BAD_REQUEST && !plain.has(known)) {
+      plain.add(known);
+      response = await ask(false);
+    }
     if (!response.ok) throw new Error(`The model server answered ${response.status}`);
     const content = (await response.json())?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') throw new Error('The model server sent no message');
@@ -152,10 +202,14 @@ export async function askModel({ endpoint, model }, messages, cancel) {
  * The models the server offers, for the settings picker.
  * @param {string} endpoint
  * @param {boolean} [quick] give up after PROBE_TIMEOUT_MS (used when looking for a server, not when asked to list one)
+ * @param {string} [key] sent as a bearer token when set
  * @returns {Promise<string[]>}
  */
-export async function listModels(endpoint, quick = false) {
-  const response = await fetch(`${base(endpoint)}/models`, quick ? { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) } : undefined);
+export async function listModels(endpoint, quick = false, key = '') {
+  const response = await fetch(`${base(endpoint)}/models`, {
+    headers: key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {},
+    ...(quick ? { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) } : {}),
+  });
   if (!response.ok) throw new Error(`The model server answered ${response.status}`);
   const { data } = await response.json();
   return Array.isArray(data) ? data.map((model) => String(model?.id ?? '')).filter(Boolean) : [];

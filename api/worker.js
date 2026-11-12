@@ -42,6 +42,7 @@ import * as v1Diagrams from './functions/api/v1/diagrams/index.js';
 import * as v1Diagram from './functions/api/v1/diagrams/[id].js';
 import * as v1ProjectContext from './functions/api/v1/projects/[project]/context.js';
 import * as mcp from './functions/api/mcp.js';
+import * as scribe from './functions/api/scribe.js';
 import * as sharedNote from './functions/n/[id].js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
@@ -97,6 +98,7 @@ const ROUTES = [
   ['/api/v1/designs/:id', v1Diagram, true],
   ['/api/v1/projects/:project/context', v1ProjectContext, true],
   ['/api/mcp', mcp, false],
+  ['/api/scribe', scribe, false],
 ];
 
 /**

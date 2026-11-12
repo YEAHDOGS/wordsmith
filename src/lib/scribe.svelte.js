@@ -6,25 +6,30 @@
 // One session for the whole app (the page and the floating pill share it), so it keeps running while you move
 // between pages and watch the board fill in. Settings stay on this device: a local model's address means nothing on
 // another machine.
+// The model can be any provider in scribe-providers.json: wordsmith cloud (Workers AI through wordsmith's Worker), a
+// model server on this machine, or any OpenAI-compatible server. Each provider remembers its own address and model.
 import { auth } from './auth.svelte.js';
+import { api } from './api.js';
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
-import { NOT_CHAT, askModel, listModels, parseActions, scribeMessages } from './scribe-llm.js';
+import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
+import PROVIDERS from './scribe-providers.json';
 
 const SETTINGS_KEY = 'ws_scribe';
-// Ollama's OpenAI-compatible address; LM Studio uses http://localhost:1234/v1.
-const DEFAULT_ENDPOINT = 'http://localhost:11434/v1';
-// Where model servers listen by default on your own machine: Ollama, LM Studio, llama.cpp. Looked for when no model
-// is set, so a running server needs no setup at all.
-const LOCAL_ENDPOINTS = [DEFAULT_ENDPOINT, 'http://localhost:1234/v1', 'http://localhost:8080/v1'];
-// A thought is sent this long after its last word, so a breath mid-sentence doesn't split it.
-const FLUSH_MS = 1_200;
+const CLOUD_PATH = '/api/scribe';
+const CLOUD_KIND = 'wordsmith';
+const DEFAULT_PROVIDER = 'ollama';
+const CUSTOM_PROVIDER = 'custom';
+// What the Worker answers when this account's (or everyone's) wordsmith cloud allowance for today is used up.
+export const ALLOWANCE_CODE = 'scribe_allowance';
+// A thought is sent this long after its last word, so a breath mid-sentence doesn't split it, and each request carries
+// a whole thought rather than a phrase.
+const FLUSH_MS = 2_500;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
 const FLUSH_CHARS = 600;
-// Tickets the model may update: the ones this session touched, then the project's most recently changed open ones.
-const MAX_TICKETS = 25;
-// How much already-handled speech rides along as context.
-const EARLIER_CHARS = 600;
+// Speech with fewer meaningful words than this waits, however long the pause, and goes out with whatever is said next
+// ("and the login page" on its own asks for nothing yet). Stopping the mic sends it anyway.
+const MIN_WORDS = 4;
 const MAX_LOG = 100;
 const MAX_TRANSCRIPT = 200;
 // Recognition errors that are part of normal use: silence, and our own stop().
@@ -36,13 +41,37 @@ const UNDO_FIELDS = ['title', 'body', 'priority_level', 'state'];
 
 const Recognition = typeof window === 'undefined' ? null : /** @type {any} */ (window).SpeechRecognition || /** @type {any} */ (window).webkitSpeechRecognition || null;
 
-/** @returns {{ endpoint: string, model: string, projectId: string }} */
+/**
+ * @typedef {{ id: string, kind: 'wordsmith' | 'openai', name: string, note: string, endpoint?: string, local?: boolean, key?: boolean }} Provider
+ * @typedef {{ endpoint: string, model: string, key: string }} Connection what one provider is set to
+ * @typedef {Connection & { provider: string, projectId: string, saved: Record<string, Connection> }} Settings
+ */
+
+/** @type {Provider[]} */
+export const SCRIBE_PROVIDERS = PROVIDERS.providers;
+
+/** A provider by id, or the default one. @param {string} id */
+export function providerOf(id) {
+  return SCRIBE_PROVIDERS.find((provider) => provider.id === id) ?? /** @type {Provider} */ (SCRIBE_PROVIDERS.find((provider) => provider.id === DEFAULT_PROVIDER));
+}
+
+/** What a provider is set to before you change anything. @param {Provider} provider @returns {Connection} */
+function fresh(provider) {
+  return { endpoint: provider.endpoint ?? '', model: '', key: '' };
+}
+
+/** @returns {Settings} */
 function loadSettings() {
+  /** @type {Record<string, any>} */
+  let stored = {};
   try {
-    return { endpoint: DEFAULT_ENDPOINT, model: '', projectId: '', ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
   } catch {
-    return { endpoint: DEFAULT_ENDPOINT, model: '', projectId: '' };
+    // Unreadable settings start over.
   }
+  // Settings from before providers existed name only an address: the provider is whichever one lives there.
+  const provider = stored.provider ? providerOf(stored.provider) : SCRIBE_PROVIDERS.find((candidate) => candidate.endpoint && candidate.endpoint === stored.endpoint) ?? providerOf(stored.endpoint ? CUSTOM_PROVIDER : DEFAULT_PROVIDER);
+  return { ...fresh(provider), saved: {}, projectId: '', ...stored, provider: provider.id };
 }
 
 class Scribe {
@@ -58,9 +87,14 @@ class Scribe {
   interim = $state('');
   /** What Scribe did, newest first. @type {LogEntry[]} */
   log = $state([]);
-  /** 'mic-denied', 'mic', 'model' or ''; `detail` carries the model's message. */
+  /** 'mic-denied', 'mic', 'model', 'allowance' (wordsmith cloud's daily allowance is used up) or ''; `detail` carries the message. */
   problem = $state('');
   detail = $state('');
+  /**
+   * wordsmith cloud as the Worker describes it: its models and today's allowance. Null until asked (loadCloud).
+   * @type {{ available: boolean, models: { id: string, name: string, note: string }[], default: string, used: number, limit: number } | null}
+   */
+  cloud = $state(null);
 
   /** @type {any} */ #recognition = null;
   /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
@@ -71,35 +105,82 @@ class Scribe {
   /** Notes this session created or changed, most recent last. @type {string[]} */ #touched = [];
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
 
+  /** The provider Scribe sends speech to. */
+  get provider() {
+    return providerOf(this.settings.provider);
+  }
+
+  /** True when the provider can be asked: wordsmith cloud needs you signed in, every other one an address and a model. */
   get ready() {
+    if (this.provider.kind === CLOUD_KIND) return Boolean(auth.user);
     return Boolean(this.settings.endpoint.trim() && this.settings.model.trim());
   }
 
   /**
    * With no model chosen yet, looks for a model server already running on this machine and picks its first chat model,
-   * so Scribe works without typing an address. Leaves a chosen model alone.
+   * so Scribe works without typing an address. Leaves a chosen model, and wordsmith cloud, alone.
    * @returns {Promise<boolean>} true when one was found and set
    */
   async detect() {
-    if (this.settings.model.trim()) return false;
-    for (const endpoint of new Set([this.settings.endpoint, ...LOCAL_ENDPOINTS])) {
+    if (this.provider.kind === CLOUD_KIND || this.settings.model.trim()) return false;
+    const local = SCRIBE_PROVIDERS.filter((provider) => provider.local);
+    // The chosen provider first, then every other one on this machine.
+    for (const provider of [this.provider, ...local.filter((candidate) => candidate !== this.provider)]) {
+      const endpoint = provider === this.provider ? this.settings.endpoint : provider.endpoint ?? '';
+      if (!endpoint) continue;
       const models = await listModels(endpoint, true).catch(() => []);
       const model = models.find((name) => !NOT_CHAT.test(name));
       // Chosen by hand while we were looking: that wins.
-      if (this.settings.model.trim()) return false;
+      if (this.settings.model.trim() || this.provider.kind === CLOUD_KIND) return false;
       if (!model) continue;
+      if (provider !== this.provider) this.configure({ provider: provider.id });
       this.configure({ endpoint, model });
       return true;
     }
     return false;
   }
 
-  /** @param {Partial<{ endpoint: string, model: string, projectId: string }>} patch */
+  /**
+   * Changes settings. Switching provider keeps what the old one was set to and brings back what the new one had.
+   * @param {Partial<Settings>} patch
+   */
   configure(patch) {
-    this.settings = { ...this.settings, ...patch };
+    let next = { ...this.settings, ...patch };
+    if (patch.provider && patch.provider !== this.settings.provider) {
+      const { endpoint, model, key } = this.settings;
+      const saved = { ...this.settings.saved, [this.settings.provider]: { endpoint, model, key } };
+      next = { ...next, ...(saved[patch.provider] ?? fresh(providerOf(patch.provider))), saved };
+    }
+    this.settings = next;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+    if (this.provider.kind === CLOUD_KIND && !this.cloud) this.loadCloud();
     // Speech that was waiting for a model to be set goes out as soon as one is.
     if (this.problem === 'model' && !this.detail && this.ready) this.retry();
+  }
+
+  /** Asks the Worker for wordsmith cloud's models and today's allowance. Signed out, there is nothing to ask. */
+  async loadCloud() {
+    if (!auth.user) return;
+    try {
+      this.cloud = await api(CLOUD_PATH);
+    } catch {
+      this.cloud = { available: false, models: [], default: '', used: 0, limit: 0 };
+    }
+  }
+
+  /**
+   * Asks the chosen provider what to do with a turn of speech.
+   * @param {{ project: string, tickets: import('./scribe-llm.js').Ticket[], earlier: string, speech: string }} turn
+   * @param {AbortSignal} cancel
+   * @returns {Promise<string>} the model's answer
+   */
+  async #ask(turn, cancel) {
+    if (this.provider.kind !== CLOUD_KIND) return askModel(this.settings, scribeMessages(turn), cancel);
+    const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body, state, priority_level }));
+    const answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.settings.model || undefined } });
+    // A session reset while this was in flight drops the answer by itself (#flush checks its run).
+    if (this.cloud) this.cloud = { ...this.cloud, used: answer.used, limit: answer.limit };
+    return answer.content;
   }
 
   /** One press: start listening, or stop. Speech already heard is still sent after a stop. */
@@ -189,15 +270,21 @@ class Scribe {
     }
   }
 
-  /** Takes one finished line of speech (or typed text) and queues it for the model. @param {string} text */
-  hear(text) {
+  /**
+   * Takes one finished line of speech (or typed text) and queues it for the model. A line of only filler ("um", "okay
+   * so") or recognizer noise shows in the transcript but is never sent. Typed text goes at once.
+   * @param {string} text @param {boolean} [typed]
+   */
+  hear(text, typed = false) {
     const line = text.trim();
     if (!line) return;
-    this.transcript.push({ id: crypto.randomUUID(), text: line, handled: false });
+    const meaningful = meaningfulWords(line) > 0;
+    this.transcript.push({ id: crypto.randomUUID(), text: line, handled: !meaningful });
     if (this.transcript.length > MAX_TRANSCRIPT) this.transcript.shift();
+    if (!meaningful) return;
     this.#pending = `${this.#pending} ${line}`.trim();
     clearTimeout(this.#timer);
-    if (this.#pending.length >= FLUSH_CHARS) this.#flush();
+    if (typed || this.#pending.length >= FLUSH_CHARS) this.#flush(true);
     else this.#timer = setTimeout(() => this.#flush(), FLUSH_MS);
   }
 
@@ -210,23 +297,31 @@ class Scribe {
     return [...touched, ...recent].slice(0, MAX_TICKETS).map((note, index) => ({ ref: `T${index + 1}`, id: note.id, title: note.title, body: note.body, state: note.state, priority_level: note.priority_level }));
   }
 
-  /** Sends the waiting speech to the model, one request at a time; speech that arrives meanwhile goes in the next. */
-  async #flush() {
+  /**
+   * Sends the waiting speech to the model, one request at a time; speech that arrives meanwhile goes in the next.
+   * While listening, too few meaningful words wait for more; `force` (stopped, typed, retried) sends them anyway.
+   * @param {boolean} [force]
+   */
+  async #flush(force = false) {
     clearTimeout(this.#timer);
     if (this.thinking || !this.#pending) return;
+    if (!force && this.listening && meaningfulWords(this.#pending) < MIN_WORDS) return;
     if (!this.ready) {
       this.problem = 'model';
       this.detail = '';
       return;
     }
-    const speech = this.#pending;
-    const lines = this.transcript.filter((line) => !line.handled).map((line) => line.id);
+    // A very long backlog goes a piece at a time, cut between words.
+    const cut = this.#pending.length <= MAX_SPEECH_CHARS ? this.#pending.length : this.#pending.lastIndexOf(' ', MAX_SPEECH_CHARS) + 1 || MAX_SPEECH_CHARS;
+    const speech = this.#pending.slice(0, cut).trim();
+    this.#pending = this.#pending.slice(cut).trim();
+    // Lines are marked sent once nothing of them is left waiting.
+    const lines = this.#pending ? [] : this.transcript.filter((line) => !line.handled).map((line) => line.id);
     const run = this.#run;
     // The account the speech belongs to: its answer is only ever written while that account is still the one signed in.
     const owner = auth.user?.id;
     const request = new AbortController();
     this.#request = request;
-    this.#pending = '';
     this.thinking = true;
     try {
       const tickets = this.#tickets();
@@ -234,7 +329,7 @@ class Scribe {
       // A project trashed since it was picked takes no more tickets.
       if (this.settings.projectId && (!target || target.deleted_at)) this.configure({ projectId: '' });
       const project = target && !target.deleted_at ? target.name : '';
-      const answer = await askModel(this.settings, scribeMessages({ project, tickets, earlier: this.#earlier, speech }), request.signal);
+      const answer = await this.#ask({ project, tickets, earlier: this.#earlier, speech }, request.signal);
       // The session was reset, or the account changed, while the model was thinking: this answer is for someone gone.
       if (run !== this.#run || auth.user?.id !== owner) return;
       this.#apply(parseActions(answer, tickets), tickets);
@@ -246,18 +341,20 @@ class Scribe {
       if (run !== this.#run) return;
       // Keep the speech: it goes out again with whatever is said next, or on Retry.
       this.#pending = `${speech} ${this.#pending}`.trim();
-      this.problem = 'model';
-      this.detail = /** @type {Error} */ (error).name === 'AbortError' ? 'timeout' : /** @type {Error} */ (error).message;
+      const failure = /** @type {Error & { code?: string }} */ (error);
+      this.problem = failure.code === ALLOWANCE_CODE ? 'allowance' : 'model';
+      this.detail = failure.name === 'AbortError' ? 'timeout' : failure.message;
     } finally {
       if (run === this.#run) this.thinking = false;
     }
-    if (this.#pending && !this.problem) this.#flush();
+    // Speech that came in meanwhile follows; once the mic is off, short speech no longer waits for more.
+    if (this.#pending && !this.problem) this.#flush(!this.listening);
   }
 
   /** Sends speech that is still waiting after a failed request. */
   retry() {
     this.problem = '';
-    this.#flush();
+    this.#flush(true);
   }
 
   /** True while speech is waiting on a failed request. */
