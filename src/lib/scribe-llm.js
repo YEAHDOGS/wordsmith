@@ -51,6 +51,7 @@ Rules:
 - title: an instruction under 80 characters, like "Add offline mode to the editor".
 - body: Markdown. What they asked for in their own meaning, then acceptance criteria as a short checklist when they gave any. Never invent requirements they did not say.
 - If the speech refines, corrects or adds to a ticket in the list, update that ticket by its ref instead of creating a new one. Use "append" to add a paragraph, "body" only to rewrite the whole body. Leave out every field you are not changing.
+- Update only a ticket the speech is clearly about (it names the same feature or problem). New work gets a create, even when a listed ticket is in the same area. Never retitle a ticket to mean something else.
 - priority: 0 none, 1 low, 2 normal, 3 high, 4 urgent, 5 critical. Set it only when they say how important it is.
 - state: ${FEATURE_STATES.join(', ')}. Set it only when they say work started or finished.
 - Filler, half sentences, thinking aloud and anything that is not about work to do: {"actions":[{"op":"none"}]}.

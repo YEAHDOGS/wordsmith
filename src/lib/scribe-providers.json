@@ -13,7 +13,7 @@
       "name": "Ollama",
       "endpoint": "http://localhost:11434/v1",
       "local": true,
-      "note": "A model on this computer. Set up with `npm run scribe:ollama`, or install Ollama from ollama.com."
+      "note": "A model on this computer. Set it up with the repo's scribe:ollama script, or install Ollama from ollama.com and pull a model."
     },
     {
       "id": "lmstudio",
