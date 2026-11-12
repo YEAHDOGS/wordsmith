@@ -32,9 +32,13 @@ export const ALLOWANCE_CODE = 'scribe_allowance';
 const FLUSH_MS = 2_500;
 // Long monologues are sent in pieces once this much text has piled up, without waiting for a pause.
 const FLUSH_CHARS = 600;
-// After a failed request, speech is kept and tried again after these waits (then the last one, over and over), so an
-// outage doesn't turn every pause into another failed request. Retry sends at once.
+// After a failed request, speech is kept and tried again by itself after each of these waits, then only on Retry: an
+// outage costs at most this many tries per device, never one for every pause. Retry sends at once and starts over.
 const RETRY_BACKOFF_MS = [5_000, 15_000, 45_000, 120_000];
+// Failures worth trying again by themselves: a model that is busy, down or rate limited. Other refusals (a model that
+// is no longer offered, a request too large, a server not set up) answer the same every time, so they wait for Retry.
+const TOO_MANY_REQUESTS = 429;
+const SERVER_ERROR = 500;
 // Speech with fewer meaningful words than this waits, however long the pause, and goes out with whatever is said next
 // ("and the login page" on its own asks for nothing yet). Stopping the mic sends it anyway.
 const MIN_WORDS = 4;
@@ -192,6 +196,16 @@ class Scribe {
     if (this.problem === 'model' && !this.detail && this.ready) this.retry();
   }
 
+  /**
+   * The wordsmith cloud model to ask for: the one chosen, unless it is no longer offered (then the Worker's default).
+   * Before the list has loaded, the chosen one is sent and the Worker checks it.
+   */
+  get cloudModel() {
+    const chosen = this.settings.model;
+    if (!chosen || !this.cloud?.models.length) return chosen;
+    return this.cloud.models.some((model) => model.id === chosen) ? chosen : this.cloud.default;
+  }
+
   /** Asks the Worker for wordsmith cloud's models and today's allowance. Signed out, there is nothing to ask. */
   loadCloud() {
     if (!auth.user) return Promise.resolve();
@@ -227,7 +241,7 @@ class Scribe {
     /** @type {{ content: string, used: number, limit: number }} */
     let answer;
     try {
-      answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.settings.model || undefined }, signal: controller.signal });
+      answer = await api(CLOUD_PATH, { method: 'POST', body: { ...turn, tickets, model: this.cloudModel || undefined }, signal: controller.signal });
     } finally {
       clearTimeout(timer);
       cancel.removeEventListener('abort', giveUp);
@@ -304,6 +318,9 @@ class Scribe {
     this.#live = null;
     clearTimeout(this.#retryTimer);
     this.#failures = 0;
+    // The allowance shown belongs to the account that is leaving; the next one loads its own.
+    this.cloud = null;
+    this.cloudError = false;
     this.#request?.abort();
     this.#request = null;
     clearTimeout(this.#timer);
@@ -389,16 +406,21 @@ class Scribe {
       if (run !== this.#run) return;
       // Keep the speech: it goes out again with whatever is said next, or on Retry.
       this.#pending = `${speech} ${this.#pending}`.trim();
-      const failure = /** @type {Error & { code?: string }} */ (error);
+      const failure = /** @type {Error & { code?: string, status?: number }} */ (error);
       this.problem = failure.code === ALLOWANCE_CODE ? 'allowance' : 'model';
       this.detail = failure.name === 'AbortError' ? 'timeout' : failure.message;
-      // A spent allowance won't come back before midnight UTC; anything else is tried again, waiting longer each time.
-      if (this.problem === 'model') {
-        const wait = RETRY_BACKOFF_MS[Math.min(this.#failures, RETRY_BACKOFF_MS.length - 1)];
+      // No status means the request never got an answer (offline, timed out): worth another try, like 5xx and 429.
+      const passing = !failure.status || failure.status === TOO_MANY_REQUESTS || failure.status >= SERVER_ERROR;
+      // A spent allowance won't come back before midnight UTC; a passing failure is tried again a few times, waiting
+      // longer each time, then waits for Retry.
+      if (this.problem === 'model' && passing && this.#failures < RETRY_BACKOFF_MS.length) {
+        const wait = RETRY_BACKOFF_MS[this.#failures];
         this.#failures++;
         clearTimeout(this.#retryTimer);
         this.#retryTimer = setTimeout(() => {
-          if (run === this.#run && this.problem === 'model') this.retry();
+          if (run !== this.#run || this.problem !== 'model') return;
+          this.problem = '';
+          this.#flush(true);
         }, wait);
       }
     } finally {
@@ -411,6 +433,7 @@ class Scribe {
   /** Sends speech that is still waiting after a failed request. */
   retry() {
     clearTimeout(this.#retryTimer);
+    this.#failures = 0;
     this.problem = '';
     this.#flush(true);
   }

@@ -194,7 +194,7 @@ export async function askModel({ endpoint, model, key }, messages, cancel) {
       plain.add(known);
       response = await ask(false);
     }
-    if (!response.ok) throw new Error(`The model server answered ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`The model server answered ${response.status}`), { status: response.status });
     const content = (await response.json())?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') throw new Error('The model server sent no message');
     return content;

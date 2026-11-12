@@ -124,7 +124,7 @@
     <p class="text-xs leading-relaxed text-ink-muted">{TEXT.cloudUnavailable}</p>
   {:else if scribe.cloud}
     <label class={label}>{TEXT.cloudModel}
-      <select class={field} value={scribe.settings.model || scribe.cloud.default} onchange={(event) => scribe.configure({ model: event.currentTarget.value })}>
+      <select class={field} value={scribe.cloudModel || scribe.cloud.default} onchange={(event) => scribe.configure({ model: event.currentTarget.value })}>
         {#each scribe.cloud.models as model (model.id)}<option value={model.id}>{model.name}: {model.note}</option>{/each}
       </select>
     </label>
