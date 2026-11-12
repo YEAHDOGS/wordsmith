@@ -241,7 +241,8 @@ class Scribe {
   async #ask(turn, cancel) {
     if (this.provider.kind !== CLOUD_KIND) return askModel(this.settings, scribeMessages(turn), cancel);
     const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body: body.slice(0, MAX_TICKET_BODY), state, priority_level }));
-    // Once per page: the model list, so a saved model that is no longer offered falls back to the default (cloudModel).
+    // Until the model list has loaded (first request, after a reset, or while it fails), load it first, so a saved
+    // model that is no longer offered falls back to the default (cloudModel).
     if (!this.cloud) await this.loadCloud();
     // Reset while the list loaded (the account changed): this speech belongs to nobody now, and must not go out
     // under the next account. The abort already happened, so a listener added now would never hear it.
