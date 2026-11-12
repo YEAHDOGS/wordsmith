@@ -14,6 +14,7 @@
     "cloudflare:dev": "npx --yes wrangler dev --persist-to .wrangler/state --port 8788 --local-upstream localhost:8788",
     "cloudflare:db:migrate:local": "npx --yes wrangler d1 migrations apply wordsmith-production --local --persist-to .wrangler/state",
     "seed:staging": "node scripts/seed-staging.js",
+    "scribe:ollama": "node scripts/scribe-ollama.js",
     "cloudflare:deploy:preview": "npx --yes wrangler deploy --env preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "node scripts/build-platforms.js windows macos linux",
