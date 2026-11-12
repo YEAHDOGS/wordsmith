@@ -18,7 +18,8 @@ import PROVIDERS from './scribe-providers.json';
 const SETTINGS_KEY = 'ws_scribe';
 const CLOUD_PATH = '/api/scribe';
 const CLOUD_KIND = 'wordsmith';
-const DEFAULT_PROVIDER = 'ollama';
+// New setups start on wordsmith cloud: it needs nothing installed and works on phones.
+const DEFAULT_PROVIDER = 'cloud';
 const CUSTOM_PROVIDER = 'custom';
 // What the Worker answers when this account's (or everyone's) wordsmith cloud allowance for today is used up.
 export const ALLOWANCE_CODE = 'scribe_allowance';
@@ -69,9 +70,17 @@ function loadSettings() {
   } catch {
     // Unreadable settings start over.
   }
-  // Settings from before providers existed name only an address: the provider is whichever one lives there.
-  const provider = stored.provider ? providerOf(stored.provider) : SCRIBE_PROVIDERS.find((candidate) => candidate.endpoint && candidate.endpoint === stored.endpoint) ?? providerOf(stored.endpoint ? CUSTOM_PROVIDER : DEFAULT_PROVIDER);
-  return { ...fresh(provider), saved: {}, projectId: '', ...stored, provider: provider.id };
+  if (stored.provider) {
+    const provider = providerOf(stored.provider);
+    return { ...fresh(provider), saved: {}, projectId: '', ...stored, provider: provider.id };
+  }
+  // Settings from before providers existed name only an address and a model. A model that was set keeps its server
+  // (whichever provider lives at that address); with none set, Scribe starts on the default, wordsmith cloud.
+  const provider = stored.model
+    ? SCRIBE_PROVIDERS.find((candidate) => candidate.endpoint && candidate.endpoint === stored.endpoint) ?? providerOf(CUSTOM_PROVIDER)
+    : providerOf(DEFAULT_PROVIDER);
+  const kept = stored.model ? { endpoint: String(stored.endpoint ?? ''), model: String(stored.model) } : {};
+  return { ...fresh(provider), ...kept, saved: {}, projectId: String(stored.projectId ?? ''), provider: provider.id };
 }
 
 class Scribe {

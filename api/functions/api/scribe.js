@@ -2,7 +2,9 @@
 // of their own. The prompt is built here from the same code the app uses for local models (src/lib/scribe-llm.js), so
 // the route answers Scribe's question and nothing else, and every field is bounded. Each account gets a daily
 // allowance of Workers AI neurons, and all accounts together stay under SCRIBE_DAILY_NEURONS, so Scribe can never
-// spend the account's whole free allowance.
+// spend the account's whole free allowance. Each request reserves its worst-case cost (the longest answer allowed) in the
+// same statement that checks the cap, so requests arriving together can never carry the total past it; the
+// reservation is then corrected to what the request really used, and given back if it fails.
 // GET  /api/scribe -> { available, models: [{ id, name, note }], default, used, limit }
 // POST /api/scribe { model?, project, tickets: [{ ref, title, body, state, priority_level }], earlier, speech }
 //   -> { content, used, limit }   429 { code: 'scribe_allowance' } once today's allowance is spent
@@ -19,6 +21,12 @@ const ALLOWANCE_CODE = 'scribe_allowance';
 const DEFAULT_USER_NEURONS = 1_500;
 const DEFAULT_DAILY_NEURONS = 4_000;
 const TOKENS_PER_MILLION = 1_000_000;
+// Fewer characters per token than any model really uses, so the input estimate is never too low.
+const CHARS_PER_TOKEN = 3;
+// Changes a row of today's usage by ?3 neurons and ?4 requests: negative gives a reservation back.
+const ADJUST = 'UPDATE scribe_usage SET neurons = MAX(0, neurons + ?3), requests = MAX(0, requests + ?4) WHERE day = ?1 AND user_id = ?2';
+const USED_UP_MINE = 'Today\'s wordsmith cloud allowance is used up. It resets at midnight UTC; a local model keeps working meanwhile.';
+const USED_UP_EVERYONE = 'wordsmith cloud is out of allowance for today. It resets at midnight UTC; a local model keeps working meanwhile.';
 // A person talking sends a request every few seconds at most; this stops a runaway loop well before the allowance does.
 const REQUEST_LIMIT = 30;
 const REQUEST_WINDOW_MS = 60_000;
@@ -41,6 +49,21 @@ function limits(env) {
     user: Number(env.SCRIBE_USER_NEURONS) || DEFAULT_USER_NEURONS,
     everyone: Number(env.SCRIBE_DAILY_NEURONS) || DEFAULT_DAILY_NEURONS,
   };
+}
+
+/**
+ * Adds `neurons` to a row of today's usage only if the total stays within `cap`, in one statement, so two requests
+ * can't both slip under it. Returns false when it would go over.
+ * @param {Record<string, any>} env @param {string} day @param {string} userId @param {number} neurons @param {number} cap
+ */
+async function reserve(env, day, userId, neurons, cap) {
+  if (neurons > cap) return false;
+  const row = await env.DB.prepare(
+    `INSERT INTO scribe_usage (day, user_id, neurons, requests) VALUES (?1, ?2, ?3, 1)
+     ON CONFLICT(day, user_id) DO UPDATE SET neurons = neurons + ?3, requests = requests + 1 WHERE neurons + ?3 <= ?4
+     RETURNING neurons`,
+  ).bind(day, userId, neurons, cap).first();
+  return Boolean(row);
 }
 
 /** Today's usage for this account and for everyone. @param {Record<string, any>} env @param {string} userId @param {string} day */
@@ -96,32 +119,42 @@ export async function onRequestPost(context) {
   const speech = text(body.speech, MAX_SPEECH_CHARS).trim();
   if (!speech) throw new HttpError(400, 'Send some speech');
 
-  const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
-  const cap = limits(env);
-  const spent = await usage(env, user.id, day);
-  if (spent.mine >= cap.user) throw new HttpError(429, 'Today\'s wordsmith cloud allowance is used up. It resets at midnight UTC; a local model keeps working meanwhile.', ALLOWANCE_CODE);
-  if (spent.everyone >= cap.everyone) throw new HttpError(429, 'wordsmith cloud is out of allowance for today. It resets at midnight UTC; a local model keeps working meanwhile.', ALLOWANCE_CODE);
-
   const messages = scribeMessages({ project: text(body.project, MAX_NAME_CHARS), tickets: tickets(body.tickets), earlier: text(body.earlier, EARLIER_CHARS), speech });
   // The switch that turns this model's hidden reasoning off, where it is a few words at the end of the request.
   if (model.suffix) messages[messages.length - 1].content += model.suffix;
-  const answer = await env.AI.run(model.id, {
-    messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
-  });
+
+  // The most this request can cost: every character a token and the longest answer allowed.
+  const chars = messages.reduce((sum, message) => sum + message.content.length, 0);
+  const worst = (Math.ceil(chars / CHARS_PER_TOKEN) * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
+  const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
+  const cap = limits(env);
+  if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
+  if (!(await reserve(env, day, user.id, worst, cap.user))) {
+    await env.DB.prepare(ADJUST).bind(day, EVERYONE, -worst, -1).run();
+    throw new HttpError(429, USED_UP_MINE, ALLOWANCE_CODE);
+  }
+
+  let answer;
+  try {
+    answer = await env.AI.run(model.id, {
+      messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
+    });
+  } catch (error) {
+    // Nothing was used: the reservation goes back.
+    await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, -worst, -1), env.DB.prepare(ADJUST).bind(day, user.id, -worst, -1)]);
+    throw error;
+  }
   const content = answer?.choices?.[0]?.message?.content ?? answer?.response ?? '';
   const tokensIn = Number(answer?.usage?.prompt_tokens) || 0;
   const tokensOut = Number(answer?.usage?.completion_tokens) || 0;
   const neurons = Number(answer?.usage?.neurons) || (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION;
-
-  const count = env.DB.prepare(
-    `INSERT INTO scribe_usage (day, user_id, neurons, requests) VALUES (?1, ?2, ?3, 1)
-     ON CONFLICT(day, user_id) DO UPDATE SET neurons = neurons + ?3, requests = requests + 1`,
-  );
-  await env.DB.batch([count.bind(day, user.id, neurons), count.bind(day, EVERYONE, neurons)]);
+  // The reservation becomes what the request really cost.
+  await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, neurons - worst, 0), env.DB.prepare(ADJUST).bind(day, user.id, neurons - worst, 0)]);
   if (Math.random() < CLEANUP_CHANCE) {
     const oldest = new Date(Date.now() - KEEP_DAYS * DAY_MS).toISOString().slice(0, ISO_DATE_LENGTH);
     await env.DB.prepare('DELETE FROM scribe_usage WHERE day < ?').bind(oldest).run();
   }
   if (typeof content !== 'string' || !content) throw new HttpError(502, 'The model sent no answer; your words are kept for the next try');
-  return json({ content, used: Math.round(spent.mine + neurons), limit: cap.user });
+  const { mine } = await usage(env, user.id, day);
+  return json({ content, used: Math.round(mine), limit: cap.user });
 }
