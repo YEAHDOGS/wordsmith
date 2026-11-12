@@ -1,0 +1,18 @@
+{
+  "$comment": "Models scripts/scribe-ollama.js offers for Scribe, best first. Each is checked live against Ollama's registry before it is shown (a tag that is gone is skipped) and sized from its manifest. Picked for following instructions and answering in JSON quickly; coding-only and embedding models are left out. The newest tool-capable models on ollama.com are listed live beside these.",
+  "models": [
+    { "name": "qwen3.8:27b", "note": "Newest Qwen. Best tickets; needs a 24 GB graphics card" },
+    { "name": "qwen3.6:35b-a3b", "note": "Mixture of experts: only 3B active, so quick for its size with lots of memory" },
+    { "name": "gemma4:26b", "note": "Google's mixture of experts, 4B active; strong JSON" },
+    { "name": "gpt-oss:20b", "note": "OpenAI's open model, 3.6B active; good on 16 GB" },
+    { "name": "ministral-3:14b", "note": "Mistral, fast and tidy JSON" },
+    { "name": "qwen3.5:9b", "note": "The best for 8 GB graphics cards" },
+    { "name": "gemma4:e4b", "note": "Small Gemma 4, runs on about 6 GB" },
+    { "name": "ministral-3:8b", "note": "Small Mistral" },
+    { "name": "qwen3.5:4b", "note": "Small and quick; good tickets on any recent laptop" },
+    { "name": "gemma4:e2b", "note": "Smallest Gemma 4" },
+    { "name": "qwen3:4b", "note": "Older Qwen, very light" },
+    { "name": "granite4:3b", "note": "IBM Granite, light and literal" },
+    { "name": "llama3.2:3b", "note": "Meta's small model, runs nearly anywhere" }
+  ]
+}

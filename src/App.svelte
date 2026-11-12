@@ -5,13 +5,14 @@
   import { cubicIn } from 'svelte/easing';
   import Login from './components/Login.svelte';
   import Shell from './components/Shell.svelte';
-  import Privacy from './components/Privacy.svelte';
+  import LazyPage from './components/LazyPage.svelte';
   import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
   import { fileShare } from './share-capture.js';
 
   const NOTICE_PARAMS = ['auth', 'auth_error', 'device', 'provider', 'code'];
+  const loadPrivacy = () => import('./components/Privacy.svelte');
   const SCREEN_IN = { duration: 260, delay: 80 };
   const SCREEN_OUT = { duration: 150, easing: cubicIn };
   const params = new URLSearchParams(location.search);
@@ -47,7 +48,10 @@
      The policy comes first so /privacy reads the same signed in or out. -->
 <div class="grid h-dvh w-full overflow-hidden bg-app">
   {#if privacy.open}
-    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Privacy /></div>
+    <!-- Loaded on demand: few visits read the policy, and its text is a tenth of the app -->
+    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}>
+      <LazyPage load={loadPrivacy} />
+    </div>
   {:else if auth.status === 'loading'}
     <div class="col-start-1 row-start-1 flex min-h-0 items-center justify-center" out:fade={SCREEN_OUT}>
       <span class="text-fluid-xl font-black tracking-tight text-ink">word<span class="text-accent">smith</span></span>

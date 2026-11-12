@@ -38,8 +38,11 @@ import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
 import * as v1Events from './functions/api/v1/events.js';
 import * as v1Context from './functions/api/v1/context.js';
+import * as v1Diagrams from './functions/api/v1/diagrams/index.js';
+import * as v1Diagram from './functions/api/v1/diagrams/[id].js';
 import * as v1ProjectContext from './functions/api/v1/projects/[project]/context.js';
 import * as mcp from './functions/api/mcp.js';
+import * as scribe from './functions/api/scribe.js';
 import * as sharedNote from './functions/n/[id].js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
@@ -88,8 +91,14 @@ const ROUTES = [
   ['/api/v1/labels', v1Labels, true],
   ['/api/v1/events', v1Events, true],
   ['/api/v1/context', v1Context, true],
+  ['/api/v1/diagrams', v1Diagrams, true],
+  ['/api/v1/diagrams/:id', v1Diagram, true],
+  // The app calls diagrams designs (the Design page): the same routes answer under that name too.
+  ['/api/v1/designs', v1Diagrams, true],
+  ['/api/v1/designs/:id', v1Diagram, true],
   ['/api/v1/projects/:project/context', v1ProjectContext, true],
   ['/api/mcp', mcp, false],
+  ['/api/scribe', scribe, false],
 ];
 
 /**

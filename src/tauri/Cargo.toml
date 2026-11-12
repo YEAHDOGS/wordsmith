@@ -16,3 +16,27 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 # Opens OAuth sign-in in the system browser: Google and Apple refuse to sign in inside embedded WebViews.
 tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+
+# Local speech-to-text (src/speech/), desktop only for now: phones need their own native builds of the engine.
+# transcribe-cpp: the ggml speech engine (60+ models, MIT), compiled from source by CMake; no smaller library runs
+# these models. Keep its version in step with TRANSCRIBE_CPP_VERSION in scripts/speech-catalog.js.
+# sha2 and serde_json (both already in the tree through Tauri) check each downloaded model file against the catalog
+# built into the app.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+transcribe-cpp = { version = "0.4.1", default-features = false }
+sha2 = "0.10"
+serde_json = "1"
+
+# Apple GPUs through Metal. Windows and Linux run on the CPU until their builds carry the Vulkan SDK
+# (the speech-vulkan feature below).
+[target.'cfg(target_os = "macos")'.dependencies]
+transcribe-cpp = { version = "0.4.1", default-features = false, features = ["metal"] }
+
+[features]
+# GPU speech on Windows and Linux. Needs the Vulkan SDK on the build machine.
+speech-vulkan = ["transcribe-cpp/vulkan"]
+
+# The speech engine is unusably slow unoptimized, so it is always built for speed, dev builds included.
+[profile.dev.package.transcribe-cpp-sys]
+opt-level = 3

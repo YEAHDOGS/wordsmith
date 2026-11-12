@@ -4,13 +4,16 @@
 import { featuresMarkdown, listNotes, resolveProject } from './agent.js';
 import { presentAttachment } from './attachments.js';
 import { HttpError } from './http.js';
-import { safeJson } from './rows.js';
+import { safeJson, toApi } from './rows.js';
+import { toMermaid } from '../../src/lib/diagram.js';
 import { MAX_CONTEXT } from '../../src/lib/models.js';
 
 const OPEN_STATES = 'requested,in_progress';
 const MAX_FEATURES = 200;
 const DEFAULT_EVENTS = 50;
 const MAX_EVENTS = 200;
+// Design diagrams carried in a project bundle, newest change first.
+const MAX_BUNDLE_DIAGRAMS = 5;
 // Attachment links carried in a project bundle (open features only), newest first.
 const MAX_ATTACHMENTS = 500;
 // A bundle past this many characters drops its oldest events, then its lowest-ranked features, and says so.
@@ -71,15 +74,21 @@ export async function projectContext(env, userId, ref, query) {
      FROM note_events e JOIN notes n ON n.id = e.note_id AND n.user_id = e.user_id
      WHERE e.user_id = ? AND n.project_id = ? AND e.created_at > ? ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
   ).bind(userId, project.id, since, bounded(query, 'events_limit', DEFAULT_EVENTS, MAX_EVENTS)).all();
+  const { results: drawn } = await env.DB.prepare('SELECT * FROM diagrams WHERE user_id = ? AND project_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?')
+    .bind(userId, project.id, MAX_BUNDLE_DIAGRAMS).all();
   const bundle = {
     project: { id: project.id, name: project.name, repo: project.repo, mission: project.description },
+    // The project's designs as Mermaid source; GET /api/v1/diagrams/:id has the boxes and arrows themselves.
+    diagrams: drawn.map(toApi).map((diagram) => ({ id: diagram.id, name: diagram.name, description: diagram.description, mermaid: toMermaid(/** @type {any} */ (diagram)) })),
     features: features.map((note) => ({ ...note, attachments: files.filter((file) => file.note_id === note.id).map(presentAttachment) })),
     events: results.map(presentEvent).reverse(),
-    truncated: { events: 0, features: 0, attachments: cutAttachments },
+    truncated: { events: 0, features: 0, diagrams: 0, attachments: cutAttachments },
   };
-  // Over the cap: oldest events go first, then the features at the end of the claim order.
-  while (JSON.stringify(bundle).length > MAX_BUNDLE_CHARS && (bundle.events.length || bundle.features.length > 1)) {
-    if (bundle.events.length) bundle.events.shift(), bundle.truncated.events++;
+  // Over the cap: the least recently changed designs go first (GET /api/v1/diagrams still has them), then the oldest
+  // events, then the features at the end of the claim order.
+  while (JSON.stringify(bundle).length > MAX_BUNDLE_CHARS && (bundle.diagrams.length || bundle.events.length || bundle.features.length > 1)) {
+    if (bundle.diagrams.length) bundle.diagrams.pop(), bundle.truncated.diagrams++;
+    else if (bundle.events.length) bundle.events.shift(), bundle.truncated.events++;
     else bundle.features.pop(), bundle.truncated.features++;
   }
   return bundle;
@@ -87,8 +96,11 @@ export async function projectContext(env, userId, ref, query) {
 
 /** The bundle as one Markdown document, ready to drop into an agent's context. @param {Awaited<ReturnType<typeof projectContext>>} bundle */
 export function projectContextMarkdown(bundle) {
-  const { project, features, events, truncated } = bundle;
+  const { project, diagrams, features, events, truncated } = bundle;
   const lines = [`# ${project.name}${project.repo ? ` (${project.repo})` : ''}`, '', '## Mission', '', project.mission || '_No mission statement yet._', ''];
+  for (const diagram of diagrams) {
+    lines.push(`## Design: ${diagram.name || 'Untitled'} (diagram ${diagram.id})`, '', ...(diagram.description ? [diagram.description, ''] : []), '```mermaid', diagram.mermaid, '```', '');
+  }
   lines.push(`## Open features (${features.length}, claim order)`, '', featuresMarkdown(features).split('\n').slice(2).join('\n'), '');
   lines.push(`## Recent events (${events.length})`, '');
   for (const event of events) {
@@ -96,6 +108,7 @@ export function projectContextMarkdown(bundle) {
   }
   if (truncated.attachments) lines.push('', '_Only the newest attachment links are listed; GET a feature to see all of its files._');
   if (truncated.events || truncated.features) lines.push('', `_Cut to fit: ${truncated.features} features and ${truncated.events} older events left out. Narrow with events_since or read features one by one._`);
+  if (truncated.diagrams) lines.push('', `_Cut to fit: ${truncated.diagrams} designs left out. GET /api/v1/diagrams?project= lists them._`);
   return lines.join('\n');
 }
 

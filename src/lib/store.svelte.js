@@ -8,9 +8,9 @@
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
-import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, newRow, projectKey } from './models.js';
+import { diagramBase, mergeDiagram } from './diagram.js';
+import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, SYNCED_TABLES as SYNCED, newRow, projectKey } from './models.js';
 
-const SYNCED = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
 const SYNC_DEBOUNCE_MS = 2_500;
 // Poll every minute while you're using the app, every five once you've been idle for five.
 const POLL_MS = 60_000;
@@ -31,7 +31,7 @@ const FIRST_COPY = 2;
 const COPY_SUFFIX = / \(\d+\)$/;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
-/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups'} Table */
+/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups' | 'diagrams'} Table */
 
 /** @param {any} value */
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -42,6 +42,7 @@ class Store {
   /** @type {any[]} */ notes = $state([]);
   /** Custom feature boards, one per scope (models.js FEATURES_SCOPE or a project id). @type {any[]} */ boards = $state([]);
   /** Note groups in projects (src/lib/groups.js). @type {any[]} */ note_groups = $state([]);
+  /** Design diagrams (src/lib/diagram.js). @type {any[]} */ diagrams = $state([]);
   /** @type {any[]} */ events = $state([]);
   /** @type {any[]} */ attachments = $state([]);
   /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);
@@ -67,6 +68,7 @@ class Store {
   #userId = '';
   /** Projects renamed after a name clash during the current push (each at most once). */
   #renamed = new Set();
+  /** What the server refused in the last push, once the device has settled it (see #push). */ #refused = '';
   /** The server has confirmed it is signed in as #userId; nothing is pushed before that. */
   #verified = false;
   #lastActivity = Date.now();
@@ -93,13 +95,13 @@ class Store {
     this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
-    const [projects, labels, notes, boards, note_groups, events, attachments, cursor, outbox] = await Promise.all([
-      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('events'), this.#db.all('attachments'),
+    const [projects, labels, notes, boards, note_groups, diagrams, events, attachments, cursor, outbox] = await Promise.all([
+      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('diagrams'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
     ]);
     // Notes cached before migration 20261027040000 only carry the old 0..3 priority; derive the 0..5 level.
     for (const note of notes) note.priority_level ??= Math.max(0, LEGACY_PRIORITY.indexOf(note.priority));
-    Object.assign(this, { projects, labels, notes, boards, note_groups, events, attachments });
+    Object.assign(this, { projects, labels, notes, boards, note_groups, diagrams, events, attachments });
     this.#cursor = cursor || 0;
     this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));
     this.pending = this.#outbox.size;
@@ -125,7 +127,7 @@ class Store {
     this.close();
     await this.#db?.destroy().catch(() => {});
     this.#db = null;
-    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
+    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
     this.#outbox.clear();
     this.#cursor = 0;
   }
@@ -155,6 +157,12 @@ class Store {
    */
   #save(table, row) {
     const next = { ...plain(row), updated_at: Date.now() };
+    // A diagram's first edit since it synced notes what the server's copy looked like, and keeps that note until the
+    // edit is saved: the server merges against it when an agent or another device changed the diagram meanwhile.
+    if (table === 'diagrams' && !this.#outbox.has(`${table}:${next.id}`)) {
+      const synced = this.find(table, next.id);
+      next.base = synced ? diagramBase(synced) : undefined;
+    }
     this.#upsertLocal(table, next);
     this.#db?.put(table, [next]);
     this.#outbox.set(`${table}:${next.id}`, ++this.#version);
@@ -247,7 +255,9 @@ class Store {
       if (full || !pushed || Date.now() - this.#lastPull > PULL_AFTER_PUSH_MS) await this.#pull();
       this.online = true;
       this.lastSync = Date.now();
-      this.error = '';
+      // A change the server refused and this device already settled is reported once, until the next sync.
+      this.error = this.#refused;
+      this.#refused = '';
       await this.#refreshPullRequests();
     } catch (error) {
       const failure = /** @type {any} */ (error);
@@ -272,10 +282,14 @@ class Store {
       const batch = [...this.#outbox].slice(0, MAX_SYNC_BATCH);
       /** @type {Record<string, any[]>} */
       const body = Object.fromEntries(SYNCED.map((table) => [table, /** @type {any[]} */ ([])]));
+      /** The rows as sent, by outbox key. @type {Map<string, any>} */
+      const sentRows = new Map();
       for (const [key] of batch) {
         const [table, id] = key.split(':');
         const row = this.find(/** @type {Table} */ (table), id);
-        if (row) body[table].push(plain(row));
+        if (!row) continue;
+        sentRows.set(key, plain(row));
+        body[table].push(sentRows.get(key));
       }
       const result = await api('/api/sync', { method: 'POST', body });
       const saved = [];
@@ -284,8 +298,18 @@ class Store {
         for (const row of result.saved[table] || []) {
           const key = `${table}:${row.id}`;
           const sentVersion = batch.find(([sent]) => sent === key)?.[1];
-          // Edited again while this push was in flight? Keep the newer local copy queued.
-          if (this.#outbox.get(key) !== sentVersion) continue;
+          // Edited again while this push was in flight? Keep the newer local copy queued. A diagram also takes in what
+          // the server merged into the copy we sent, and starts its next merge from the saved row.
+          if (this.#outbox.get(key) !== sentVersion) {
+            const local = table === 'diagrams' ? this.find(table, row.id) : null;
+            const sentRow = sentRows.get(key);
+            if (local && sentRow && !row.deleted_at) {
+              const rebased = { ...mergeDiagram(row, plain(local), diagramBase(sentRow)), base: diagramBase(row) };
+              this.#upsertLocal(table, rebased);
+              this.#db?.put(table, [rebased]);
+            }
+            continue;
+          }
           this.#outbox.delete(key);
           this.#upsertLocal(table, row);
           saved.push([table, row]);
@@ -298,6 +322,14 @@ class Store {
           if (refusedTable === 'projects') {
             this.#outbox.delete(key);
             await this.#settleProject(id, current, code);
+          } else if (refusedTable === 'diagrams') {
+            // A refused diagram must not block every later sync. Take the server's copy; one the server never had
+            // (refused at the cap) is dropped here. The message shows once, without failing the push.
+            this.#outbox.delete(key);
+            const settled = current ?? { ...plain(this.find('diagrams', id)), deleted_at: Date.now() };
+            this.#upsertLocal('diagrams', settled);
+            await this.#db?.put('diagrams', [settled]);
+            this.#refused = `A design change was not saved: ${error}`;
           } else {
             rejection = `A change was rejected: ${error}`;
           }

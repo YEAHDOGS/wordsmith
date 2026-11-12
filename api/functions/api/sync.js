@@ -9,7 +9,9 @@ import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
 import { schedulePurge, settleTrash } from '../../lib/trash.js';
-import { MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
+import { DIAGRAM_LIMIT, MAX_DIAGRAMS, MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
+import { mergeDiagram } from '../../../src/lib/diagram.js';
+import { ERASED_DIAGRAM } from '../../lib/diagrams.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
@@ -115,21 +117,59 @@ export async function onRequestPost(context) {
     }
 
     const statements = [];
-    for (const row of incoming) {
+    // Room left under the diagram cap, counted only when this push brings a new diagram.
+    let diagramRoom = Infinity;
+    if (table === 'diagrams' && incoming.some((/** @type {any} */ row) => !row.deleted_at && !existing.has(row.id))) {
+      const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM diagrams WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).first();
+      diagramRoom = MAX_DIAGRAMS - Number(live?.n ?? 0);
+    }
+    for (const pushed of incoming) {
+      const before = existing.get(pushed.id) ?? null;
       try {
-        const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, existing.get(row.id) ?? null);
-        const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
+        const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
+        // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
+        if (!row) {
+          saved[table].push(before);
+          continue;
+        }
+        if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
+          rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first`, current: null });
+          continue;
+        }
+        const base = before ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
+        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
+        // Diagrams have no Trash: a deleted one is erased at once, leaving only the marker other devices need.
+        if (table === 'diagrams' && next.deleted_at) Object.assign(next, structuredClone(ERASED_DIAGRAM));
+        const upsert = upsertStatement(env, table, next, before);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
         saved[table].push(apiRow);
       } catch (error) {
-        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+        rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message, ...(table === 'diagrams' && { table, current: before }) });
       }
     }
     if (statements.length) await env.DB.batch(statements);
   }
   return json({ saved, rejected, server_time: now });
+}
+
+/**
+ * A pushed diagram, set against what happened to it elsewhere. A device sends `base`: what the server's copy looked
+ * like when it last had it (diagramBase in src/lib/diagram.js). When the stored row has changed since (an agent drew
+ * on it, another device edited it), the two are merged rather than letting this push replace the whole drawing.
+ * Without a base (an old app build) the push is saved as sent, as before.
+ * @param {Record<string, any> | null} before the stored row, API-shaped (loadByIds)
+ * @param {Record<string, any>} row the pushed row
+ * @returns {Record<string, any> | null} the row to save, or null when the diagram was deleted elsewhere and stays so
+ */
+function reconcileDiagram(before, row) {
+  // Deleting a diagram erases it and nothing restores one, so a deleted diagram stays deleted whatever is pushed,
+  // base or no base: otherwise a stale device, or a replayed request, could bring it back.
+  if (before?.deleted_at) return null;
+  const base = row.base;
+  // Anything but a plain base with a numeric time is treated as no base at all.
+  if (!before || !base || typeof base !== 'object' || Array.isArray(base) || typeof base.at !== 'number' || !(Number(before.updated_at) > base.at)) return row;
+  return row.deleted_at ? row : mergeDiagram(before, row, base);
 }
 
 /**

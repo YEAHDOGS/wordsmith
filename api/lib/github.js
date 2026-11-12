@@ -9,6 +9,8 @@ const GITHUB_ACTOR = /** @type {const} */ ({ type: 'github', name: 'github' });
 // Open PRs are re-checked at most this often per note, and at most MAX_NOTES_PER_REFRESH notes per call.
 const RECHECK_MS = 120_000;
 const MAX_NOTES_PER_REFRESH = 10;
+// A private repo's webhook checks each account's own access with one GitHub call; at most this many accounts per event.
+const MAX_PRIVATE_WEBHOOK_USERS = 20;
 
 /**
  * The GitHub credential for a user and where it came from: their own sign-in token ('sign-in'), else the Worker's shared
@@ -34,14 +36,16 @@ export async function githubCredential(env, userId) {
  * Fetches one PR and returns its current state, or null when GitHub can't be reached.
  * @param {string | null} token
  * @param {{ repo: string, number: number }} pr
+ * @param {boolean} publicOnly true unless the token is the user's own: the shared GITHUB_TOKEN must not read private repos
  */
-export async function fetchPullRequest(token, pr) {
+export async function fetchPullRequest(token, pr, publicOnly) {
   /** @type {Record<string, string>} */
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': USER_AGENT };
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${GITHUB_API}/repos/${pr.repo}/pulls/${pr.number}`, { headers });
   if (!response.ok) return null;
   const data = await response.json();
+  if (publicOnly && data.base?.repo?.private) return null;
   const mergedAt = data.merged_at ? Date.parse(data.merged_at) : null;
   return { title: String(data.title || '').slice(0, 300), state: mergedAt ? 'merged' : data.state === 'closed' ? 'closed' : 'open', merged_at: mergedAt };
 }
@@ -63,7 +67,7 @@ export async function refreshPullRequests(env, userId, noteIds) {
   const { results } = await query.all();
   if (!results.length) return [];
 
-  const { token } = await githubCredential(env, userId);
+  const { token, source } = await githubCredential(env, userId);
   const changes = [];
   /** @type {string[]} */
   const unchanged = [];
@@ -71,7 +75,7 @@ export async function refreshPullRequests(env, userId, noteIds) {
     const before = toApi(row);
     const prs = await Promise.all(before.pull_requests.map(async (/** @type {any} */ pr) => {
       if (pr.state !== 'open') return pr;
-      const latest = await fetchPullRequest(token, pr);
+      const latest = await fetchPullRequest(token, pr, source !== 'sign-in');
       return latest ? { ...pr, ...latest } : pr;
     }));
     if (JSON.stringify(prs) === JSON.stringify(before.pull_requests)) unchanged.push(before.id);
@@ -109,6 +113,18 @@ export async function applyPullRequestWebhook(env, payload) {
     list.push({ before, patch: { pull_requests: prs, prs_checked_at: Date.now() } });
     byUser.set(row.user_id, list);
   }
-  for (const [userId, changes] of byUser) await saveNotes(env, userId, GITHUB_ACTOR, changes);
-  return results.length;
+  // Knowing a pull request's URL is not permission to see it. For a private repo (or one the payload doesn't mark
+  // public), an account gets the update only if its own GitHub sign-in can read that pull request.
+  const isPrivate = payload.repository?.private !== false;
+  const pr = { repo: String(pull.base?.repo?.full_name || payload.repository?.full_name || ''), number: Number(pull.number) };
+  let applied = 0;
+  for (const [userId, changes] of [...byUser].slice(0, isPrivate ? MAX_PRIVATE_WEBHOOK_USERS : byUser.size)) {
+    if (isPrivate) {
+      const { token, source } = await githubCredential(env, userId);
+      if (source !== 'sign-in' || !(await fetchPullRequest(token, pr, false))) continue;
+    }
+    await saveNotes(env, userId, GITHUB_ACTOR, changes);
+    applied += changes.length;
+  }
+  return applied;
 }

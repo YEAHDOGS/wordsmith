@@ -17,6 +17,8 @@
   import Group from '@lucide/svelte/icons/group';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import BellDot from '@lucide/svelte/icons/bell-dot';
+  import Network from '@lucide/svelte/icons/network';
+  import Mic from '@lucide/svelte/icons/mic';
   import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
@@ -27,7 +29,7 @@
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG } from '../lib/colors.js';
-  import { MAX_NAME, projectKey } from '../lib/models.js';
+  import { MAX_NAME, NEEDS_YOU_ENABLED, projectKey } from '../lib/models.js';
   import { trashItems } from './trash.js';
   import { APP_VERSION } from '../lib/version.js';
   import { byName } from '../lib/nav-order.js';
@@ -43,9 +45,11 @@
   const LIST = 'relative min-h-0 shrink overflow-x-hidden overflow-y-auto overscroll-contain';
   const LIST_CAP = 'max-h-64 short:max-h-32 tv:max-h-96';
   const NAV = [
-    { view: 'attention', label: 'Needs you', icon: BellDot },
+    ...(NEEDS_YOU_ENABLED ? [{ view: 'attention', label: 'Needs you', icon: BellDot }] : []),
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
+    { view: 'design', label: 'Design', icon: Network },
+    { view: 'scribe', label: 'Scribe (beta)', icon: Mic },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';
@@ -76,7 +80,7 @@
   // Read on each change to the store; the page itself keeps the countdown fresh.
   const trashCount = $derived(trashItems(Date.now()).length);
   // Read on each change to the store; the Needs you page itself re-checks snoozes every minute.
-  const attentionCount = $derived(needsYou(Date.now()).length);
+  const attentionCount = $derived(NEEDS_YOU_ENABLED ? needsYou(Date.now()).length : 0);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
     /** @type {Record<string, number>} */

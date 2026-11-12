@@ -24,6 +24,13 @@ const MAX_RESULTS = 50;
 const REPOS_CACHE_VERSION = 'v2';
 // When the listing hit the page cap, a typed query also searches by name across you and your orgs.
 const SEARCH_LIMIT = 30;
+// Without a GitHub sign-in the picker searches public repos by name: this many, kept this long for everyone who types the same thing.
+const PUBLIC_SEARCH_LIMIT = 20;
+const PUBLIC_SEARCH_CACHE_SECONDS = 600;
+const MIN_PUBLIC_QUERY = 2;
+// One answer for a repo that is missing and one the shared token could see but this account may not: saying "private"
+// would confirm to any account that the repo exists.
+const NOT_FOUND_MESSAGE = 'was not found. If it is private or belongs to an organization, link GitHub in Settings so wordsmith can read it as you';
 const MAX_SEARCH_QUERY = 256;
 const MAX_SEARCH_OWNERS = 8;
 const NEXT_LINK = /<([^>]+)>;\s*rel="next"/;
@@ -159,16 +166,35 @@ async function searchByName(token, userId, bundle, needle) {
 }
 
 /**
+ * Public repos matching a name, for people with no GitHub sign-in (Google or Apple only). `is:public` matters: the
+ * Worker's shared GITHUB_TOKEN may be able to see private repos, and those must never reach another account. The answer
+ * is the same for everyone, so it is cached once for all users. Failures (GitHub's search rate limit) return [].
+ * @param {string | null} token the shared GITHUB_TOKEN, or null
+ * @param {string} q
+ */
+async function searchPublicRepos(token, q) {
+  const needle = q.trim().toLowerCase();
+  if (needle.length < MIN_PUBLIC_QUERY) return [];
+  return cached(`public-repos:${REPOS_CACHE_VERSION}:${needle}`, PUBLIC_SEARCH_CACHE_SECONDS, async () => {
+    const query = `${needle} in:name is:public fork:true`;
+    const data = await getOr(`${GITHUB_API}/search/repositories?q=${encodeURIComponent(query)}&per_page=${PUBLIC_SEARCH_LIMIT}`, token, { items: [] });
+    return (data.items || []).filter((/** @type {any} */ repo) => !repo.private).map(toRepo);
+  });
+}
+
+/**
  * Repos the user can see (their own, collaborations and organization repos), most recently pushed first, filtered by q.
+ * Without the user's own GitHub sign-in it searches public repos by name instead and says so with needs_github.
  * Also reports why org repos might be missing: scopes the token lacks and orgs with no visible repos (often an
  * organization that restricts OAuth apps), with the page where access is granted. Needs a GitHub token.
  * @param {string | null} token
  * @param {string} userId
  * @param {string} q
  * @param {string | null} clientId OAuth app client id when the token came from GitHub sign-in, for the grant link
+ * @param {boolean} ownToken true when the token is the user's own GitHub sign-in
  */
-export async function searchRepos(token, userId, q, clientId) {
-  if (!token) return { repos: [], needs_github: true };
+export async function searchRepos(token, userId, q, clientId, ownToken) {
+  if (!token || !ownToken) return { repos: await searchPublicRepos(token, q), needs_github: true };
   const bundle = await cached(`repos:${REPOS_CACHE_VERSION}:${userId}`, REPOS_CACHE_SECONDS, async () => {
     const [listing, orgs, user] = await Promise.all([
       fetchRepoPages(token),
@@ -204,14 +230,16 @@ export async function searchRepos(token, userId, q, clientId) {
  * Checks a repo exists and is visible with this token (or publicly).
  * @param {string | null} token
  * @param {string} repo
+ * @param {boolean} publicOnly true unless the token is the user's own: the shared GITHUB_TOKEN must not open private repos
  */
-export async function getRepo(token, repo) {
+export async function getRepo(token, repo, publicOnly) {
   assertRepo(repo);
   const response = await fetch(`${GITHUB_API}/repos/${repo}`, { headers: headers(token) });
   // An organization that restricts OAuth apps answers 404 for its private repos, same as a missing repo.
-  if (response.status === 404) throw new HttpError(404, `${repo} was not found. If it is private or belongs to an organization, check that wordsmith has access to it`);
+  if (response.status === 404) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
   if (!response.ok) await fail(response);
   const data = await response.json();
+  if (publicOnly && data.private) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
   return { full_name: data.full_name, description: data.description || '', private: data.private, html_url: data.html_url, default_branch: data.default_branch };
 }
 
@@ -262,8 +290,9 @@ function fromRest(pr) {
  * @param {string | null} token
  * @param {string} userId
  * @param {string} repo
+ * @param {boolean} publicOnly true unless the token is the user's own: the shared GITHUB_TOKEN must not open private repos
  */
-export async function repoPulls(token, userId, repo) {
+export async function repoPulls(token, userId, repo, publicOnly) {
   assertRepo(repo);
   return cached(`pulls:${userId}:${repo}`, PULLS_CACHE_SECONDS, async () => {
     const [owner, name] = repo.split('/');
@@ -274,8 +303,10 @@ export async function repoPulls(token, userId, repo) {
         body: JSON.stringify({ query: PULLS_QUERY, variables: { owner, name, open: OPEN_LIMIT, merged: MERGED_LIMIT } }),
       });
       if (!response.ok) await fail(response);
-      const { data, errors } = await response.json();
-      if (!data?.repository) throw new HttpError(404, errors?.[0]?.message || 'GitHub repo not found');
+      const { data } = await response.json();
+      // The same words whether the repo is missing or private and out of reach (GitHub's own message tells them apart).
+      if (!data?.repository) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
+      if (publicOnly && data.repository.isPrivate) throw new HttpError(404, `${repo} ${NOT_FOUND_MESSAGE}`);
       return { source: 'graphql', fetched_at: Date.now(), open: data.repository.open.nodes.map(fromGraphql), merged: data.repository.merged.nodes.map(fromGraphql) };
     }
     const [open, closed] = await Promise.all([

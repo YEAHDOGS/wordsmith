@@ -1,9 +1,10 @@
 <script>
   // Signed-in layout. Phones: one column + bottom nav + drawer. Tablets: icon rail. Desktop: full sidebar,
   // content capped at max-w-7xl. Ultra-wide: content spreads. Only lists scroll; the frame never does.
-  import { untrack } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
-  import { cubicIn, quintOut } from 'svelte/easing';
+  import { onDestroy, untrack } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { backOut, cubicIn, quintOut } from 'svelte/easing';
+  import Mic from '@lucide/svelte/icons/mic';
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
   import BottomNav from './BottomNav.svelte';
@@ -16,9 +17,16 @@
   import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
+  import ProjectDesigns from './ProjectDesigns.svelte';
   import SelectionBar from './SelectionBar.svelte';
   import Trash from './Trash.svelte';
   import Attention from './Attention.svelte';
+  import LazyPage from './LazyPage.svelte';
+  import DESIGN_TEXT from './design.json';
+  import Scribe from './Scribe.svelte';
+  import SCRIBE_TEXT from './scribe.json';
+  import { scribe } from '../lib/scribe.svelte.js';
+  import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
@@ -31,9 +39,20 @@
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
+  const loadDesign = () => import('./Design.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
+  const PILL = { start: 0.6, duration: 200, easing: backOut };
+
+  // Signing out unmounts the shell: the microphone goes off with it.
+  // The Scribe session and all it heard belong to one account. They go when the Shell does (sign-out, session ended),
+  // and also when the account changes under a Shell that stays (another tab signed in as someone else).
+  $effect.pre(() => {
+    const userId = auth.user?.id;
+    untrack(() => scribe.claim(userId));
+  });
+  onDestroy(() => scribe.reset());
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -64,6 +83,8 @@
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
+      case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
+      case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
@@ -84,7 +105,7 @@
   /** The cards on screen right now: what "select all" picks. */
   const visible = $derived.by(() => {
     if (route.view === 'features' || (project && projectTab === 'board')) return view.features ?? [];
-    if (project && (projectTab === 'prs' || projectTab === 'media')) return [];
+    if (project && (projectTab === 'prs' || projectTab === 'media' || projectTab === 'designs')) return [];
     return (view.notes ?? []).filter((note) => ui.showsState(note));
   });
 
@@ -156,6 +177,11 @@
             <Trash />
           {:else if route.view === 'attention'}
             <Attention />
+          {:else if route.view === 'design'}
+            <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
+            <LazyPage load={loadDesign} id={route.id} />
+          {:else if route.view === 'scribe'}
+            <Scribe />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}
@@ -173,6 +199,8 @@
               </div>
             {:else if projectTab === 'media' && project}
               <div class="{CONTENT} min-h-0 flex-1 px-2 sm:px-4" in:fade={TAB_IN}><ProjectMedia notes={view.features ?? []} /></div>
+            {:else if projectTab === 'designs' && project}
+              <div class="{CONTENT} min-h-0 flex-1 px-2 sm:px-4" in:fade={TAB_IN}><ProjectDesigns {project} /></div>
             {:else if projectTab === 'prs' && project}
               <div class="{CONTENT} min-h-0 flex-1" in:fade={TAB_IN}>
                 {#if project.repo}
@@ -211,6 +239,24 @@
         <Sidebar />
       </div>
     </div>
+  {/if}
+
+  <!-- Scribe keeps listening while you move around: this pill says so on every other page and leads back to it.
+       It floats over the top-right corner of the page, clear of the bottom nav and the composer. -->
+  {#if scribe.listening && route.view !== 'scribe'}
+    <button class="spring press fixed top-14 right-2 z-30 flex items-center gap-2 border border-accent bg-accent-soft px-2.5 py-1.5 text-xs text-ink sm:top-16 sm:right-4 tv:top-24 tv:text-lg"
+      aria-label={SCRIBE_TEXT.pill} title={SCRIBE_TEXT.pill} onclick={() => router.go('scribe')} transition:scale={PILL}>
+      <span class="live-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true"></span><Mic class="size-3.5 shrink-0" />
+      <!-- A ticket just written takes over the pill for a moment; otherwise it shows your words as you speak -->
+      <span class="min-w-0 max-w-[60vw] truncate sm:max-w-80">
+        {#if scribe.recent[0]}
+          {#key scribe.recent[0].id}<span class="text-complete" in:fade={{ duration: 150 }}>{SCRIBE_TEXT[scribe.recent[0].kind]}: {scribe.recent[0].title}</span>{/key}
+        {:else}
+          {scribe.interim || (scribe.thinking ? SCRIBE_TEXT.thinking : SCRIBE_TEXT.listening)}
+        {/if}
+      </span>
+      {#if scribe.made}<span class="shrink-0 font-mono text-complete">{scribe.made}</span>{/if}
+    </button>
   {/if}
 
   {#if route.note}
