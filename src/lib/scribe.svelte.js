@@ -13,7 +13,7 @@ import { auth } from './auth.svelte.js';
 import { api } from './api.js';
 import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
-import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
+import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
 import { listen, listenEngine } from './listen.js';
 import PROVIDERS from './scribe-providers.json';
 
@@ -112,6 +112,12 @@ class Scribe {
   cloud = $state(null);
 
   /** The microphone session. @type {{ stop: () => void } | null} */ #session = null;
+  /**
+   * The listening session the screen answers to. A newer press of the mic, or a reset, replaces it, so an older
+   * session's late ending or error (a local model finishing its last sentence after stop) changes nothing; its words
+   * still count. @type {object | null}
+   */
+  #live = null;
   /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
   /** The model request in flight. @type {AbortController | null} */ #request = null;
   /** The account this session belongs to (see claim). @type {string | undefined} */ #owner;
@@ -184,7 +190,8 @@ class Scribe {
     try {
       this.cloud = await api(CLOUD_PATH);
     } catch {
-      this.cloud = { available: false, models: [], default: '', used: 0, limit: 0 };
+      // A network blip: ask again the next time the settings open.
+      this.cloud = null;
     }
   }
 
@@ -196,7 +203,7 @@ class Scribe {
    */
   async #ask(turn, cancel) {
     if (this.provider.kind !== CLOUD_KIND) return askModel(this.settings, scribeMessages(turn), cancel);
-    const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body, state, priority_level }));
+    const tickets = turn.tickets.map(({ ref, title, body, state, priority_level }) => ({ ref, title, body: body.slice(0, MAX_TICKET_BODY), state, priority_level }));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
     cancel.addEventListener('abort', () => controller.abort(), { once: true });
@@ -219,25 +226,29 @@ class Scribe {
     this.problem = '';
     this.detail = '';
     this.listening = true;
-    // Words, problems and endings still arriving from a session that was reset belong to nobody now.
+    // Words still arriving from a session that was reset belong to nobody now; endings and errors from any session
+    // but the newest belong to nobody either.
     const run = this.#run;
+    const live = {};
+    this.#live = live;
     this.#session = listen({
       onInterim: (text) => {
-        if (run === this.#run) this.interim = text;
+        if (this.#live === live) this.interim = text;
       },
       onFinal: (text) => {
         if (run !== this.#run) return;
-        this.interim = '';
+        if (this.#live === live) this.interim = '';
         this.hear(text);
       },
       onProblem: (kind, detail) => {
-        if (run !== this.#run) return;
+        if (this.#live !== live) return;
         this.problem = kind;
         this.detail = detail;
       },
       // Also reached when the engine gives up by itself (microphone refused, model failed to load).
       onEnd: () => {
-        if (run !== this.#run) return;
+        if (this.#live !== live) return;
+        this.#live = null;
         this.#session = null;
         this.listening = false;
         this.interim = '';
@@ -272,6 +283,7 @@ class Scribe {
    */
   reset() {
     this.#run++;
+    this.#live = null;
     this.#request?.abort();
     this.#request = null;
     clearTimeout(this.#timer);

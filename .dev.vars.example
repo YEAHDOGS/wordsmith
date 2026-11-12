@@ -40,3 +40,8 @@ APPLE_CLIENT_ID=
 APPLE_TEAM_ID=
 APPLE_KEY_ID=
 APPLE_PRIVATE_KEY=
+
+# Scribe's wordsmith cloud runs on the real Workers AI even in local dev (it has no local copy), and spends the
+# account's shared 10,000 free neurons a day, but local D1 counts it separately. Keep local dev small:
+SCRIBE_USER_NEURONS=200
+SCRIBE_DAILY_NEURONS=300

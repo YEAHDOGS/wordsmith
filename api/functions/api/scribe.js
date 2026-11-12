@@ -12,7 +12,7 @@
 import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
-import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
+import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
 import { FEATURE_STATES, MAX_PRIORITY } from '../../../src/lib/models.js';
 import CLOUD from '../../../src/lib/scribe-cloud-models.json';
 
@@ -33,8 +33,6 @@ const USED_UP_EVERYONE = 'wordsmith cloud is out of allowance for today. It rese
 // A person talking sends a request every few seconds at most; this stops a runaway loop well before the allowance does.
 const REQUEST_LIMIT = 30;
 const REQUEST_WINDOW_MS = 60_000;
-// Ticket bodies the model sees are cut much shorter than this by scribeMessages; this only bounds what is sent.
-const MAX_TICKET_BODY = 4_000;
 const KEEP_DAYS = 7;
 // Old days are swept now and then rather than on every request, to keep writes down.
 const CLEANUP_CHANCE = 0.02;
@@ -146,14 +144,15 @@ export async function onRequestPost(context) {
       messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
     });
   } catch (error) {
-    // Nothing was used: the reservation goes back.
-    await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, -worst, -1), env.DB.prepare(ADJUST).bind(day, user.id, -worst, -1)]);
+    // The model may have worked before failing (a timeout, say), so the reservation stays counted: the count may run
+    // high, never low.
     throw error;
   }
   const content = answer?.choices?.[0]?.message?.content ?? answer?.response ?? '';
   const tokensIn = Number(answer?.usage?.prompt_tokens) || 0;
   const tokensOut = Number(answer?.usage?.completion_tokens) || 0;
-  const neurons = Number(answer?.usage?.neurons) || (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION;
+  // An answer that doesn't say what it used counts as its whole reservation, so the count never runs low.
+  const neurons = Number(answer?.usage?.neurons) || (tokensIn || tokensOut ? (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION : worst);
   // The reservation becomes what the request really cost.
   await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, neurons - worst, 0), env.DB.prepare(ADJUST).bind(day, user.id, neurons - worst, 0)]);
   if (Math.random() < CLEANUP_CHANCE) {

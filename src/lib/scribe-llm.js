@@ -14,6 +14,9 @@ const BODY_PREVIEW = 120;
 export const MAX_TICKETS = 12;
 // How much already-handled speech rides along as context.
 export const EARLIER_CHARS = 300;
+// The most of a ticket's body a request carries. The model sees only BODY_PREVIEW of it once spaces are squeezed;
+// this leaves room for that and bounds the upload.
+export const MAX_TICKET_BODY = 1_000;
 // The most speech one request carries; more waits for the next.
 export const MAX_SPEECH_CHARS = 2_000;
 // The longest a ticket title or project name may be in a request (the model only needs to recognize them).

@@ -29,26 +29,34 @@ async function getJson(url) {
 }
 
 /**
- * SHA-256 of every LFS file in a Hugging Face model repo, by file name. Null when the repo isn't public (the catalog
- * lists a few models before, or without, a public download).
+ * The current commit of a Hugging Face model repo and the SHA-256 and size of every LFS file in it, by file name.
+ * The app downloads from that commit, so a later change upstream can't make the catalog's hashes wrong. Null when the
+ * repo isn't public (the catalog lists a few models before, or without, a public download).
  * @param {string} repo
+ * @returns {Promise<{ revision: string, files: Map<string, { sha256: string, size: number }> } | null>}
  */
 async function hashes(repo) {
-  const response = await fetch(`${HUGGING_FACE}/api/models/${repo}/tree/main`, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } });
-  if (NOT_PUBLIC.includes(response.status)) return null;
-  if (!response.ok) throw new Error(`${repo} answered ${response.status}`);
-  return new Map((await response.json()).filter((/** @type {any} */ entry) => entry.lfs?.oid).map((/** @type {any} */ entry) => [entry.path, entry.lfs.oid]));
+  const headers = { 'User-Agent': USER_AGENT, Accept: 'application/json' };
+  const info = await fetch(`${HUGGING_FACE}/api/models/${repo}`, { headers });
+  if (NOT_PUBLIC.includes(info.status)) return null;
+  if (!info.ok) throw new Error(`${repo} answered ${info.status}`);
+  const revision = (await info.json()).sha;
+  const response = await fetch(`${HUGGING_FACE}/api/models/${repo}/tree/${revision}`, { headers });
+  if (!response.ok) throw new Error(`${repo} at ${revision} answered ${response.status}`);
+  const entries = (await response.json()).filter((/** @type {any} */ entry) => entry.lfs?.oid);
+  return { revision, files: new Map(entries.map((/** @type {any} */ entry) => [entry.path, { sha256: entry.lfs.oid, size: entry.lfs.size }])) };
 }
 
 /** One downloadable file of a catalog record, or null when it can't be downloaded. @param {any} record @param {string[]} quants preferred first */
 async function download(record, quants) {
   const pick = quants.map((quant) => record.downloads.find((/** @type {any} */ file) => file.quant === quant)).find(Boolean) ?? record.downloads[0];
-  const sha256 = pick && (await hashes(record.published_repo))?.get(pick.filename);
-  if (!sha256) {
+  const repo = pick ? await hashes(record.published_repo) : null;
+  const found = repo?.files.get(pick.filename);
+  if (!repo || !found) {
     console.warn(`Skipped ${record.variant}: no public download at ${record.published_repo}`);
     return null;
   }
-  return { repo: record.published_repo, file: pick.filename, quant: pick.quant, size: pick.size_bytes, sha256 };
+  return { repo: record.published_repo, revision: repo.revision, file: pick.filename, quant: pick.quant, size: found.size, sha256: found.sha256 };
 }
 
 /** Runs fn over items, PARALLEL at a time, keeping order. @template T, R @param {T[]} items @param {(item: T) => Promise<R>} fn */

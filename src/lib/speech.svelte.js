@@ -24,8 +24,8 @@ const DEFAULTS = { modelId: DEFAULT_MODEL, acceleration: 'auto', unloadMinutes: 
 const DENIED_ERROR = 'NotAllowedError';
 
 /**
- * @typedef {{ id: string, name: string, family: string, params: number | null, languages: string[], streaming: boolean, translates: boolean, license: string, repo: string, file: string, quant: string, size: number, sha256: string }} SpeechModel
- * @typedef {{ repo: string, file: string, size: number, sha256: string }} ModelFile
+ * @typedef {{ id: string, name: string, family: string, params: number | null, languages: string[], streaming: boolean, translates: boolean, license: string, repo: string, revision: string, file: string, quant: string, size: number, sha256: string }} SpeechModel
+ * @typedef {{ repo: string, revision: string, file: string, size: number, sha256: string }} ModelFile the file at one exact commit of its repo
  * @typedef {{ onInterim: (text: string) => void, onFinal: (text: string) => void, onProblem: (kind: 'mic-denied' | 'mic' | 'speech', detail: string) => void, onEnd: () => void }} Listener
  */
 
@@ -136,7 +136,7 @@ class Speech {
    */
   async #fetchFile(file, before, signal) {
     await invoke('speech_download_begin', { file: file.file });
-    const response = await fetch(`${MODEL_HOST}/${file.repo}/resolve/main/${file.file}`, { signal });
+    const response = await fetch(`${MODEL_HOST}/${file.repo}/resolve/${file.revision}/${file.file}`, { signal });
     if (!response.ok || !response.body) throw new Error(`The model host answered ${response.status}`);
     const reader = response.body.getReader();
     /** @type {Uint8Array[]} */
