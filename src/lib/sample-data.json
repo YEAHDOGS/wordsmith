@@ -30,7 +30,7 @@
     { "project": "pawprint", "kind": "note", "daysAgo": 12, "title": "Interview notes: dog owners", "body": "- most book walks the night before\n- price matters less than trust\n- want photos during the walk" },
     { "project": "site", "kind": "note", "daysAgo": 4, "title": "Copy tone", "body": "Short sentences. No jargon. Talk to one person, not \"users\"." },
     { "project": "mobile", "kind": "note", "color": "blue", "daysAgo": 6, "title": "Devices to test on", "body": "Small Android phone, iPhone SE, a tablet in landscape, and a TV browser." },
-    { "project": null, "kind": "note", "pinned": true, "daysAgo": 0, "title": "Welcome to staging", "body": "Everything here is **synthetic test data** from `npm run seed:staging`. Edit, drag, archive and delete freely." },
+    { "project": null, "kind": "note", "pinned": true, "daysAgo": 0, "title": "Welcome to wordsmith", "body": "Everything here is **synthetic sample data**. Edit, drag, archive and delete freely." },
     { "project": null, "kind": "note", "color": "green", "daysAgo": 5, "title": "Grocery list (sample)", "body": "- coffee\n- oats\n- dog treats" },
     { "project": null, "kind": "note", "archived": true, "daysAgo": 30, "title": "Old idea (archived)", "body": "An archived note so the Archive view has something in it." }
   ]

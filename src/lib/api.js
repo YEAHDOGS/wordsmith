@@ -4,7 +4,11 @@ import { isTauri } from '@tauri-apps/api/core';
 // Native bundles have no same-origin API, so they are built with VITE_API_BASE=https://wordsmith.dogs.red.
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const TOKEN_KEY = 'ws_session_token';
+const DEMO_KEY = 'ws_demo';
 const NO_CONTENT = 204;
+const DEMO_STATUS = 403;
+export const DEMO_CODE = 'demo';
+const DEMO_MESSAGE = 'This is the demo: nothing is sent to the server. Sign in to use this.';
 
 export const IS_NATIVE = isTauri();
 
@@ -25,12 +29,25 @@ export const sessionToken = {
   set: (token) => (token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY)),
 };
 
+/** Demo mode: the app runs on sample data in memory and no request ever leaves the device. */
+export const demoMode = {
+  get: () => localStorage.getItem(DEMO_KEY) === '1',
+  /** @param {boolean} on */
+  set: (on) => (on ? localStorage.setItem(DEMO_KEY, '1') : localStorage.removeItem(DEMO_KEY)),
+};
+
+/** Refuses a request in demo mode, before anything reaches the network. */
+function refuseInDemo() {
+  if (demoMode.get()) throw new ApiError(DEMO_STATUS, DEMO_MESSAGE, DEMO_CODE);
+}
+
 /**
  * Calls the API and returns parsed JSON (null for 204).
  * @param {string} path
  * @param {{ method?: string, body?: any, signal?: AbortSignal }} [options] `signal` gives the request up early
  */
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  refuseInDemo();
   /** @type {Record<string, string>} */
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -57,6 +74,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
  * @returns {Promise<any>}
  */
 export function uploadFile(path, file, onProgress) {
+  refuseInDemo();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API_BASE + path);
@@ -82,6 +100,7 @@ export function uploadFile(path, file, onProgress) {
  * @param {string} path
  */
 export async function mediaUrl(path) {
+  refuseInDemo();
   const token = sessionToken.get();
   if (!token && !API_BASE) return path;
   const response = await fetch(API_BASE + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

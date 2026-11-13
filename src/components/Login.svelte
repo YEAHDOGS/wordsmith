@@ -4,6 +4,7 @@
   import { fade, fly } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
+  import FlaskConical from '@lucide/svelte/icons/flask-conical';
   import ProviderIcon from './ProviderIcon.svelte';
   import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
@@ -18,6 +19,8 @@
   const DOGS_URL = 'https://dogs.red';
   const REPO_URL = 'https://github.com/YEAHDOGS/wordsmith';
   const STEP_STAGGER_MS = 90;
+  // Always on the landing page, in this order, even before their credentials exist on a server; other providers only once configured.
+  const FEATURED_PROVIDERS = ['google', 'github'];
   const BUTTON_CLASS =
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
   const INPUT_CLASS =
@@ -36,6 +39,7 @@
     if (!auth.sessionFetched) auth.load();
   });
   const available = $derived(PROVIDERS.filter((provider) => auth.providers.includes(provider)));
+  const shown = $derived([...FEATURED_PROVIDERS, ...available.filter((provider) => !FEATURED_PROVIDERS.includes(provider))]);
   const confirmHref = $derived(
     notice?.kind === 'device_confirm' ? `/api/auth/${notice.provider}/start?device=${encodeURIComponent(notice.device || '')}&confirm=1` : '',
   );
@@ -68,6 +72,11 @@
 
   /** @param {string} provider */
   async function signIn(provider) {
+    const name = TEXT.providers[/** @type {keyof typeof TEXT.providers} */ (provider)];
+    if (!available.includes(provider)) {
+      auth.error = TEXT.notSetUp.replace('{provider}', name);
+      return;
+    }
     busy = provider;
     if (await unlockBeta()) await auth.signIn(provider);
     busy = '';
@@ -157,7 +166,7 @@
         <p class="short:hidden text-center text-fluid-sm text-ink-muted">{TEXT.previewHint}</p>
       {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
-        {#if showBeta && available.length}
+        {#if showBeta}
           <form class="flex" onsubmit={submitBeta} in:fly={{ y: 8, delay: 150, duration: 300 }}>
             {@render betaInput('w-full')}
           </form>
@@ -165,16 +174,22 @@
             <p role="status" class="bg-complete-soft px-5 py-2 text-center text-fluid-sm text-complete" in:fade>{TEXT.betaAccepted}</p>
           {/if}
         {/if}
-        {#each available as provider, index (provider)}
+        {#each shown as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>
             <ProviderIcon {provider} />
             {TEXT.continue} {TEXT.providers[/** @type {keyof typeof TEXT.providers} */ (provider)]}
           </button>
         {/each}
+        <button class="{BUTTON_CLASS} border-accent" disabled={Boolean(busy)} onclick={() => auth.startDemo()}
+          in:fly={{ y: 8, delay: 200 + shown.length * STEP_STAGGER_MS, duration: 300 }}>
+          <FlaskConical class="size-5 text-accent" />
+          {TEXT.demo}
+        </button>
         {#if auth.devLogin}
           <button class="{BUTTON_CLASS} border-dashed font-mono text-ink-muted" onclick={() => auth.devSignIn()}>{TEXT.dev}</button>
         {/if}
       </div>
+      <p class="short:hidden -mt-4 text-center text-xs text-ink-faint">{TEXT.demoHint}</p>
       {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}

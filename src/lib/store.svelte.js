@@ -51,6 +51,8 @@ class Store {
   lastSync = $state(0);
   pending = $state(0);
   error = $state('');
+  /** Demo mode: rows live in memory only, with no local database, outbox or sync. */
+  demo = $state(false);
   /** Called when the server says the session is gone. */
   onUnauthorized = () => {};
   /** Called when the server's signed-in user isn't the one this store opened for (start-up trusted a stale cache). */
@@ -88,10 +90,22 @@ class Store {
     if (this.online) this.sync();
   };
 
-  /** Loads the local copy for a user, then syncs. @param {string} userId */
-  async open(userId) {
+  /**
+   * Loads the local copy for a user, then syncs. With sample rows (demo mode) it shows those instead and never
+   * touches IndexedDB or the network, so every edit is gone on reload.
+   * @param {string} userId
+   * @param {Partial<Record<Table, any[]>>} [sample]
+   */
+  async open(userId, sample) {
     this.close();
     this.#userId = userId;
+    this.demo = Boolean(sample);
+    if (sample) {
+      this.#db = null;
+      Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, error: '' }, sample);
+      this.lastSync = Date.now();
+      return;
+    }
     this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
@@ -127,6 +141,7 @@ class Store {
     this.close();
     await this.#db?.destroy().catch(() => {});
     this.#db = null;
+    this.demo = false;
     Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
     this.#outbox.clear();
     this.#cursor = 0;
@@ -164,6 +179,7 @@ class Store {
       next.base = synced ? diagramBase(synced) : undefined;
     }
     this.#upsertLocal(table, next);
+    if (this.demo) return next;
     this.#db?.put(table, [next]);
     this.#outbox.set(`${table}:${next.id}`, ++this.#version);
     this.#persistOutbox();
