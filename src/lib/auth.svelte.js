@@ -1,10 +1,12 @@
 // Sign-in state. Web logins redirect through the OAuth provider and come back with a cookie.
 // Native apps open the system browser (Google and Apple block embedded WebViews) and poll for their session.
-import { ApiError, IS_NATIVE, api, apiUrl, sessionToken } from './api.js';
+import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken } from './api.js';
 
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
 const DEVICE_GONE = 410;
+// Demo mode's stand-in user. Never cached or sent anywhere.
+const DEMO_USER = { id: 'demo', email: null, name: 'Demo', avatar_url: null };
 
 /** Opens a URL in the system browser on native, or navigates on the web. @param {string} url */
 async function openExternal(url) {
@@ -33,6 +35,8 @@ class Auth {
   /** Native login in progress: the code to match in the browser. @type {{ code: string, provider: string, url: string } | null} */
   device = $state(null);
   error = $state('');
+  /** Demo mode: sample data in memory, nothing synced (demoMode in api.js). */
+  demo = $state(false);
   #deviceRun = 0;
 
   /**
@@ -42,6 +46,12 @@ class Auth {
    * @param {boolean} [useCache]
    */
   async load(useCache = false) {
+    // Only a plain start resumes the demo; coming back from a real sign-in ends it.
+    if (demoMode.get() && useCache) {
+      this.startDemo();
+      return;
+    }
+    this.#endDemo();
     const cached = localStorage.getItem(USER_CACHE_KEY);
     if (useCache && cached) {
       this.user = JSON.parse(cached);
@@ -70,6 +80,7 @@ class Auth {
 
   /** @param {any} user */
   #setUser(user) {
+    if (!user) this.#endDemo();
     this.user = user;
     this.status = user ? 'signed_in' : 'signed_out';
     if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
@@ -112,6 +123,20 @@ class Auth {
     this.device = null;
   }
 
+  /** Opens the app on sample data with every server request switched off. Survives reloads until signing out. */
+  startDemo() {
+    demoMode.set(true);
+    this.error = '';
+    this.demo = true;
+    this.user = DEMO_USER;
+    this.status = 'signed_in';
+  }
+
+  #endDemo() {
+    demoMode.set(false);
+    this.demo = false;
+  }
+
   /** Local development only (DEV_LOGIN in .dev.vars on localhost). */
   async devSignIn() {
     const { token } = await api('/api/auth/dev', { method: 'POST' });
@@ -148,6 +173,10 @@ class Auth {
   }
 
   async signOut() {
+    if (this.demo) {
+      this.#setUser(null);
+      return;
+    }
     await api('/api/auth/session', { method: 'DELETE' }).catch(() => {});
     sessionToken.set(null);
     this.#setUser(null);

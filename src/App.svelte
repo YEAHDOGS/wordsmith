@@ -40,7 +40,11 @@
     if (openedFor) store.close();
     openedFor = userId;
     // A page shared into the app (share-capture.js) becomes a note once the store has loaded.
-    if (userId) store.open(userId).then(fileShare);
+    if (userId && !auth.demo) store.open(userId).then(fileShare);
+    // The demo opens on the sample workspace staging is seeded with, held in memory only. Loaded on demand.
+    if (userId && auth.demo) {
+      import('./lib/sample-data.js').then(({ sampleRows }) => openedFor === userId && store.open(userId, sampleRows(userId, userId, Date.now())).then(fileShare));
+    }
   });
 </script>
 
