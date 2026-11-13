@@ -9,7 +9,7 @@ const AUTH_HINT = /sign|session|auth|forbidden|unauthori|permission/i;
 // Demo mode never syncs; the icon explains why instead, so it is never mistaken for a fault.
 const DEMO = {
   title: 'Demo mode',
-  detail: 'You are exploring sample data. Nothing is saved or sent to the server, and every edit is gone when you reload.',
+  detail: 'You are exploring sample data, read-only. Nothing can be changed, and nothing is sent to the server.',
   advice: 'Sign in with Google or GitHub to keep your own notes.',
   demo: true,
 };

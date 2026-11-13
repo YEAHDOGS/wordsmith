@@ -14,6 +14,7 @@
   import BoardSettings from './BoardSettings.svelte';
   import ProjectHeader from './ProjectHeader.svelte';
   import NoteEditor from './NoteEditor.svelte';
+  import DemoGuard from './DemoGuard.svelte';
   import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
@@ -124,6 +125,7 @@
 
   /** Bottom-nav "+": a blank note in the current context, opened straight into the editor. */
   function newNote() {
+    if (store.blockedInDemo()) return;
     const note = store.create('notes', {
       project_id: route.view === 'project' ? route.id : null,
       label_ids: route.view === 'label' ? [route.id] : [],
@@ -262,4 +264,6 @@
   {#if route.note}
     {#key route.note}<NoteEditor id={route.note} />{/key}
   {/if}
+
+  {#if store.demo}<DemoGuard />{/if}
 </div>

@@ -16,7 +16,7 @@
   "none": "No sign-in providers are configured yet. Add OAuth credentials in .dev.vars (see .dev.vars.example).",
   "dev": "Local dev sign-in",
   "demo": "Launch demo",
-  "demoHint": "Explore with sample data. Nothing is saved or sent to the server.",
+  "demoHint": "Explore sample data, read-only. Nothing is sent to the server.",
   "notSetUp": "Sign-in with {provider} is not set up on this server yet.",
   "previewLabel": "Preview password",
   "previewHint": "This is a pull request Preview on test data. Enter the Preview password to look around.",

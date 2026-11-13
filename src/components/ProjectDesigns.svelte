@@ -33,6 +33,7 @@
   const open = $derived(linked.find((diagram) => diagram.id === openId));
 
   function create() {
+    if (store.blockedInDemo()) return;
     openId = store.create('diagrams', { project_id: project.id }).id;
   }
 

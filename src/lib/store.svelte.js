@@ -51,8 +51,10 @@ class Store {
   lastSync = $state(0);
   pending = $state(0);
   error = $state('');
-  /** Demo mode: rows live in memory only, with no local database, outbox or sync. */
+  /** Demo mode: read-only sample rows in memory, with no local database, outbox or sync. Every write is refused. */
   demo = $state(false);
+  /** When a write was last refused in demo mode; DemoGuard shows a notice for each. */
+  refusedAt = $state(0);
   /** Called when the server says the session is gone. */
   onUnauthorized = () => {};
   /** Called when the server's signed-in user isn't the one this store opened for (start-up trusted a stale cache). */
@@ -91,8 +93,8 @@ class Store {
   };
 
   /**
-   * Loads the local copy for a user, then syncs. With sample rows (demo mode) it shows those instead and never
-   * touches IndexedDB or the network, so every edit is gone on reload.
+   * Loads the local copy for a user, then syncs. With sample rows (demo mode) it shows those instead, read-only, and
+   * never touches IndexedDB or the network.
    * @param {string} userId
    * @param {Partial<Record<Table, any[]>>} [sample]
    */
@@ -147,6 +149,12 @@ class Store {
     this.#cursor = 0;
   }
 
+  /** True (and the read-only notice flashes) when demo mode refuses a write. */
+  blockedInDemo() {
+    if (this.demo) this.refusedAt = Date.now();
+    return this.demo;
+  }
+
   /** @param {Table} table @param {string} id */
   find(table, id) {
     return this[table].find((row) => row.id === id);
@@ -171,6 +179,8 @@ class Store {
    * @param {any} row
    */
   #save(table, row) {
+    // Demo mode is read-only: nothing changes, not even in memory. The row comes back unsaved so callers don't break.
+    if (this.blockedInDemo()) return this.find(table, row.id) ?? row;
     const next = { ...plain(row), updated_at: Date.now() };
     // A diagram's first edit since it synced notes what the server's copy looked like, and keeps that note until the
     // edit is saved: the server merges against it when an agent or another device changed the diagram meanwhile.
@@ -179,7 +189,6 @@ class Store {
       next.base = synced ? diagramBase(synced) : undefined;
     }
     this.#upsertLocal(table, next);
-    if (this.demo) return next;
     this.#db?.put(table, [next]);
     this.#outbox.set(`${table}:${next.id}`, ++this.#version);
     this.#persistOutbox();
@@ -214,6 +223,7 @@ class Store {
    * @param {Partial<Record<Table, string[]>>} rows
    */
   async purge(rows) {
+    if (this.blockedInDemo()) return;
     const ids = Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
     if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
       const deadline = Date.now() + PURGE_SYNC_WAIT_MS;
@@ -446,6 +456,7 @@ class Store {
    * @param {File[]} files
    */
   async upload(noteId, files) {
+    if (this.blockedInDemo()) return;
     if (this.#outbox.has(`notes:${noteId}`)) await this.sync();
     await Promise.all(files.map(async (file) => {
       const entry = { id: crypto.randomUUID(), noteId, name: file.name, progress: 0, error: '' };
@@ -473,6 +484,7 @@ class Store {
 
   /** Deletes an attachment everywhere (needs a connection). @param {string} id */
   async deleteAttachment(id) {
+    if (this.blockedInDemo()) return;
     await api(`/api/attachments/${id}`, { method: 'DELETE' });
     const row = this.attachments.find((file) => file.id === id);
     if (row) row.deleted_at = Date.now();
