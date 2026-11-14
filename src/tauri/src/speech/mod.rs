@@ -95,6 +95,7 @@ impl Download {
     }
 }
 
+/// The speech state lib.rs adds to the app (its commands are registered there too).
 #[derive(Default)]
 pub struct Speech {
     model: Mutex<Option<Loaded>>,
@@ -103,22 +104,6 @@ pub struct Speech {
     /// before it to finish, so two never share a model.
     session: Mutex<Option<(Sender<engine::Input>, JoinHandle<()>)>>,
     download: Mutex<Option<Download>>,
-}
-
-/// Adds the speech state and commands to the app.
-pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.manage(Speech::default()).invoke_handler(tauri::generate_handler![
-        speech_models,
-        speech_download_begin,
-        speech_download_chunk,
-        speech_download_finish,
-        speech_download_cancel,
-        speech_delete,
-        speech_start,
-        speech_feed,
-        speech_stop,
-        speech_unload,
-    ])
 }
 
 /// A model file name from the web app, checked so it can only ever name a file inside the models folder.
@@ -138,7 +123,7 @@ fn models_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 
 /// The model files that finished downloading.
 #[tauri::command(async)]
-fn speech_models<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
+pub fn speech_models<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
     let entries = fs::read_dir(models_dir(&app)?).map_err(|error| error.to_string())?;
     Ok(entries
         .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
@@ -149,7 +134,7 @@ fn speech_models<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
 /// Starts (or restarts) a download of `file`, a model or the voice activity model of the catalog: the bytes that
 /// follow go to `<file>.part`. A download still in progress is dropped first.
 #[tauri::command(async)]
-fn speech_download_begin<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
+pub fn speech_download_begin<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
     let expected = catalog_file(safe_name(&file)?, false).or_else(|_| catalog_file(&file, true))?;
     let part = models_dir(&app)?.join(format!("{file}{PARTIAL_EXTENSION}"));
     let mut download = state.download.lock().unwrap_or_else(PoisonError::into_inner);
@@ -163,7 +148,7 @@ fn speech_download_begin<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>
 
 /// Appends the request body to the download. Returns the bytes written so far.
 #[tauri::command(async)]
-fn speech_download_chunk(request: Request<'_>, state: State<'_, Speech>) -> Result<u64, String> {
+pub fn speech_download_chunk(request: Request<'_>, state: State<'_, Speech>) -> Result<u64, String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("Expected bytes".into());
     };
@@ -180,7 +165,7 @@ fn speech_download_chunk(request: Request<'_>, state: State<'_, Speech>) -> Resu
 
 /// Ends the download of `file`: it is kept only if its size and SHA-256 are the catalog's.
 #[tauri::command(async)]
-fn speech_download_finish<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
+pub fn speech_download_finish<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
     let dir = models_dir(&app)?;
     let mut guard = state.download.lock().unwrap_or_else(PoisonError::into_inner);
     if guard.as_ref().is_none_or(|download| download.file != file) {
@@ -209,7 +194,7 @@ fn speech_download_finish<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech
 }
 
 #[tauri::command(async)]
-fn speech_download_cancel(state: State<'_, Speech>) {
+pub fn speech_download_cancel(state: State<'_, Speech>) {
     if let Some(download) = state.download.lock().unwrap_or_else(PoisonError::into_inner).take() {
         download.discard();
     }
@@ -217,7 +202,7 @@ fn speech_download_cancel(state: State<'_, Speech>) {
 
 /// Deletes a downloaded model, unloading it first if it is the one in memory.
 #[tauri::command(async)]
-fn speech_delete<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
+pub fn speech_delete<R: Runtime>(app: AppHandle<R>, state: State<'_, Speech>, file: String) -> Result<(), String> {
     let path = models_dir(&app)?.join(safe_name(&file)?);
     let mut loaded = state.model.lock().unwrap_or_else(PoisonError::into_inner);
     if loaded.as_ref().is_some_and(|model| model.file == file) {
@@ -258,7 +243,7 @@ fn load_vad(state: &Speech, dir: &PathBuf, file: &str) -> Result<Model, String> 
 /// Starts listening. Returns at once; loading and everything heard is reported on `on_event`, ending with Stopped or Error.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn speech_start<R: Runtime>(
+pub fn speech_start<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, Speech>,
     model: String,
@@ -316,7 +301,7 @@ fn speech_start<R: Runtime>(
 
 /// Microphone audio for the running session: the request body is 16 kHz mono f32 samples, little endian.
 #[tauri::command]
-fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(), String> {
+pub fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(), String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("Expected audio bytes".into());
     };
@@ -329,7 +314,7 @@ fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(), Str
 
 /// Stops listening. Speech already heard is still transcribed and reported before Stopped.
 #[tauri::command]
-fn speech_stop(state: State<'_, Speech>) {
+pub fn speech_stop(state: State<'_, Speech>) {
     if let Some((input, _)) = state.session.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
         let _ = input.send(engine::Input::Stop);
     }
@@ -337,7 +322,7 @@ fn speech_stop(state: State<'_, Speech>) {
 
 /// Frees the loaded models' memory. A session that is still listening keeps its own until it ends.
 #[tauri::command(async)]
-fn speech_unload(state: State<'_, Speech>) {
+pub fn speech_unload(state: State<'_, Speech>) {
     *state.model.lock().unwrap_or_else(PoisonError::into_inner) = None;
     *state.vad.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }

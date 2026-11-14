@@ -13,21 +13,30 @@ const GEN_DIR = join(ROOT, 'src/tauri/gen');
 const ARCH = { x64: 'x64', arm64: 'arm64' }[process.arch] ?? process.arch;
 
 // Per platform: which produced files to keep and what to call them. First match per output name wins.
+// Builds signed for in-app updates (TAURI_SIGNING_PRIVATE_KEY set) also leave an updater bundle and its .sig, which
+// scripts/update-manifest.js turns into latest.json. Android keeps the APK build-apps.yml signed, else the unsigned one.
 const RULES = {
   windows: [
     { from: TARGET_DIR, match: /bundle[\\/]nsis[\\/].*-setup\.exe$/, name: `${APP}-win-${ARCH}.exe` },
+    { from: TARGET_DIR, match: /bundle[\\/]nsis[\\/].*-setup\.exe\.sig$/, name: `${APP}-win-${ARCH}.exe.sig` },
     { from: TARGET_DIR, match: /bundle[\\/]msi[\\/].*\.msi$/, name: `${APP}-win-${ARCH}.msi` },
   ],
   macos: [
     { from: TARGET_DIR, match: /universal-apple-darwin[\\/].*bundle[\\/]dmg[\\/].*\.dmg$/, name: `${APP}-mac-universal.dmg` },
+    { from: TARGET_DIR, match: /universal-apple-darwin[\\/].*bundle[\\/]macos[\\/].*\.app\.tar\.gz$/, name: `${APP}-mac-universal.app.tar.gz` },
+    { from: TARGET_DIR, match: /universal-apple-darwin[\\/].*bundle[\\/]macos[\\/].*\.app\.tar\.gz\.sig$/, name: `${APP}-mac-universal.app.tar.gz.sig` },
     { from: TARGET_DIR, match: /bundle[\\/]dmg[\\/].*\.dmg$/, name: `${APP}-mac-${ARCH}.dmg` },
   ],
   linux: [
     { from: TARGET_DIR, match: /bundle[\\/]appimage[\\/].*\.AppImage$/, name: `${APP}-linux-${ARCH}.AppImage` },
+    { from: TARGET_DIR, match: /bundle[\\/]appimage[\\/].*\.AppImage\.sig$/, name: `${APP}-linux-${ARCH}.AppImage.sig` },
     { from: TARGET_DIR, match: /bundle[\\/]deb[\\/].*\.deb$/, name: `${APP}-linux-${ARCH}.deb` },
     { from: TARGET_DIR, match: /bundle[\\/]rpm[\\/].*\.rpm$/, name: `${APP}-linux-${ARCH}.rpm` },
   ],
-  android: [{ from: GEN_DIR, match: /outputs[\\/]apk[\\/].*release.*\.apk$/, name: `${APP}-android.apk` }],
+  android: [
+    { from: GEN_DIR, match: /outputs[\\/]apk[\\/].*-release\.apk$/, name: `${APP}-android.apk` },
+    { from: GEN_DIR, match: /outputs[\\/]apk[\\/].*release.*\.apk$/, name: `${APP}-android.apk` },
+  ],
   ios: [{ from: GEN_DIR, match: /\.ipa$/, name: `${APP}-ios.ipa` }],
 };
 

@@ -27,6 +27,9 @@ serde = { version = "1", features = ["derive"] }
 transcribe-cpp = { version = "0.4.1", default-features = false }
 sha2 = "0.10"
 serde_json = "1"
+# In-app updates (src/updates.rs): downloads a signed newer release and installs it on restart. Desktop only: phones
+# update through a new APK (src/lib/updates.svelte.js).
+tauri-plugin-updater = "2"
 
 # Apple GPUs through Metal. Windows and Linux run on the CPU until their builds carry the Vulkan SDK
 # (the speech-vulkan feature below).

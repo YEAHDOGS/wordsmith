@@ -1,5 +1,6 @@
 <script>
-  // Settings → About: the Made by DOGS sticker, the running version (linked to the PR it shipped with, and when that merged), the Privacy Policy link and, on the web,
+  // Settings → About: the Made by DOGS sticker, the running version (linked to the PR it shipped with, and when that merged), the Privacy Policy link,
+  // in the native apps their updates (UpdateSettings) and, on the web,
   // installers for every platform from the latest GitHub release, the visitor's own platform first. Installers are
   // hidden inside the native app.
   import Download from '@lucide/svelte/icons/download';
@@ -9,10 +10,12 @@
   import Smartphone from '@lucide/svelte/icons/smartphone';
   import ShieldCheck from '@lucide/svelte/icons/shield-check';
   import { fade, fly } from 'svelte/transition';
+  import UpdateSettings from './UpdateSettings.svelte';
   import { IS_NATIVE } from '../lib/api.js';
+  import { updates } from '../lib/updates.svelte.js';
   import { APP_VERSION, LATEST_PR } from '../lib/version.js';
   import { fullTime } from '../lib/time.js';
-  import { latestRelease, visitorPlatform } from './settings-data.js';
+  import { latestRelease, visitorPlatform } from '../lib/github-public.js';
   import { PRIVACY_PATH, privacy } from './privacy-route.svelte.js';
   import { BOX, BUTTON, HEADING, HINT, SUBHEADING } from './settings-styles.js';
   import TEXT from './settings.json';
@@ -24,7 +27,7 @@
   const FADE = { duration: 150 };
 
   const platform = visitorPlatform();
-  /** @type {import('./settings-data.js').Release | null | undefined} undefined while loading */
+  /** @type {import('../lib/github-public.js').Release | null | undefined} undefined while loading */
   let release = $state(undefined);
 
   /** Downloads grouped by platform, the visitor's own first. */
@@ -32,7 +35,7 @@
     if (!release) return [];
     const order = Object.keys(TEXT.platforms).sort((a, b) => Number(b === platform) - Number(a === platform));
     return order
-      .map((id) => ({ id, downloads: /** @type {import('./settings-data.js').Release} */ (release).downloads.filter((download) => download.platform === id) }))
+      .map((id) => ({ id, downloads: /** @type {import('../lib/github-public.js').Release} */ (release).downloads.filter((download) => download.platform === id) }))
       .filter((group) => group.downloads.length);
   });
 
@@ -63,6 +66,8 @@
 <a href={PRIVACY_PATH} class="{BUTTON} group mb-4" onclick={(event) => privacy.show(event)}>
   <ShieldCheck class="size-4 shrink-0 spring group-hover:text-accent" />{TEXT.privacy}
 </a>
+
+{#if updates.supported}<UpdateSettings />{/if}
 
 {#if !IS_NATIVE}
   <p class={SUBHEADING}>{TEXT.install}</p>

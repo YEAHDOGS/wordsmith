@@ -1,5 +1,6 @@
-// Public GitHub lookups for Settings: the latest app release (Install app) and the signed-in user's GitHub profile.
-// Both are anonymous api.github.com calls (60 an hour per visitor), so answers are cached in localStorage.
+// Public GitHub lookups: the latest app release (Settings → Install app, and the update check in updates.svelte.js) and
+// the signed-in user's GitHub profile. Both are anonymous api.github.com calls (60 an hour per visitor), so answers are
+// cached in localStorage.
 
 const GITHUB_API = 'https://api.github.com';
 // The list (not /releases/latest) answers 200 with [] before the first release, so no 404 lands in the console
@@ -31,13 +32,15 @@ const AGENT_PLATFORMS = /** @type {[string, RegExp][]} */ ([
 const IPAD_AGENT = /macintosh/i;
 const IPAD_TOUCH_POINTS = 1;
 const NUMERIC_ID = /^\d+$/;
+// Release tags are the app version with a v in front (v1.0.0.18)
+const VERSION_PREFIX = /^v/;
 
 /** @typedef {{ platform: string, name: string, kind: string, url: string, mb: number }} Download */
 /** @typedef {{ tag: string, url: string, publishedAt: string, downloads: Download[] }} Release */
 
 /**
  * GETs JSON with a localStorage cache. A 404 caches null; network errors fall back to a stale copy.
- * @param {string} key @param {string} url @param {number} maxAge
+ * @param {string} key @param {string} url @param {number} maxAge 0 always asks GitHub
  * @returns {Promise<any>}
  */
 async function cachedJson(key, url, maxAge) {
@@ -60,9 +63,13 @@ async function cachedJson(key, url, maxAge) {
   }
 }
 
-/** The newest published release and its installers, grouped by platform. Null when there is none or GitHub is unreachable. @returns {Promise<Release | null>} */
-export async function latestRelease() {
-  const releases = await cachedJson(RELEASE_CACHE_KEY, RELEASE_URL, RELEASE_CACHE_MS);
+/**
+ * The newest published release and its installers, grouped by platform. Null when there is none or GitHub is unreachable.
+ * @param {{ fresh?: boolean }} [options] fresh skips the cache (a "Check for updates" press)
+ * @returns {Promise<Release | null>}
+ */
+export async function latestRelease({ fresh = false } = {}) {
+  const releases = await cachedJson(RELEASE_CACHE_KEY, RELEASE_URL, fresh ? 0 : RELEASE_CACHE_MS);
   const release = Array.isArray(releases) ? releases.find((entry) => !entry.draft && !entry.prerelease) : null;
   if (!release?.tag_name) return null;
   /** @type {Download[]} */
@@ -74,6 +81,21 @@ export async function latestRelease() {
     }
   }
   return { tag: release.tag_name, url: release.html_url, publishedAt: release.published_at, downloads };
+}
+
+/**
+ * Compares two app versions part by part ("1.0.0.17" against "v1.0.0.18"): above 0 when a is newer, below when b is.
+ * A part that isn't a number (a dev build's "dev") counts as 0.
+ * @param {string} a @param {string} b
+ */
+export function compareVersions(a, b) {
+  const parts = (/** @type {string} */ version) => version.replace(VERSION_PREFIX, '').split('.').map((part) => Number(part) || 0);
+  const [left, right] = [parts(a), parts(b)];
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference) return difference;
+  }
+  return 0;
 }
 
 /** The visitor's platform from the user agent: android, ios, windows, macos, linux, or '' when unknown. */
