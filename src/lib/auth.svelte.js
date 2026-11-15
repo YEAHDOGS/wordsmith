@@ -92,7 +92,7 @@ class Auth {
       this.status = 'signed_in';
       // Trial or lapsed accounts ask the server once in the background: an approval since the last start, or the
       // trial running out, must not wait for a 401 to be noticed.
-      if (this.user?.access && this.user.access !== 'member') this.#refresh();
+      if (this.user?.access && this.user.access !== 'member') this.refresh();
       return;
     }
     try {
@@ -115,13 +115,18 @@ class Auth {
     }
   }
 
-  /** Re-reads the session quietly; offline, the cached user stays as it is. */
-  async #refresh() {
+  /**
+   * Re-reads the session quietly: a server hiccup or being offline changes nothing (never signs anyone out).
+   * @returns {Promise<boolean>} whether the server answered
+   */
+  async refresh() {
     try {
       const session = await api('/api/auth/session');
       if (session.user) this.#setUser(session.user);
+      return true;
     } catch {
-      // Offline: nothing changes, and the server still refuses anything a locked account asks for.
+      // Offline or a server error: the cached user stays, and the server still refuses anything a locked account asks for.
+      return false;
     }
   }
 

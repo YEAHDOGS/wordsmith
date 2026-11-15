@@ -26,6 +26,11 @@ function committed(tx) {
   });
 }
 
+/** Deletes a user's local copy without opening it (signing out from the paywall, where it never opened). @param {string} userId */
+export function deleteLocalDb(userId) {
+  return done(indexedDB.deleteDatabase(DB_PREFIX + userId));
+}
+
 /** Local database for one user. */
 export class LocalDb {
   /**

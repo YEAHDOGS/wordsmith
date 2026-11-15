@@ -6,9 +6,6 @@
 //   npm run access -- trial <email>        back on the trial clock (from when they signed up)
 // Add --staging to use the staging database instead, or --local for the machine-local one.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { TRIAL_MS } from '../src/lib/models.js';
 
 const DATABASES = { production: 'wordsmith-production', staging: 'wordsmith-staging' };
@@ -28,22 +25,16 @@ const where = local ? ['--local', '--persist-to', '.wrangler/state'] : ['--remot
 const database = staging ? DATABASES.staging : DATABASES.production;
 
 /**
- * Runs SQL through wrangler and returns the rows. The statement goes in a temporary file (--file), so the only
- * arguments the shell sees are fixed ones (Windows runs npx through a shell).
+ * Runs SQL through wrangler and returns the rows. --command, not --file: against the real databases wrangler runs a
+ * file as a bulk import, which returns no rows and pauses the database while it runs. Windows runs npx through a
+ * shell, so the statement is wrapped in double quotes there; it can't break out, because it never holds a double quote
+ * or a %: its only values are fixed words, digits, and an email that matched EMAIL.
  * @param {string} sql
  */
 function query(sql) {
-  const folder = mkdtempSync(join(tmpdir(), 'wordsmith-access-'));
-  const file = join(folder, 'query.sql');
-  writeFileSync(file, sql);
-  try {
-    const windows = process.platform === 'win32';
-    // Quoted for the shell in case the temp folder's path has a space in it (it can't hold a quote).
-    const out = execFileSync('npx', ['--yes', 'wrangler', 'd1', 'execute', database, ...where, '--json', '--file', windows ? `"${file}"` : file], { encoding: 'utf8', shell: windows });
-    return JSON.parse(out)[0]?.results ?? [];
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
+  const windows = process.platform === 'win32';
+  const out = execFileSync('npx', ['--yes', 'wrangler', 'd1', 'execute', database, ...where, '--json', '--command', windows ? `"${sql}"` : sql], { encoding: 'utf8', shell: windows });
+  return JSON.parse(out)[0]?.results ?? [];
 }
 
 if (command === 'list') {

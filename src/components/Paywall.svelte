@@ -15,6 +15,8 @@
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { IS_NATIVE } from '../lib/api.js';
   import { SUBSCRIBE_URL } from '../lib/models.js';
+  import { store } from '../lib/store.svelte.js';
+  import { deleteLocalDb } from '../lib/idb.js';
   import TEXT from './paywall.json';
 
   const STAGES = TEXT.stages;
@@ -56,12 +58,22 @@
     openExternal(SUBSCRIBE_URL);
   }
 
+  // A quiet re-read: a server hiccup leaves the paywall up instead of signing out.
   async function check() {
     checking = true;
     stillLocked = false;
-    await auth.load();
+    await auth.refresh();
     checking = false;
     stillLocked = auth.locked;
+  }
+
+  // Like Settings' sign out, this device forgets its copy of the notes too. The store may never have opened (the app
+  // started locked), so the database is also deleted by name.
+  async function signOut() {
+    const userId = auth.user?.id;
+    await auth.signOut();
+    await store.wipe();
+    if (userId) await deleteLocalDb(userId).catch(() => {});
   }
 </script>
 
@@ -120,7 +132,7 @@
     <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked ? 'text-accent' : 'text-ink-faint'}" role="status">
       {#key stillLocked}<span in:fade={{ duration: 150 }}>{stillLocked ? TEXT.stillLocked : TEXT.manual}</span>{/key}
     </p>
-    <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={() => auth.signOut()}>{TEXT.signOut}</button>
+    <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={signOut}>{TEXT.signOut}</button>
     </div>
   </section>
 </div>
