@@ -19,7 +19,7 @@
 </script>
 
 {#if player.tape}
-  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-surface px-2 py-2 sm:flex-nowrap sm:px-4 tv:py-4" transition:fly={ENTER}>
+  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-line bg-surface px-2 py-2 short:py-1 sm:flex-nowrap sm:px-4 tv:py-4" transition:fly={ENTER}>
     <div class="flex shrink-0 items-center">
       <button class={BUTTON} aria-label={TEXT.previous} title={TEXT.previous} onclick={() => player.previous()}><SkipBack class="size-4" /></button>
       <button class="{BUTTON} border border-accent text-accent" aria-label={player.playing ? TEXT.pause : TEXT.play.replace('{title}', title)} onclick={() => player.toggle()}>
@@ -27,7 +27,8 @@
       </button>
       <button class={BUTTON} aria-label={TEXT.next} title={TEXT.next} onclick={() => player.next()}><SkipForward class="size-4" /></button>
     </div>
-    <p class="order-first w-full min-w-0 truncate text-sm font-semibold text-ink sm:order-none sm:w-48 sm:shrink-0 lg:w-64 tv:text-xl">
+    <!-- Phones show the title on its own line above the controls; short windows drop it to keep the list in view -->
+    <p class="order-first w-full min-w-0 truncate text-sm font-semibold text-ink short:hidden sm:order-none sm:w-48 sm:shrink-0 lg:w-64 tv:text-xl">
       {player.error ? TEXT.loadError : title}
     </p>
     <div class="flex min-w-0 flex-1 items-center gap-2 font-mono text-xs text-ink-muted tabular-nums tv:text-base">

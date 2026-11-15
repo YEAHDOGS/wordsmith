@@ -112,9 +112,10 @@
 <div class="relative grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" role="region" aria-label={TEXT.title}
   {ondragover} ondragleave={(event) => event.currentTarget === event.target && (dragging = false)} {ondrop}>
   <div class="{CONTENT} flex flex-wrap items-center gap-2 border-b border-line px-2 py-2 sm:px-4">
-    <button class={BUTTON} onclick={() => filePicker?.click()}><Upload class="size-4" />{TEXT.importFiles}</button>
+    <!-- Icon-only on phones, so the button and the search share one row down to 320px -->
+    <button class={BUTTON} aria-label={TEXT.importFiles} title={TEXT.importFiles} onclick={() => filePicker?.click()}><Upload class="size-4" /><span class="max-sm:hidden">{TEXT.importFiles}</span></button>
     <button class="{BUTTON} max-sm:hidden" onclick={() => folderPicker?.click()}><FolderUp class="size-4" />{TEXT.importFolder}</button>
-    <label class="flex min-w-40 flex-1 items-center gap-2 border border-line bg-surface px-2 focus-within:border-accent">
+    <label class="flex min-w-0 flex-1 basis-40 items-center gap-2 border border-line bg-surface px-2 focus-within:border-accent">
       <Search class="size-4 shrink-0 text-ink-faint" />
       <input class="min-w-0 flex-1 bg-transparent py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none" type="search" placeholder={TEXT.search} aria-label={TEXT.search} bind:value={query} />
     </label>

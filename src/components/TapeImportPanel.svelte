@@ -24,7 +24,7 @@
   const headline = $derived((tapeImport.active ? TEXT.importing : TEXT.imported).replace('{done}', String(finished)).replace('{total}', String(tapeImport.total)));
 </script>
 
-<section class="border-b border-line bg-surface px-2 py-3 sm:px-4" aria-live="polite" transition:fly={ENTER}>
+<section class="border-b border-line bg-surface px-2 py-3 short:py-1.5 sm:px-4" aria-live="polite" transition:fly={ENTER}>
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
     <span class="font-semibold text-ink">{headline}</span>
     {#if tapeImport.skipped}<span class="text-xs text-ink-muted">{TEXT.skipped.replace('{count}', String(tapeImport.skipped))}</span>{/if}
