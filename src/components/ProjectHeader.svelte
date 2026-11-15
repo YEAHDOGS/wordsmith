@@ -1,6 +1,6 @@
 <script>
   // Project toolbar: one slim row under the top bar (which already shows the project name and the settings gear).
-  // Board / Notes / Pull requests / Media / Designs tabs on the left; queue counts and the GitHub repo on the right. Name, color, the agent
+  // Board / Notes / PRs / Media / Designs tabs on the left; queue counts and the GitHub repo on the right. Name, color, the agent
   // prompt, board columns and delete live in project settings (BoardSettings). Tablets and up fit one line (short tab
   // labels below lg); if a window is too narrow the repo wraps under the tabs.
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -15,7 +15,7 @@
   let { project, features, tab, ontab } = $props();
 
   const FULL_WIDTH_PERCENT = 100;
-  const TABS = [{ id: 'board', label: 'Board', short: 'Board' }, { id: 'notes', label: 'Notes', short: 'Notes' }, { id: 'prs', label: 'Pull requests', short: 'PRs' }, { id: 'media', label: 'Media', short: 'Media' }, { id: 'designs', label: 'Designs', short: 'Design' }];
+  const TABS = [{ id: 'board', label: 'Board', short: 'Board' }, { id: 'notes', label: 'Notes', short: 'Notes' }, { id: 'prs', label: 'PRs', short: 'PRs' }, { id: 'media', label: 'Media', short: 'Media' }, { id: 'designs', label: 'Designs', short: 'Design' }];
   /** Arrow key -> how far the tab choice moves. */
   const TAB_STEPS = { ArrowRight: 1, ArrowLeft: -1 };
   const ICON_BUTTON = 'spring press flex size-8 shrink-0 items-center justify-center text-ink-muted hover:bg-surface-raised hover:text-ink tv:size-11';

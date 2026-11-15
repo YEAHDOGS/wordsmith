@@ -33,11 +33,11 @@
 </script>
 
 <header class="relative flex h-12 shrink-0 items-center gap-1 border-b border-line bg-app px-1 sm:h-14 sm:gap-2 sm:px-4 tv:h-20">
-  <button class="{ICON_BUTTON} lg:hidden" aria-label={problem ? `Open navigation. Sync problem: ${problem.title}` : 'Open navigation'} onclick={() => (ui.drawerOpen = true)}>
+  <button class="{ICON_BUTTON} lg:hidden" aria-label={problem ? `Open navigation. ${problem.demo ? '' : 'Sync problem: '}${problem.title}` : 'Open navigation'} onclick={() => (ui.drawerOpen = true)}>
     <Menu class="size-5" />
     {#if problem}
       <span class="absolute top-2 right-2" aria-hidden="true" transition:scale={BADGE}>
-        <span class="badge-breathe block size-2.5 rounded-full bg-requested ring-2 ring-app"></span>
+        <span class="badge-breathe block size-2.5 rounded-full ring-2 ring-app {problem.demo ? 'bg-accent' : 'bg-requested'}"></span>
       </span>
     {/if}
   </button>
