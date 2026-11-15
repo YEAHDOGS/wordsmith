@@ -26,6 +26,8 @@ import * as noteAttachments from './functions/api/notes/[id]/attachments.js';
 import * as attachment from './functions/api/attachments/[id].js';
 import * as tapes from './functions/api/tapes/index.js';
 import * as tapeAudio from './functions/api/tapes/[id]/audio.js';
+import * as tapeTranscribe from './functions/api/tapes/[id]/transcribe.js';
+import * as tapeTranscription from './functions/api/tapes/transcription.js';
 import * as v1Index from './functions/api/v1/index.js';
 import * as v1Projects from './functions/api/v1/projects.js';
 import * as v1Features from './functions/api/v1/features/index.js';
@@ -82,7 +84,9 @@ const ROUTES = [
   ['/api/notes/:id/attachments', noteAttachments, false],
   ['/api/attachments/:id', attachment, false],
   ['/api/tapes', tapes, false],
+  ['/api/tapes/transcription', tapeTranscription, false],
   ['/api/tapes/:id/audio', tapeAudio, false],
+  ['/api/tapes/:id/transcribe', tapeTranscribe, false],
   ['/api/v1', v1Index, true],
   ['/api/v1/projects', v1Projects, true],
   ['/api/v1/features', v1Features, true],
