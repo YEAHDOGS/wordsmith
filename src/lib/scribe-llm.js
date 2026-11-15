@@ -5,6 +5,7 @@
 // The model answers in JSON rather than tool calls, because small local models follow a JSON shape far more reliably.
 // It is never told about wordsmith's API: it only says what to create or update, and the app makes those changes.
 import { FEATURE_STATES, MAX_BODY, MAX_PRIORITY, MAX_TITLE, PRIORITY_LABELS } from './models.js';
+import WORK from './scribe-work-words.json';
 
 // Low, so the same speech gives the same tickets.
 export const TEMPERATURE = 0.2;
@@ -38,6 +39,16 @@ const OPS = ['create', 'update', 'none'];
 export const NOT_CHAT = /embed|whisper|rerank|tts/i;
 // Looking for a model server on this machine gives each address this long to answer.
 const PROBE_TIMEOUT_MS = 1_500;
+// The work words, and the common words a ticket title's words must not be (soundsLikeWork).
+const WORK_WORDS = new Set(WORK.words);
+const IGNORED_WORDS = new Set(WORK.ignore);
+// A ticket title's or project name's word counts as a sign of work from this many letters (shorter ones are "the",
+// "for"...).
+const MIN_NAME_WORD = 4;
+// Endings dropped to find a word's base form: "pages", "crashes", "loading", "broke" + "d"...
+const ENDINGS = [['s', ''], ['es', ''], ['ing', ''], ['ing', 'e'], ['ed', ''], ['ed', 'e'], ['d', '']];
+// Things only code looks like: camelCase, snake_case, a file name or a path.
+const CODE_LIKE = /[a-z][A-Z]|\w[_./]\w/;
 
 const SYSTEM = `You are Scribe. A developer is thinking out loud, and you turn what they say into tickets in their notes app while they keep talking.
 
@@ -54,6 +65,7 @@ Rules:
 - title: an instruction under 80 characters, like "Add offline mode to the editor".
 - body: Markdown. What they asked for in their own meaning, then acceptance criteria as a short checklist when they gave any. Never invent requirements they did not say.
 - If the speech refines, corrects or adds to a ticket in the list, update that ticket by its ref instead of creating a new one. Use "append" to add a paragraph, "body" only to rewrite the whole body. Leave out every field you are not changing.
+- The new speech may finish a request begun in the earlier speech: then write the ticket for the whole request.
 - Update only a ticket the speech is clearly about (it names the same feature or problem). New work gets a create, even when a listed ticket is in the same area. Never retitle a ticket to mean something else.
 - priority: 0 none, 1 low, 2 normal, 3 high, 4 urgent, 5 critical. Set it only when they say how important it is.
 - state: ${FEATURE_STATES.join(', ')}. Set it only when they say work started or finished.
@@ -147,19 +159,38 @@ const base = (endpoint) => endpoint.trim().replace(/\/+$/, '');
 /** Servers and models that refused the reasoning and length options ("endpoint model"), so they are asked plainly. */
 const plain = new Set();
 
+/** How many words in a stretch of speech carry meaning: not filler, not a stray letter or recognizer noise. @param {string} text */
+export function meaningfulWords(text) {
+  return wordsOf(text).filter((word) => word.length > 1 && !FILLER.test(word)).length;
+}
+
 /**
- * How many words in a stretch of speech carry meaning: not filler, not a stray letter or recognizer noise. Uses the
- * browser's word breaking where it has one, so languages written without spaces count too.
+ * A text's words, letters and digits only. Uses the browser's word breaking where it has one, so languages written
+ * without spaces split too.
  * @param {string} text
  */
-export function meaningfulWords(text) {
+function wordsOf(text) {
   const words = typeof Intl !== 'undefined' && 'Segmenter' in Intl
     ? [...new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)].filter((part) => part.isWordLike).map((part) => part.segment)
     : text.split(/\s+/);
-  return words.filter((word) => {
-    const bare = word.replace(/[^\p{L}\p{N}]/gu, '');
-    return bare.length > 1 && !FILLER.test(bare);
-  }).length;
+  return words.map((word) => word.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+}
+
+/**
+ * Whether speech could be about work, checked on this device before it costs a request: it names something from
+ * software work (scribe-work-words.json), a word from one of the tickets or the project, or looks like code. "I need
+ * to get to a dentist" doesn't. Errs on the side of sending: a wrong yes costs one request, while a wrong no keeps
+ * a ticket back until you press Send anyway.
+ * @param {string} text
+ * @param {string[]} names the listed tickets' titles and the project's name
+ */
+export function soundsLikeWork(text, names) {
+  if (CODE_LIKE.test(text)) return true;
+  const known = new Set(names.flatMap((name) => wordsOf(name.toLowerCase())).filter((word) => word.length >= MIN_NAME_WORD && !IGNORED_WORDS.has(word)));
+  return wordsOf(text.toLowerCase()).some((word) => {
+    const forms = [word, ...ENDINGS.filter(([ending]) => word.endsWith(ending)).map(([ending, base]) => word.slice(0, -ending.length) + base)];
+    return forms.some((form) => WORK_WORDS.has(form) || known.has(form));
+  });
 }
 
 /**
