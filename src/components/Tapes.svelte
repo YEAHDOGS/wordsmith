@@ -1,5 +1,7 @@
 <script>
-  // Tapes: every voice recording you've imported, newest first, searchable, each one playable and with notes. Import
+  // Tapes: every voice recording you've imported, newest first, searchable (titles, notes, transcripts) and filtered by
+  // rating, each one playable, with notes and a transcript. The desktop apps transcribe on the device ("Transcribe all",
+  // src/lib/tape-transcribe.svelte.js). Import
   // with the buttons (a whole recorder folder at once is fine) or by dropping files or folders anywhere on the page;
   // the queue (src/lib/tapes.svelte.js) shrinks and uploads them in the background, and keeps going if you leave.
   // Layout: one column everywhere, capped at max-w-7xl (spread on ultra-wide). The toolbar and the player hold their
@@ -10,23 +12,31 @@
   import FolderUp from '@lucide/svelte/icons/folder-up';
   import Search from '@lucide/svelte/icons/search';
   import CassetteTape from '@lucide/svelte/icons/cassette-tape';
+  import AudioLines from '@lucide/svelte/icons/audio-lines';
   import TapeRow from './TapeRow.svelte';
   import TapeImportPanel from './TapeImportPanel.svelte';
   import TapePlayerBar from './TapePlayerBar.svelte';
   import { store } from '../lib/store.svelte.js';
   import { tapeImport } from '../lib/tapes.svelte.js';
-  import { AUDIO_TYPES } from '../lib/models.js';
+  import { transcriber } from '../lib/tape-transcribe.svelte.js';
+  import { speech } from '../lib/speech.svelte.js';
+  import { AUDIO_TYPES, TAPE_RATINGS } from '../lib/models.js';
   import { player } from './tape-player.svelte.js';
   import TEXT from './tapes.json';
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const BUTTON = 'spring press inline-flex shrink-0 items-center gap-2 border border-line-strong px-3 py-2 text-sm text-ink hover:border-accent';
   const PAGE_SIZE = 100;
-  const SEARCH_FIELDS = ['title', 'body', 'source_name'];
+  const SEARCH_FIELDS = ['title', 'body', 'transcript', 'source_name'];
+  // Rating filters, best first; ALL_RATINGS shows every tape.
+  const ALL_RATINGS = -1;
+  const FILTERS = [ALL_RATINGS, ...['Gold', 'Maybe', 'Unrated', 'Trash'].map((label) => TAPE_RATINGS.indexOf(label))];
+  const CHIP = 'spring press shrink-0 border px-2.5 py-1 text-xs';
   const ACCEPT = ['audio/*', ...Object.values(AUDIO_TYPES).flat()].join(',');
   const FADE = { duration: 150 };
 
   let query = $state('');
+  let rating = $state(ALL_RATINGS);
   let openId = $state('');
   let shown = $state(PAGE_SIZE);
   let dragging = $state(false);
@@ -37,8 +47,9 @@
   const tapes = $derived(store.tapes.filter((tape) => !tape.deleted_at).sort((a, b) => (b.recorded_at ?? b.created_at) - (a.recorded_at ?? a.created_at)));
   const matches = $derived.by(() => {
     const words = query.trim().toLowerCase();
-    if (!words) return tapes;
-    return tapes.filter((tape) => SEARCH_FIELDS.some((field) => String(tape[field] || '').toLowerCase().includes(words)));
+    const rated = rating === ALL_RATINGS ? tapes : tapes.filter((tape) => (tape.rating ?? 0) === rating);
+    if (!words) return rated;
+    return rated.filter((tape) => SEARCH_FIELDS.some((field) => String(tape[field] || '').toLowerCase().includes(words)));
   });
   const visible = $derived(matches.slice(0, shown));
 
@@ -46,12 +57,21 @@
   $effect(() => {
     player.order = matches;
   });
-  // A new search starts from the top.
+  // A new search or filter starts from the top.
   $effect(() => {
     query;
+    rating;
     shown = PAGE_SIZE;
   });
   onDestroy(() => player.pause());
+  speech.init();
+
+  const transcribeLine = $derived.by(() => {
+    if (transcriber.error) return transcriber.error;
+    if (transcriber.waiting) return TEXT.transcribeWaiting;
+    if (transcriber.running) return TEXT.transcribeProgress.replace('{done}', String(transcriber.done)).replace('{left}', String(transcriber.remaining));
+    return transcriber.done ? TEXT.transcribeDone : '';
+  });
 
   /** @param {File[]} files */
   function start(files) {
@@ -119,12 +139,26 @@
       <Search class="size-4 shrink-0 text-ink-faint" />
       <input class="min-w-0 flex-1 bg-transparent py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none" type="search" placeholder={TEXT.search} aria-label={TEXT.search} bind:value={query} />
     </label>
+    {#if speech.available && (transcriber.running || transcriber.remaining)}
+      <button class={BUTTON} onclick={() => (transcriber.running ? transcriber.stop() : transcriber.start())}>
+        <AudioLines class="size-4 {transcriber.running ? 'animate-pulse text-accent' : ''}" />
+        <span class="max-sm:hidden">{transcriber.running ? TEXT.transcribeStop : TEXT.transcribeAll.replace('{count}', String(transcriber.remaining))}</span>
+      </button>
+    {/if}
     <input class="hidden" type="file" multiple accept={ACCEPT} bind:this={filePicker} onchange={picked} />
     <input class="hidden" type="file" multiple webkitdirectory bind:this={folderPicker} onchange={picked} />
   </div>
 
   <div class={CONTENT}>
     {#if panel && (tapeImport.active || tapeImport.total)}<TapeImportPanel onclose={() => (panel = false)} />{/if}
+    <!-- Rating filters: one row that swipes sideways on narrow screens instead of wrapping -->
+    <div class="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain border-b border-line px-2 py-1.5 [scrollbar-width:none] sm:px-4" role="radiogroup" aria-label={TEXT.filterLabel}>
+      {#each FILTERS as level (level)}
+        <button class="{CHIP} {rating === level ? 'border-accent bg-accent-soft text-ink' : 'border-line text-ink-muted hover:border-line-strong'}" role="radio" aria-checked={rating === level}
+          onclick={() => (rating = level)}>{level === ALL_RATINGS ? TEXT.allRatings : TEXT.ratings[level]}</button>
+      {/each}
+      {#if transcribeLine}<span class="ml-auto min-w-0 shrink truncate pl-2 text-xs {transcriber.error ? 'text-accent' : 'text-ink-faint'}" aria-live="polite" title={transcribeLine}>{transcribeLine}</span>{/if}
+    </div>
   </div>
 
   <div class="min-h-0 overflow-y-auto overscroll-contain">

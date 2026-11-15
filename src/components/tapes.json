@@ -5,7 +5,7 @@
   "importFolder": "Import a folder",
   "dropHere": "Drop recordings to import them",
   "dropHint": "MP3, M4A, WAV, FLAC or Ogg. Each one is shrunk to about a fifth before it uploads; the originals stay on this device.",
-  "search": "Search tapes",
+  "search": "Search titles, notes and transcripts",
   "empty": "No tapes yet. Import your recorder's folder: a thousand files is fine, and importing it again only adds new ones.",
   "noMatches": "No tapes match.",
   "importing": "Importing {done} of {total}",
@@ -42,5 +42,27 @@
   "deleteNo": "Keep",
   "loadError": "Couldn't load this tape's audio.",
   "showMore": "Showing {shown} of {total}",
-  "untitled": "Untitled tape"
+  "untitled": "Untitled tape",
+  "ratings": [
+    "Unrated",
+    "Trash",
+    "Maybe",
+    "Gold"
+  ],
+  "allRatings": "All",
+  "filterLabel": "Show tapes rated",
+  "rate": "Rating",
+  "gold": "Mark gold",
+  "ungold": "Gold: press to unmark",
+  "transcript": "Transcript",
+  "transcriptPlaceholder": "Not transcribed yet.",
+  "transcriptBy": "Transcribed on this device by {model}. Fix any line by editing it.",
+  "transcribe": "Transcribe",
+  "transcribing": "Transcribing…",
+  "transcribeAll": "Transcribe all ({count})",
+  "transcribeStop": "Stop",
+  "transcribeProgress": "Transcribing on this device: {done} done, {left} to go",
+  "transcribeWaiting": "Waiting for Scribe to stop listening…",
+  "transcribeDone": "Every tape has a transcript.",
+  "transcribeFailed": "Couldn't transcribe: {error}"
 }

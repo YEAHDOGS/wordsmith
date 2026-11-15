@@ -100,6 +100,11 @@ export const TAPE_LIMIT = 'tape_limit';
 export const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
 // Longest recording a tape can say it is (ms): past this a duration is a mistake, not a recording.
 export const MAX_TAPE_DURATION_MS = 24 * 3_600_000;
+// The owner's verdict on a tape (tapes.rating). Index = stored value; GOLD_RATING is the one worth going back to.
+export const TAPE_RATINGS = ['Unrated', 'Trash', 'Maybe', 'Gold'];
+export const GOLD_RATING = TAPE_RATINGS.indexOf('Gold');
+// An hour of fast rap is about 10,000 words; this holds several.
+export const MAX_TRANSCRIPT = 100_000;
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
@@ -241,6 +246,11 @@ export const MODELS = {
     title: { type: 'text', max: MAX_TITLE, default: '' },
     // The owner's notes or lyrics, Markdown.
     body: { type: 'text', max: MAX_BODY, default: '' },
+    rating: { type: 'int', min: 0, max: TAPE_RATINGS.length - 1, default: 0 },
+    // Written by the desktop app's local speech engine (src/lib/tape-transcribe.svelte.js); the owner may correct it.
+    transcript: { type: 'text', max: MAX_TRANSCRIPT, default: '' },
+    transcript_model: { type: 'text', max: MAX_NAME, default: '' },
+    transcribed_at: { type: 'real', nullable: true, default: null },
   },
   // Design diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
   diagrams: {
