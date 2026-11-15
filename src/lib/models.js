@@ -38,6 +38,8 @@ export const PLANS = {
 /** @typedef {keyof typeof PLANS} Plan */
 const PLAN_RANK = /** @type {Plan[]} */ (Object.keys(PLANS));
 const PAID_PLANS = PLAN_RANK.filter((plan) => PLANS[plan].level !== null);
+// The currency of PLANS' prices.
+const PRICE_CURRENCY = 'USD';
 // The plan scripts/access.js gives when approving by hand without naming one.
 export const GRANTED_PLAN = 'rockstar';
 /** When an account's trial ends (ms). @param {{ created_at: number }} user */
@@ -45,8 +47,12 @@ export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
 
 /**
  * The plan a Buy Me a Coffee membership pays for, or null while it isn't paid up (paused, or canceled and past the end
- * of its paid period). A level not in PLANS gets the highest plan its price covers, and at least the lowest paid one.
- * @param {{ level_id: number | null, duration: string, amount: number, status: string, period_end: number | null }} membership
+ * of its paid period). A level not in PLANS gets the highest plan its price covers (prices are USD; another currency
+ * gets the lowest paid plan), and at least the lowest paid one.
+ * An active membership counts even past period_end: Buy Me a Coffee isn't documented to send an event on every
+ * renewal, so expiring on it could lock out paying members. A cancellation that never arrives (Buy Me a Coffee retries
+ * for hours and emails the owner when deliveries keep failing) shows in `npm run access -- list` instead.
+ * @param {{ level_id: number | null, duration: string, amount: number, currency?: string, status: string, period_end: number | null }} membership
  * @param {number} now
  * @returns {Plan | null}
  */
@@ -55,6 +61,7 @@ export function membershipPlan(membership, now) {
   if (!paidUp) return null;
   const known = PAID_PLANS.find((plan) => PLANS[plan].level === Number(membership.level_id));
   if (known) return known;
+  if (membership.currency && membership.currency.toUpperCase() !== PRICE_CURRENCY) return PAID_PLANS[0];
   const price = (/** @type {Plan} */ plan) => (membership.duration === 'year' ? PLANS[plan].yearly : PLANS[plan].monthly);
   // Not findLast: Firefox 97 (the Potato Target) lacks it.
   return [...PAID_PLANS].reverse().find((plan) => Number(membership.amount) >= price(plan)) ?? PAID_PLANS[0];

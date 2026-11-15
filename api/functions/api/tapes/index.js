@@ -36,12 +36,13 @@ export async function onRequestPost(context) {
     .bind(userId, meta.hash, meta.id).first();
   if (existing) return json({ tape: toApi(existing), code: TAPE_EXISTS });
   await rateLimit(env, `tape-upload:${userId}`, UPLOADS_PER_DAY, DAY_MS);
-  // Tapes in the trash still hold their audio (audio_size drops to 0 once it is gone), so they count towards storage.
+  // Deleted tapes have audio_size 0 (their audio is erased), so this is what the account's live tapes hold. Two uploads
+  // at once can both pass before either lands, overshooting by at most one MAX_TAPE_BYTES; R2_MAX_GB still caps the total.
   const held = await env.DB.prepare('SELECT COALESCE(SUM(deleted_at IS NULL), 0) AS n, COALESCE(SUM(audio_size), 0) AS bytes FROM tapes WHERE user_id = ?').bind(userId).first();
   if (Number(held?.n) >= MAX_TAPES) return json({ error: `You can have at most ${MAX_TAPES} tapes`, code: TAPE_LIMIT }, 400);
   const plan = PLANS[/** @type {import('../../../../src/lib/models.js').Plan} */ (auth.user.plan)];
   if (Number(held?.bytes) + size > plan.tapeBytes) {
-    return json({ error: `Your tapes are full: ${plan.name} holds ${Math.round(plan.tapeBytes / MB)} MB. Delete some (and empty the trash), or join a bigger DOGS membership for more room.`, code: TAPE_STORAGE }, 400);
+    return json({ error: `Your tapes are full: ${plan.name} holds ${Math.round(plan.tapeBytes / MB)} MB. Delete some tapes, or join a bigger DOGS membership for more room.`, code: TAPE_STORAGE }, 400);
   }
 
   await reserve(env, { bytes: size, writes: 1 });

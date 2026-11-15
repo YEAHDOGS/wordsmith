@@ -17,6 +17,8 @@ const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
 const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 // `list` shows at most this many accounts, newest first.
 const LIST_LIMIT = 500;
+// An active membership this long past its paid period gets flagged in `list`.
+const STALE_AFTER_MS = 3 * DAY_MS;
 const USAGE = `Usage: npm run access -- list | approve <email> [${Object.keys(PLANS).filter((plan) => PLANS[plan].level !== null).join('|')}] | lapse <email> | trial <email> [--staging | --local]`;
 
 const args = process.argv.slice(2);
@@ -41,16 +43,18 @@ function query(sql) {
 }
 
 if (command === 'list') {
-  const rows = query(`SELECT u.email, u.access, u.plan, u.created_at, m.level_id, m.level_name, m.duration, m.amount, m.status, m.period_end, m.live FROM users u LEFT JOIN memberships m ON m.email = lower(u.email) ORDER BY u.created_at DESC LIMIT ${LIST_LIMIT}`);
+  const rows = query(`SELECT u.email, u.access, u.plan, u.created_at, m.level_id, m.level_name, m.duration, m.amount, m.currency, m.status, m.period_end, m.live FROM users u LEFT JOIN memberships m ON m.email = lower(u.email) ORDER BY u.created_at DESC LIMIT ${LIST_LIMIT}`);
   const now = Date.now();
   for (const row of rows) {
     const left = Math.ceil((Number(row.created_at) + TRIAL_MS - now) / DAY_MS);
     const trial = left > 0 ? `trial, ${left} day(s) left` : 'trial over';
     const given = row.access === 'member' ? `given ${row.plan ?? GRANTED_PLAN}` : row.access === 'lapsed' ? 'LAPSED (locked)' : trial;
-    const paid = row.status ? ` · Buy Me a Coffee: ${row.level_name || row.level_id} ${row.status}${membershipPlan(row, now) ? '' : ' (not paid up)'}${row.live ? '' : ' (test event)'}` : '';
+    // An active membership past its period end may be a cancellation that never arrived: check it on Buy Me a Coffee.
+    const stale = row.status === 'active' && Number(row.period_end) && Number(row.period_end) < now - STALE_AFTER_MS ? ' (period ended, no renewal seen: check it)' : '';
+    const paid = row.status ? ` · Buy Me a Coffee: ${row.level_name || row.level_id} ${row.status}${membershipPlan(row, now) ? '' : ' (not paid up)'}${stale}${row.live ? '' : ' (test event)'}` : '';
     console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${given}${paid}`);
   }
-  console.log('Memberships are matched by sign-in email too (identities), so one not shown here may still apply.');
+  console.log('Memberships reach accounts through verified sign-in emails (identities), so one not shown here may still apply.');
 // Object.hasOwn, not `in`: `in` also matches inherited names like toString, which would write junk into access.
 } else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '') && (command === 'approve' ? Object.hasOwn(PLANS, plan) && plan !== 'trial' : !planArg)) {
   // The email matched EMAIL above (letters, digits and . _ + - only) and the plan is a PLANS key, so both are safe to

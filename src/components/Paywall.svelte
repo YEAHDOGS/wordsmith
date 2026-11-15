@@ -46,7 +46,7 @@
   let subscribeLink = $state();
 
   const email = $derived(auth.user?.email ?? '');
-  const note = $derived(unreachable ? TEXT.unreachable : stillLocked ? TEXT.stillLocked.replace('{email}', email)
+  const note = $derived(unreachable ? TEXT.unreachable : stillLocked ? (email ? TEXT.stillLocked.replace('{email}', email) : TEXT.stillLockedNoEmail)
     : email ? TEXT.manual.replace('{email}', email) : TEXT.manualNoEmail);
 
   // Focus starts in the paywall, so keyboards and screen readers land on it. Coming back to this tab (from joining on

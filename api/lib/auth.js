@@ -14,10 +14,11 @@ const TOKEN_TOUCH_MS = 3_600_000;
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 const MAX_USER_AGENT = 200;
 const PAYMENT_REQUIRED = 402;
-// The account's Buy Me a Coffee memberships, as a JSON array: every row whose email is one of the account's (its own,
-// or any sign-in identity's). models.js planOf turns them into a plan.
-const MEMBERSHIPS = `(SELECT json_group_array(json_object('level_id', m.level_id, 'duration', m.duration, 'amount', m.amount, 'status', m.status, 'period_end', m.period_end))
-  FROM memberships m WHERE m.email IN (SELECT lower(i.email) FROM identities i WHERE i.user_id = u.id UNION SELECT lower(u.email))) AS memberships`;
+// The account's Buy Me a Coffee memberships, as a JSON array: every row whose email is one a sign-in provider verified
+// for this account (identities.email_verified), so an unverified address can't borrow someone else's membership.
+// models.js planOf turns them into a plan.
+const MEMBERSHIPS = `(SELECT json_group_array(json_object('level_id', m.level_id, 'duration', m.duration, 'amount', m.amount, 'currency', m.currency, 'status', m.status, 'period_end', m.period_end))
+  FROM memberships m WHERE m.email IN (SELECT lower(i.email) FROM identities i WHERE i.user_id = u.id AND i.email_verified = 1)) AS memberships`;
 const USER_COLUMNS = `u.id, u.email, u.name, u.avatar_url, u.created_at, u.access, u.plan, ${MEMBERSHIPS}`;
 
 /** plan: the best plan the account holds now (models.js planOf), null when locked.
