@@ -20,7 +20,7 @@ export const TRIAL_MS = TRIAL_DAYS * 86_400_000;
 export const ACCESS_LEVELS = ['trial', 'member', 'lapsed'];
 export const TRIAL_ENDED = 'trial_ended';
 // Where people subscribe to DOGS ($1 a month, or 50 cents) to keep using wordsmith.
-export const SUBSCRIBE_URL = 'https://dogs.red';
+export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs';
 /** When an account's trial ends (ms). @param {{ created_at: number }} user */
 export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
 /**
