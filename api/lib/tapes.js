@@ -70,3 +70,22 @@ export async function eraseTapeAudio(env, userId, tapes) {
     await release(env, tapes.reduce((sum, tape) => sum + Number(tape.audio_size || 0), 0));
   }
 }
+
+// wordsmith cloud transcripts (api/functions/api/tapes/[id]/transcribe.js): Workers AI's Whisper, billed per minute of
+// audio. Each account gets TAPE_CLOUD_MINUTES a day, counted as neurons on its own row of scribe_usage, inside the
+// everyone-together cap Scribe's cloud shares (SCRIBE_DAILY_NEURONS), so tapes can never spend the free allowance.
+export const TAPE_CLOUD_MODEL = '@cf/openai/whisper-large-v3-turbo';
+// Workers AI's price for this model (developers.cloudflare.com/workers-ai/platform/pricing).
+export const NEURONS_PER_AUDIO_MINUTE = 46.63;
+const DEFAULT_TAPE_CLOUD_MINUTES = 15;
+const DEFAULT_DAILY_NEURONS = 4_000;
+export const MS_PER_MINUTE = 60_000;
+
+/** Today's limits: this account's minutes and neurons, and everyone's neurons. @param {Record<string, any>} env */
+export function cloudLimits(env) {
+  const minutes = Number(env.TAPE_CLOUD_MINUTES) || DEFAULT_TAPE_CLOUD_MINUTES;
+  return { minutes, neurons: minutes * NEURONS_PER_AUDIO_MINUTE, everyone: Number(env.SCRIBE_DAILY_NEURONS) || DEFAULT_DAILY_NEURONS };
+}
+
+/** The usage row for one account's cloud transcripts. @param {string} userId */
+export const cloudKey = (userId) => `tapes:${userId}`;
