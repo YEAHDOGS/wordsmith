@@ -114,7 +114,9 @@
     </a>
   </header>
 
-  <section class="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-stretch justify-center gap-6 short:gap-3 overflow-y-auto px-4 py-6 short:py-2 tv:max-w-2xl">
+  <!-- Everything keeps its full height: when it doesn't all fit (a small phone, the keyboard open, a big system font)
+       the column scrolls, and safe centering keeps its top reachable instead of pushing it off the screen. -->
+  <section class="relative z-10 mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col items-stretch justify-center-safe gap-6 short:gap-3 overflow-y-auto overscroll-contain px-4 py-6 short:py-2 tv:max-w-2xl *:shrink-0">
     <div class="relative overflow-hidden bg-app py-2 text-center sweep" in:fade={{ duration: 400 }}>
       <h1 class="text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
         word<span class="text-accent">smith</span>
