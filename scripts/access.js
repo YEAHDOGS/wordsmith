@@ -54,7 +54,7 @@ if (command === 'list') {
     const paid = row.status ? ` · Buy Me a Coffee: ${row.level_name || row.level_id} ${row.status}${membershipPlan(row, now) ? '' : ' (not paid up)'}${stale}${row.live ? '' : ' (test event)'}` : '';
     console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${given}${paid}`);
   }
-  console.log('Memberships reach accounts only through verified sign-in emails (identities.email_verified), as shown.');
+  console.log('Memberships reach accounts only through verified sign-in emails (identities.email_verified), as shown. An account with several memberships is listed once per membership.');
 // Object.hasOwn, not `in`: `in` also matches inherited names like toString, which would write junk into access.
 } else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '') && (command === 'approve' ? Object.hasOwn(PLANS, plan) && plan !== 'trial' : !planArg)) {
   // The email matched EMAIL above (letters, digits and . _ + - only) and the plan is a PLANS key, so both are safe to

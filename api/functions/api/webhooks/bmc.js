@@ -18,12 +18,14 @@ const MAX_CURRENCY = 8;
 const DURATIONS = ['month', 'year'];
 const SECOND_MS = 1000;
 const TRUE = 'true';
+const FALSE = 'false';
 // Saves the membership, unless a newer event for the same supporter is already saved (retries can arrive late). A NULL
-// status (an update that doesn't say) keeps the saved one; a supporter seen for the first time counts as active.
+// status or period end (an event that doesn't say) keeps the saved one; a supporter seen for the first time counts as
+// active.
 const SAVE = `INSERT INTO memberships (email, level_id, level_name, duration, amount, currency, status, period_end, live, event_at, updated_at)
   VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 'active'), ?8, ?9, ?10, ?11)
   ON CONFLICT(email) DO UPDATE SET level_id = ?2, level_name = ?3, duration = ?4, amount = ?5, currency = ?6, status = COALESCE(?7, memberships.status),
-    period_end = ?8, live = ?9, event_at = ?10, updated_at = ?11 WHERE ?10 >= memberships.event_at`;
+    period_end = COALESCE(?8, memberships.period_end), live = ?9, event_at = ?10, updated_at = ?11 WHERE ?10 >= memberships.event_at`;
 
 /** A Unix time in seconds as ms, or null. @param {unknown} seconds */
 function millis(seconds) {
@@ -42,7 +44,8 @@ function standing(type, data) {
   if (type === 'membership.paused' || data.status === 'paused' || data.paused === TRUE) return 'paused';
   // Canceled at period end still works until period_end (models.js membershipPlan), and un-canceling sends "false".
   if (type === 'membership.cancelled' || data.status === 'canceled' || data.canceled === TRUE || data.cancel_at_period_end === TRUE) return 'canceled';
-  if (type === 'membership.started' || data.status === 'active') return 'active';
+  // Un-canceling sends the cancel flags as "false", with or without a status.
+  if (type === 'membership.started' || data.status === 'active' || data.canceled === FALSE || data.cancel_at_period_end === FALSE) return 'active';
   return null;
 }
 
