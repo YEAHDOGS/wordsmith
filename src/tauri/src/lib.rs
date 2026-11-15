@@ -1,13 +1,15 @@
 #[cfg(desktop)]
 mod speech;
 #[cfg(desktop)]
+mod tapes;
+#[cfg(desktop)]
 mod updates;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
-    // Local speech-to-text (src/speech/mod.rs) and in-app updates (src/updates.rs) run on the desktop apps only. Tauri
-    // keeps a single command list, so every desktop command is registered here, in one place.
+    // Local speech-to-text (src/speech/mod.rs), shrinking tapes (src/tapes/mod.rs) and in-app updates (src/updates.rs)
+    // run on the desktop apps only. Tauri keeps a single command list, so every desktop command is registered here.
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -24,6 +26,7 @@ pub fn run() {
             speech::speech_feed,
             speech::speech_stop,
             speech::speech_unload,
+            tapes::tape_encode,
             updates::update_fetch,
             updates::update_install,
         ]);

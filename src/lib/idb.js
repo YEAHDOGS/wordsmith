@@ -3,11 +3,11 @@
 const DB_PREFIX = 'wordsmith-';
 // v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards, v4 note_groups.
 // v5 adds nothing: it re-pulls once on devices that skipped note groups while their older build didn't know the table.
-// v6 adds diagrams.
-const DB_VERSION = 6;
+// v6 adds diagrams, v7 tapes.
+const DB_VERSION = 7;
 // Every upgrade forgets the sync cursor, so rows of tables the old build ignored come down on the next pull.
 const CURSOR_KEY = 'cursor';
-export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'events', 'attachments', 'meta'];
+export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'tapes', 'events', 'attachments', 'meta'];
 
 /** @param {IDBRequest} request @returns {Promise<any>} */
 function done(request) {
