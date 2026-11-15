@@ -1,10 +1,14 @@
 // Sign-in state. Web logins redirect through the OAuth provider and come back with a cookie.
 // Native apps open the system browser (Google and Apple block embedded WebViews) and poll for their session.
-import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken } from './api.js';
+import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken, whenTrialEnds } from './api.js';
+import { hasAccess, trialEndsAt } from './models.js';
 
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
 const DEVICE_GONE = 410;
+// The trial countdown (and the lock when it runs out) refreshes this often.
+const CLOCK_MS = 60_000;
+const DAY_MS = 86_400_000;
 // Demo mode's stand-in user. Never cached or sent anywhere.
 const DEMO_USER = { id: 'demo', email: null, name: 'Demo', avatar_url: null };
 
@@ -21,8 +25,13 @@ async function openExternal(url) {
 class Auth {
   /** @type {'loading' | 'signed_out' | 'signed_in'} */
   status = $state('loading');
-  /** @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null } | null} */
+  /** access and trial_ends_at come from the server (models.js hasAccess); older cached users may not have them yet.
+   * @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at?: number, access?: string, trial_ends_at?: number } | null} */
   user = $state(null);
+  /** The server answered 402: the free trial is over. Cleared when the session is loaded again. */
+  trialEnded = $state(false);
+  /** Now, to the minute, so the trial countdown and lock keep up while the app stays open. */
+  now = $state(Date.now());
   /** @type {string[]} */ providers = $state([]);
   /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
   devLogin = $state(false);
@@ -38,6 +47,28 @@ class Auth {
   /** Demo mode: sample data in memory, nothing synced (demoMode in api.js). */
   demo = $state(false);
   #deviceRun = 0;
+
+  constructor() {
+    whenTrialEnds(() => {
+      if (!this.demo) this.trialEnded = true;
+    });
+    setInterval(() => (this.now = Date.now()), CLOCK_MS);
+  }
+
+  /** The free trial is over and no membership is approved: the app shows the paywall (Paywall.svelte). */
+  get locked() {
+    const user = this.user;
+    if (!user || this.demo) return false;
+    // Only a server-sent access level counts, so a user cached before trials existed is never locked by mistake.
+    return this.trialEnded || (Boolean(user.access) && user.created_at !== undefined && !hasAccess(/** @type {any} */ (user), this.now));
+  }
+
+  /** Whole days left on the free trial (rounded up), or null when not on one. */
+  get trialDaysLeft() {
+    const user = this.user;
+    if (!user || this.demo || user.access !== 'trial' || user.created_at === undefined) return null;
+    return Math.max(0, Math.ceil((trialEndsAt(/** @type {any} */ (user)) - this.now) / DAY_MS));
+  }
 
   /**
    * Restores the session; falls back to the cached user when offline so notes stay usable.
@@ -81,6 +112,7 @@ class Auth {
   /** @param {any} user */
   #setUser(user) {
     if (!user) this.#endDemo();
+    this.trialEnded = false;
     this.user = user;
     this.status = user ? 'signed_in' : 'signed_out';
     if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));

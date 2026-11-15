@@ -2,6 +2,7 @@
   // Title (with a settings gear on board pages) and search in one compact row. Search filters the current view on-device (no requests). On phones search
   // is an icon that expands over the row, so the header stays one slim line. Sync lives in the sidebar; the menu
   // button carries a yellow dot when sync has a problem, because the sidebar is a hidden drawer on phones.
+  // During the free trial a small pill at the end counts the days left and links to the DOGS membership.
   import Menu from '@lucide/svelte/icons/menu';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
@@ -12,6 +13,11 @@
   import { ui } from '../lib/ui.svelte.js';
   import { syncProblem } from './sync-problem.js';
   import { letterIn, letterOut } from './title-flip.js';
+  import Coffee from '@lucide/svelte/icons/coffee';
+  import { auth, openExternal } from '../lib/auth.svelte.js';
+  import { IS_NATIVE } from '../lib/api.js';
+  import { SUBSCRIBE_URL } from '../lib/models.js';
+  import PAYWALL from './paywall.json';
 
   /** @type {{ title: string, subtitle?: string, onsettings?: (() => void) | null }} */
   let { title, subtitle = '', onsettings = null } = $props();
@@ -25,6 +31,17 @@
   const problem = $derived(syncProblem(store));
   // A phone search with text in it stays open, so the filter is never applied invisibly.
   const phoneSearch = $derived(searching || !!ui.query);
+
+  const trialDays = $derived(auth.trialDaysLeft);
+  const trialText = $derived(trialDays === null ? '' : trialDays <= 1 ? PAYWALL.trialLastDay
+    : PAYWALL.trialLeft.replace('{days}', PAYWALL.days.replace('{count}', String(trialDays))));
+
+  /** The membership page, in the system browser on the native apps. @param {MouseEvent} event */
+  function subscribe(event) {
+    if (!IS_NATIVE) return;
+    event.preventDefault();
+    openExternal(SUBSCRIBE_URL);
+  }
 
   function closeSearch() {
     ui.query = '';
@@ -78,6 +95,13 @@
       <button class="absolute right-2 text-ink-faint hover:text-ink" aria-label="Clear search" onclick={() => (ui.query = '')} transition:scale={BADGE}><X class="size-4" /></button>
     {/if}
   </label>
+
+  {#if trialText}
+    <a class="spring press flex shrink-0 items-center gap-1.5 border border-accent px-2 py-1 font-mono text-[0.6875rem] text-accent hover:bg-accent-soft tv:px-3 tv:py-2 tv:text-base"
+      href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" title="{trialText} · {PAYWALL.dollar}" aria-label="{trialText}. {PAYWALL.dollar}" onclick={subscribe} transition:scale={BADGE}>
+      <Coffee class="size-3.5 tv:size-5" /><span class="max-md:hidden">{trialText} ·</span><span>{PAYWALL.subscribe}</span>
+    </a>
+  {/if}
 
   <!-- Phones: a search icon in the same row; it expands over the header instead of taking a row of its own -->
   <button class="{ICON_BUTTON} sm:hidden" aria-label="Search" aria-expanded={phoneSearch} onclick={() => (searching = true)}><Search class="size-5" /></button>

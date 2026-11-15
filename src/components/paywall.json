@@ -1,0 +1,30 @@
+{
+  "label": "Free trial ended",
+  "dismiss": "Close",
+  "stages": [
+    {
+      "title": "Your free trial is over",
+      "body": "Thanks for trying wordsmith for five days. It runs on cloud servers that cost real money every month, so keeping it going takes a DOGS membership: $1 a month on Buy Me a Coffee."
+    },
+    {
+      "title": "Alright, what about 50 cents a month?",
+      "body": "Come on, man. That's two quarters a month for a cloud app that costs me money to host."
+    },
+    {
+      "title": "Okay. Well, same to you, pal.",
+      "body": "But honestly? I've been broke before too. I'm broke right now too. The offer stands whenever you're ready."
+    }
+  ],
+  "dollar": "Subscribe for $1 a month",
+  "half": "Subscribe for 50¢ a month",
+  "check": "I subscribed: check again",
+  "checking": "Checking…",
+  "stillLocked": "Not approved yet. Memberships are checked by hand, usually within a day.",
+  "manual": "Memberships are approved by hand, so access comes back once yours is checked, usually within a day.",
+  "signOut": "Sign out",
+  "trialLeft": "Free trial: {days} left",
+  "trialLastDay": "Free trial: last day",
+  "day": "1 day",
+  "days": "{count} days",
+  "subscribe": "Subscribe"
+}
