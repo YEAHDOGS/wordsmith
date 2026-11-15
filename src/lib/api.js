@@ -69,11 +69,17 @@ export function uploadFile(path, file, onProgress, headers = {}) {
     for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total);
     xhr.onload = () => {
-      const data = JSON.parse(xhr.responseText || '{}');
+      // A gateway error page (502, 524) isn't JSON: it still has to settle the upload, or the import queue waits forever.
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || '{}') ?? {};
+      } catch {}
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
       else reject(new ApiError(xhr.status, data.error || `Upload failed (${xhr.status})`, data.code));
     };
     xhr.onerror = () => reject(new TypeError('Network error during upload'));
+    xhr.onabort = () => reject(new TypeError('Upload was stopped'));
+    xhr.ontimeout = () => reject(new TypeError('Upload timed out'));
     xhr.send(file);
   });
 }

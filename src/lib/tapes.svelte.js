@@ -4,9 +4,9 @@
 // same folder again, after a crash or on another device, only adds what's new: that's how an import resumes.
 // The queue lives here, outside the page, so leaving the Tapes page doesn't stop it.
 import { ApiError, uploadFile } from './api.js';
-import { NATIVE_ENCODER, encodeTape } from './tape-encode.js';
+import { NATIVE_ENCODER, encodeTape, tooLarge } from './tape-encode.js';
 import { store } from './store.svelte.js';
-import { MAX_TAPE_SOURCE_BYTES, TAPE_EXISTS, TAPE_LIMIT, audioType } from './models.js';
+import { TAPE_EXISTS, TAPE_LIMIT, audioType } from './models.js';
 
 // The desktop encoder runs on its own threads, so two files encode while others upload; a phone does one at a time.
 const WORKERS = NATIVE_ENCODER ? 2 : 1;
@@ -17,6 +17,11 @@ const STOPPERS = [RATE_LIMITED, STORAGE_FULL, 401];
 const OFFLINE = "You're offline. Import again when you're back; finished tapes are kept.";
 // Recorder apps name files after the moment they started: 2024-05-12 14-33-01, 20240512_143301, 2024.05.12-14.33...
 const DATE_IN_NAME = /(20\d{2})[-_. ]?([01]\d)[-_. ]?([0-3]\d)[-_. T]*([0-2]\d)[-_.: h]?([0-5]\d)(?:[-_.: m]?([0-5]\d))?/;
+// Month, day and hour limits a date in a file name must keep to (a name like 20201345... is a number, not a date).
+const MAX_MONTH = 12;
+const MAX_DAY = 31;
+const MAX_HOUR = 23;
+const WORKING = ['reading', 'encoding', 'uploading'];
 const HEX = 16;
 const HEX_PAIR = 2;
 // Recent finished items stay listed so the page can show what just landed; the rest are counted.
@@ -35,7 +40,9 @@ async function sha256(bytes) {
 export function recordedAt(file) {
   const match = DATE_IN_NAME.exec(file.name);
   if (!match) return file.lastModified || null;
-  const [, year, month, day, hour, minute, second = '0'] = match.map(Number);
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  const second = Number(match[6] ?? 0);
+  if (month < 1 || month > MAX_MONTH || day < 1 || day > MAX_DAY || hour > MAX_HOUR) return file.lastModified || null;
   const time = new Date(year, month - 1, day, hour, minute, second).getTime();
   return Number.isFinite(time) ? time : file.lastModified || null;
 }
@@ -60,8 +67,9 @@ class TapeImport {
   /** @type {Map<string, File>} */ #files = new Map();
   #workers = 0;
 
+  /** Something is being worked on, or waits and will be: a queue stopped early is idle, so Retry shows. */
   get active() {
-    return this.items.some((item) => !['done', 'skipped', 'failed'].includes(item.status));
+    return this.items.some((item) => WORKING.includes(item.status) || (item.status === 'waiting' && !this.stopped));
   }
 
   get total() {
@@ -70,7 +78,11 @@ class TapeImport {
 
   /** Queues recordings (anything that isn't audio is left out) and starts working. @param {File[]} files */
   add(files) {
-    if (!this.active) Object.assign(this, { done: 0, skipped: 0, failed: 0, sourceBytes: 0, storedBytes: 0, stopped: '' });
+    // A new batch starts its counts over, but files that failed stay listed and counted, so Retry still reaches them.
+    if (!this.active) {
+      const failed = this.items.filter((item) => item.status === 'failed').length;
+      Object.assign(this, { done: 0, skipped: 0, failed, sourceBytes: 0, storedBytes: 0, stopped: '' });
+    }
     const known = new Set([...this.#files.values()].map((file) => `${file.name}:${file.size}:${file.lastModified}`));
     for (const file of files.filter(isRecording)) {
       const key = `${file.name}:${file.size}:${file.lastModified}`;
@@ -116,7 +128,8 @@ class TapeImport {
     const file = this.#files.get(item.id);
     if (!file) return;
     try {
-      if (file.size > MAX_TAPE_SOURCE_BYTES) throw new Error(`${file.name} is too large to be a recording.`);
+      const refusal = tooLarge(file);
+      if (refusal) throw new Error(refusal);
       item.status = 'reading';
       const bytes = await file.arrayBuffer();
       const hash = await sha256(bytes);
@@ -132,6 +145,7 @@ class TapeImport {
       item.status = 'uploading';
       const meta = { id: crypto.randomUUID(), name: file.name, hash, size: file.size, recorded_at: recordedAt(file), duration_ms: tape.durationMs };
       const answer = await uploadFile('/api/tapes', tape.file, (fraction) => (item.progress = fraction), { 'X-Tape': encodeURIComponent(JSON.stringify(meta)) });
+      if (!answer?.tape?.id) throw new Error('The server sent no tape back. Retry this file.');
       store.adopt('tapes', [answer.tape]);
       this.originals.set(answer.tape.id, file);
       if (answer.code === TAPE_EXISTS) {

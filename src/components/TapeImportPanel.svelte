@@ -31,7 +31,7 @@
     {#if tapeImport.failed}<span class="text-xs text-accent">{TEXT.failed.replace('{count}', String(tapeImport.failed))}</span>{/if}
     {#if saved > 0}<span class="text-xs text-complete">{TEXT.saved.replace('{percent}', String(saved))}</span>{/if}
     <span class="ml-auto flex items-center gap-1">
-      {#if tapeImport.failed && !tapeImport.active}
+      {#if (tapeImport.failed || tapeImport.stopped) && !tapeImport.active}
         <button class="spring press inline-flex items-center gap-1.5 px-2 py-1 text-xs text-ink hover:text-accent" onclick={() => tapeImport.retry()}><RotateCcw class="size-3.5" />{TEXT.retry}</button>
       {/if}
       {#if tapeImport.active}

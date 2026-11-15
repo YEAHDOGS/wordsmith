@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { IS_NATIVE } from './api.js';
 import { visitorPlatform } from './github-public.js';
 import { oggOpus } from './ogg-opus.js';
-import { MAX_TAPE_BYTES, TAPE_BITRATE, TAPE_EXTENSION, TAPE_TYPE, audioType, fileExtension } from './models.js';
+import { MAX_TAPE_BYTES, MAX_TAPE_SOURCE_BYTES, TAPE_BITRATE, TAPE_EXTENSION, TAPE_TYPE, audioType, fileExtension } from './models.js';
 
 const OPUS_RATE = 48_000;
 // What the browser decodes to before encoding: Opus keeps speech and a beat at 24 kHz, and it halves the memory.
@@ -38,6 +38,16 @@ export const NATIVE_ENCODER = IS_NATIVE && !['android', 'ios'].includes(visitorP
 
 /** @param {number} bytes */
 const megabytes = (bytes) => `${Math.round(bytes / BYTES_PER_MB)} MB`;
+
+/**
+ * Why a recording is too big to import here, or '' if it isn't. Checked before the file is read, so a phone never
+ * loads a 500 MB file just to refuse it. @param {File} source
+ */
+export function tooLarge(source) {
+  if (source.size > MAX_TAPE_SOURCE_BYTES) return `${source.name} is too large to be a recording.`;
+  if (!NATIVE_ENCODER && source.size > MAX_WEB_SOURCE_BYTES) return `${source.name} is ${megabytes(source.size)}. Recordings over ${megabytes(MAX_WEB_SOURCE_BYTES)} import from the wordsmith desktop app.`;
+  return '';
+}
 
 /** @typedef {{ file: File, durationMs: number, encoded: boolean }} EncodedTape the upload, how long it plays, and whether it was shrunk */
 

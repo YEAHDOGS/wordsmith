@@ -45,7 +45,8 @@ permissions:
 
 concurrency:
   group: build-apps-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer run on a branch replaces the one in progress; on master it waits, so a release is never cut off half-published.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 env:
   NODE_VERSION: "24"
@@ -142,12 +143,15 @@ jobs:
         run: npx tauri ${{ matrix.platform }} init
       # Native apps carry 1.0.NN for app version 1.0.0.NN (scripts/version.js): Tauri, the updater, Android's
       # versionCode and Windows installers need a rising three-part version. With the update signing key, desktop
-      # builds also write a signed updater bundle, which the release job lists in latest.json (in-app updates).
+      # builds also write a signed updater bundle, which the release job lists in latest.json (in-app updates). Only
+      # master builds get the update signing key: nothing else is released, so nothing else needs to be trusted.
       - name: Set app version
         env:
-          SIGNS_UPDATES: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && matrix.mobile == '' }}
+          SIGNS_UPDATES: ${{ github.ref == 'refs/heads/master' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' && matrix.mobile == '' }}
         run: |
           version=$(node scripts/version.js --native)
+          # A release build without its version would carry 1.0.0.dev, and a dev build never looks for updates.
+          if [ -z "$version" ] && [ "$GITHUB_REF" = refs/heads/master ]; then echo "::error::Could not work out the app version."; exit 1; fi
           node -e '
             const [version, signs] = process.argv.slice(1);
             const config = { ...(version && { version }), ...(signs === "true" && { bundle: { createUpdaterArtifacts: true } }) };
@@ -158,8 +162,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.ref == 'refs/heads/master' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.ref == 'refs/heads/master' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         with:
           tauriScript: npx tauri
           args: ${{ matrix.args }} --config src/tauri/tauri.release.conf.json
@@ -173,6 +177,8 @@ jobs:
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          # On master an unsigned APK would be released and offered to every Android install, which can't take it.
+          if [ -z "$ANDROID_KEYSTORE" ] && [ "$GITHUB_REF" = refs/heads/master ]; then echo "::error::ANDROID_KEYSTORE is not set; a release APK must be signed."; exit 1; fi
           if [ -z "$ANDROID_KEYSTORE" ]; then echo "::warning::ANDROID_KEYSTORE is not set, so the APK is unsigned and Android won't install it."; exit 0; fi
           keystore="$RUNNER_TEMP/release.jks"
           printf '%s' "$ANDROID_KEYSTORE" | base64 -d > "$keystore"
@@ -241,7 +247,7 @@ jobs:
           # uploaded but not listed under Downloads: people install from the installers.
           files=()
           listed=()
-          for f in build/wordsmith-* build/latest.json; do
+          for f in build/wordsmith-*; do
             [ -f "$f" ] || continue
             case "$f" in *.sig) continue;; esac
             files+=("$f")
@@ -258,10 +264,15 @@ jobs:
             done
           } > notes.md
           echo "Releasing ${tag} with: ${files[*]}"
+          # The manifest goes up last, so no app is pointed at a bundle that isn't there yet. A new release stays a
+          # draft (invisible to the updater) until everything is uploaded.
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
+            if [ -f build/latest.json ]; then gh release upload "$tag" build/latest.json --clobber; fi
             gh release edit "$tag" --notes-file notes.md
           else
-            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --title "wordsmith ${version}" --notes-file notes.md --generate-notes --latest
+            gh release create "$tag" "${files[@]}" --draft --target "$GITHUB_SHA" --title "wordsmith ${version}" --notes-file notes.md --generate-notes
+            if [ -f build/latest.json ]; then gh release upload "$tag" build/latest.json; fi
+            gh release edit "$tag" --draft=false --latest
           fi
           { echo "# wordsmith ${version}"; echo; echo "Release: ${repo_url}/releases/tag/${tag}"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"

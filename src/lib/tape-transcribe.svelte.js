@@ -55,12 +55,14 @@ class TapeTranscriber {
       this.error = NO_MODEL;
       return;
     }
-    Object.assign(this, { running: true, done: 0, error: '' });
+    // A new run tries again the tapes that failed before.
+    Object.assign(this, { running: true, done: 0, error: '', waiting: false, failures: new Map() });
     this.#loop();
   }
 
   stop() {
     this.running = false;
+    this.waiting = false;
     clearTimeout(this.#timer);
   }
 
@@ -106,9 +108,11 @@ class TapeTranscriber {
     this.current = tape.id;
     this.waiting = false;
     try {
+      // The original when it can still be read (it may have been moved or deleted since), else the stored copy.
       const original = tapeImport.originals.get(tape.id);
-      const bytes = original ? await original.arrayBuffer() : await this.#download(tape);
-      const extension = original ? fileExtension(original.name).slice(1) : OGG_EXTENSION;
+      const local = original ? await original.arrayBuffer().catch(() => null) : null;
+      const bytes = local ?? (await this.#download(tape));
+      const extension = local && original ? fileExtension(original.name).slice(1) : OGG_EXTENSION;
       /** @type {string} */
       const text = await invoke('speech_transcribe', new Uint8Array(bytes), {
         headers: {
@@ -137,7 +141,9 @@ class TapeTranscriber {
   async #download(tape) {
     const url = await mediaUrl(`/api/tapes/${tape.id}/audio`);
     try {
-      return await (await fetch(url)).arrayBuffer();
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Couldn't download this tape (${response.status})`);
+      return await response.arrayBuffer();
     } finally {
       if (url.startsWith('blob:')) URL.revokeObjectURL(url);
     }

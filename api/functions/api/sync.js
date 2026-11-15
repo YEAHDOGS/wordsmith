@@ -120,7 +120,11 @@ export async function onRequestPost(context) {
     }
 
     const statements = [];
-    /** Tapes deleted by this push, as they were: their audio goes once the rows are saved. @type {any[]} */
+    /**
+     * Tapes this push deletes, as they were, each with the batch position of the statement that claims the delete.
+     * Only a claim that matched a live row erases the audio, so a tape deleted twice (in one push, or by two devices at
+     * once) gives its storage back once. @type {{ tape: any, claim: number }[]}
+     */
     const erased = [];
     // Room left under the diagram cap, counted only when this push brings a new diagram.
     let diagramRoom = Infinity;
@@ -155,8 +159,10 @@ export async function onRequestPost(context) {
         // Diagrams have no Trash: a deleted one is erased at once, leaving only the marker other devices need.
         if (table === 'diagrams' && next.deleted_at) Object.assign(next, structuredClone(ERASED_DIAGRAM));
         if (table === 'tapes' && next.deleted_at && before) {
-          erased.push(before);
           next.audio_size = 0;
+          erased.push({ tape: before, claim: statements.length });
+          statements.push(env.DB.prepare('UPDATE tapes SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id')
+            .bind(next.deleted_at, before.id, auth.user.id));
         }
         const upsert = upsertStatement(env, table, next, before);
         if (upsert) statements.push(upsert);
@@ -166,8 +172,14 @@ export async function onRequestPost(context) {
         rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message, ...(table === 'diagrams' && { table, current: before }) });
       }
     }
-    if (statements.length) await env.DB.batch(statements);
-    await eraseTapeAudio(env, auth.user.id, erased);
+    const results = statements.length ? await env.DB.batch(statements) : [];
+    const claimed = erased.filter(({ claim }) => results[claim]?.results?.length).map(({ tape }) => tape);
+    // The rows are saved: a failed R2 delete must not fail the push (the device would retry a delete that's done).
+    try {
+      await eraseTapeAudio(env, auth.user.id, claimed);
+    } catch (error) {
+      console.error('Tape audio erase failed', error);
+    }
   }
   return json({ saved, rejected, server_time: now });
 }
