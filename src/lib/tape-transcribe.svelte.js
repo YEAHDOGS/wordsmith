@@ -10,7 +10,7 @@ import { ApiError, api, mediaUrl } from './api.js';
 import { speech } from './speech.svelte.js';
 import { store } from './store.svelte.js';
 import { tapeImport } from './tapes.svelte.js';
-import { TAPE_CLOUD_ALLOWANCE, fileExtension } from './models.js';
+import { TAPE_CLOUD_ALLOWANCE, TAPE_TYPE, fileExtension } from './models.js';
 
 // How often a waiting queue looks again for Scribe to finish.
 const WAIT_MS = 15_000;
@@ -19,6 +19,7 @@ const YIELDED = /Scribe (is|started) listening/;
 const OGG_EXTENSION = 'ogg';
 const NO_MODEL = 'Download a speech model in Settings → Local speech first.';
 const MS_PER_MINUTE = 60_000;
+const KEPT_EDITS = 'You edited the transcript while it was being made, so your text was kept. Transcribe again to replace it.';
 
 /** @typedef {{ available: boolean, used: number, limit: number }} CloudAllowance minutes of wordsmith cloud today */
 
@@ -58,7 +59,8 @@ class TapeTranscriber {
 
   /** Whether a tape fits in what's left of today's cloud minutes. @param {any} tape */
   fitsCloud(tape) {
-    return Boolean(this.cloud?.available) && Math.max(1, (tape.duration_ms || 0) / MS_PER_MINUTE) <= this.cloudLeft;
+    // Only tapes the app shrank to Opus: the cloud counts their length from the audio itself.
+    return Boolean(this.cloud?.available) && tape.audio_type === TAPE_TYPE && Math.max(1, (tape.duration_ms || 0) / MS_PER_MINUTE) <= this.cloudLeft;
   }
 
   /** Asks how many cloud minutes are left today, where there's no local engine. */
@@ -137,6 +139,7 @@ class TapeTranscriber {
     if (!model || !catalog) return false;
     this.current = tape.id;
     this.waiting = false;
+    const before = tape.transcript;
     try {
       // The original when it can still be read (it may have been moved or deleted since), else the stored copy.
       const original = tapeImport.originals.get(tape.id);
@@ -153,6 +156,7 @@ class TapeTranscriber {
           'tape-extension': extension,
         },
       });
+      if (this.#edited(tape.id, before)) return true;
       store.update('tapes', tape.id, { transcript: text, transcript_model: model.id, transcribed_at: Date.now() });
       this.done++;
       return true;
@@ -172,12 +176,14 @@ class TapeTranscriber {
     if (this.current) return;
     this.current = tape.id;
     this.error = '';
+    const before = tape.transcript;
     try {
       const answer = await api(`/api/tapes/${tape.id}/transcribe`, { method: 'POST' });
+      this.cloud = { available: true, used: answer.used, limit: answer.limit };
+      if (this.#edited(tape.id, before)) return;
       // Saved as an edit, not adopted: an unsynced note on this tape would otherwise push an empty transcript over it.
       const { transcript, transcript_model, transcribed_at } = answer.tape;
       store.update('tapes', tape.id, { transcript, transcript_model, transcribed_at });
-      this.cloud = { available: true, used: answer.used, limit: answer.limit };
       if (this.failures.delete(tape.id)) this.failures = new Map(this.failures);
     } catch (error) {
       const failure = /** @type {Error} */ (error);
@@ -187,6 +193,18 @@ class TapeTranscriber {
     } finally {
       this.current = '';
     }
+  }
+
+  /**
+   * Whether the transcript was edited while it was being made: the edit wins, and the tape says why.
+   * @param {string} id @param {string} before the transcript when transcribing started
+   */
+  #edited(id, before) {
+    const now = store.find('tapes', id);
+    if (!now || now.transcript === before) return false;
+    this.failures.set(id, KEPT_EDITS);
+    this.failures = new Map(this.failures);
+    return true;
   }
 
   /** The stored copy of a tape's audio. @param {any} tape */

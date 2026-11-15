@@ -72,5 +72,6 @@
   "cloudTooLong": "This tape is longer than the free cloud minutes left today. The desktop app transcribes it on your computer, free.",
   "desktopNudge": "The desktop app transcribes every tape on your computer: free, private, no limit.",
   "desktopGetFor": "Get it for {platform}",
-  "desktopGet": "Get the desktop app"
+  "desktopGet": "Get the desktop app",
+  "cloudOriginal": "This tape is stored in its original format, which cloud transcripts don't take. The desktop app transcribes it on your computer, free."
 }

@@ -102,7 +102,7 @@
           "what": "Voice recordings you import on the Tapes page, shrunk on your device before upload, with their title, notes, rating, transcript, the original file's name, size and fingerprint (a SHA-256 hash, to skip files already imported), and when it was recorded. The original files stay on your device.",
           "where": "r2",
           "why": "To play, search and rate your recordings on every device, and so your AI agents can search their transcripts with your API tokens.",
-          "kept": "Until you delete the tape, which deletes its audio right away."
+          "kept": "Until you delete the tape, which deletes its audio from storage."
         },
         {
           "name": "Shared notes",

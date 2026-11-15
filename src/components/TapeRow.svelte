@@ -12,7 +12,7 @@
   import Star from '@lucide/svelte/icons/star';
   import AudioLines from '@lucide/svelte/icons/audio-lines';
   import { store } from '../lib/store.svelte.js';
-  import { CLOUD_TRANSCRIPT_MODEL, GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
+  import { CLOUD_TRANSCRIPT_MODEL, TAPE_TYPE, GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
   import { speech } from '../lib/speech.svelte.js';
   import { transcriber } from '../lib/tape-transcribe.svelte.js';
   import { clock, player } from './tape-player.svelte.js';
@@ -103,7 +103,7 @@
           oninput={(event) => store.update('tapes', tape.id, { transcript: event.currentTarget.value })}></textarea>
         {#if failure}<p class="text-accent">{TEXT.transcribeFailed.replace('{error}', failure)}</p>
         {:else if tape.transcribed_at}<p>{byLine}</p>
-        {:else if cloud && !canTranscribe}<p>{TEXT.cloudTooLong}</p>{/if}
+        {:else if cloud && !canTranscribe}<p>{tape.audio_type === TAPE_TYPE ? TEXT.cloudTooLong : TEXT.cloudOriginal}</p>{/if}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-ink-muted">
         <p class="min-w-0 break-all"><span class="text-ink-faint">{TEXT.original}</span> {tape.source_name} · {size(tape.source_size)}
