@@ -34,6 +34,8 @@
   let shaking = $state(false);
   let checking = $state(false);
   let stillLocked = $state(false);
+  /** The last check couldn't reach the server, so nothing is known yet. */
+  let unreachable = $state(false);
   const last = $derived(stage === STAGES.length - 1);
   /** @type {HTMLElement | undefined} */
   let card = $state();
@@ -63,9 +65,11 @@
   async function check() {
     checking = true;
     stillLocked = false;
-    await auth.refresh();
+    unreachable = false;
+    const answered = await auth.refresh();
     checking = false;
-    stillLocked = auth.locked;
+    unreachable = !answered;
+    stillLocked = answered && auth.locked;
   }
 
   // Like Settings' sign out, this device forgets its copy of the notes too. The store may never have opened (the app
@@ -130,8 +134,8 @@
       </button>
     </div>
 
-    <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked ? 'text-accent' : 'text-ink-faint'}" role="status">
-      {#key stillLocked}<span in:fade={STATUS_FADE}>{stillLocked ? TEXT.stillLocked : TEXT.manual}</span>{/key}
+    <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked || unreachable ? 'text-accent' : 'text-ink-faint'}" role="status">
+      {#key `${stillLocked}${unreachable}`}<span in:fade={STATUS_FADE}>{unreachable ? TEXT.unreachable : stillLocked ? TEXT.stillLocked : TEXT.manual}</span>{/key}
     </p>
     <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={signOut}>{TEXT.signOut}</button>
     </div>

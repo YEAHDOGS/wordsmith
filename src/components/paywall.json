@@ -26,5 +26,6 @@
   "trialLastDay": "Free trial: last day",
   "days": "{count} days",
   "subscribe": "Subscribe",
-  "trialShort": "{count}d"
+  "trialShort": "{count}d",
+  "unreachable": "Couldn't reach wordsmith just now. Check your connection and try again."
 }

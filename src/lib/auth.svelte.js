@@ -1,14 +1,13 @@
 // Sign-in state. Web logins redirect through the OAuth provider and come back with a cookie.
 // Native apps open the system browser (Google and Apple block embedded WebViews) and poll for their session.
 import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken, whenTrialEnds } from './api.js';
-import { trialEndsAt } from './models.js';
+import { DAY_MS } from './models.js';
 
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
 const DEVICE_GONE = 410;
 // The trial countdown (and the lock when it runs out) refreshes this often.
 const CLOCK_MS = 60_000;
-const DAY_MS = 86_400_000;
 // Demo mode's stand-in user. Never cached or sent anywhere.
 const DEMO_USER = { id: 'demo', email: null, name: 'Demo', avatar_url: null };
 
@@ -47,6 +46,7 @@ class Auth {
   /** Demo mode: sample data in memory, nothing synced (demoMode in api.js). */
   demo = $state(false);
   #deviceRun = 0;
+  /** Counts sign outs, so a session re-read still in flight when one starts is dropped. */ #signOuts = 0;
 
   constructor() {
     whenTrialEnds(() => {
@@ -69,8 +69,9 @@ class Auth {
   /** Whole days left on the free trial (rounded up), or null when not on one. */
   get trialDaysLeft() {
     const user = this.user;
-    if (!user || this.demo || user.access !== 'trial' || user.created_at === undefined) return null;
-    return Math.max(0, Math.ceil((trialEndsAt(/** @type {any} */ (user)) - this.now) / DAY_MS));
+    // trial_ends_at comes from the server (models.js trialEndsAt), so the end is worked out in one place.
+    if (!user || this.demo || user.access !== 'trial' || user.trial_ends_at === undefined) return null;
+    return Math.max(0, Math.ceil((user.trial_ends_at - this.now) / DAY_MS));
   }
 
   /**
@@ -120,9 +121,14 @@ class Auth {
    * @returns {Promise<boolean>} whether the server answered
    */
   async refresh() {
+    // A sign out that starts while this is in flight wins: its answer must not sign the user back in.
+    const run = this.#signOuts;
     try {
       const session = await api('/api/auth/session');
+      if (run !== this.#signOuts) return true;
+      // No user is the server's answer, not a hiccup: the session ended, so back to sign in.
       if (session.user) this.#setUser(session.user);
+      else this.expired();
       return true;
     } catch {
       // Offline or a server error: the cached user stays, and the server still refuses anything a locked account asks for.
@@ -227,6 +233,7 @@ class Auth {
   }
 
   async signOut() {
+    this.#signOuts++;
     if (this.demo) {
       this.#setUser(null);
       return;

@@ -6,13 +6,12 @@
 //   npm run access -- trial <email>        back on the trial clock (from when they signed up)
 // Add --staging to use the staging database instead, or --local for the machine-local one.
 import { execFileSync } from 'node:child_process';
-import { TRIAL_MS } from '../src/lib/models.js';
+import { DAY_MS, TRIAL_MS } from '../src/lib/models.js';
 
 const DATABASES = { production: 'wordsmith-production', staging: 'wordsmith-staging' };
 const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
 // Letters, digits and . _ + - only: nothing a shell or SQL would read as syntax.
 const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
-const DAY_MS = 86_400_000;
 // `list` shows at most this many accounts, newest first.
 const LIST_LIMIT = 500;
 const USAGE = 'Usage: npm run access -- list | approve <email> | lapse <email> | trial <email> [--staging | --local]';
