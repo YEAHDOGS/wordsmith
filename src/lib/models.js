@@ -15,8 +15,9 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 export const NEEDS_YOU_ENABLED = true;
 // Free trial (users.access): new accounts get TRIAL_DAYS of full access from when they signed up, then every route but
 // sign-in and sign-out answers 402 with TRIAL_ENDED until a membership is approved by hand (scripts/access.js).
+export const DAY_MS = 86_400_000;
 export const TRIAL_DAYS = 5;
-export const TRIAL_MS = TRIAL_DAYS * 86_400_000;
+export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
 export const ACCESS_LEVELS = ['trial', 'member', 'lapsed'];
 export const TRIAL_ENDED = 'trial_ended';
 // Where people subscribe to DOGS ($1 a month, or 50 cents) to keep using wordsmith.
@@ -171,7 +172,6 @@ export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
 export const MAX_ANALYSIS = 20_000;
 // Trash: deleted rows of these tables stay recoverable for TRASH_DAYS, then the server purges them (api/lib/trash.js).
 export const TRASH_DAYS = 30;
-export const DAY_MS = 86_400_000;
 export const TRASH_MS = TRASH_DAYS * DAY_MS;
 export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
 // Design diagrams (the Design page; the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the

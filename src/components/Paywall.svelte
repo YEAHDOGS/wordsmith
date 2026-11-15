@@ -27,6 +27,7 @@
   const TEXT_OUT = { x: -40, duration: 160 };
   const CARD_IN = { y: 24, duration: 320, easing: quintOut };
   const OFFER_IN = { y: -10, duration: 260, easing: quintOut };
+  const STATUS_FADE = { duration: 150 };
   const BUTTON = 'spring press flex min-h-12 w-full items-center justify-center gap-2 px-4 text-sm font-bold short:min-h-9 tv:min-h-20 tv:text-2xl';
 
   let stage = $state(0);
@@ -130,7 +131,7 @@
     </div>
 
     <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked ? 'text-accent' : 'text-ink-faint'}" role="status">
-      {#key stillLocked}<span in:fade={{ duration: 150 }}>{stillLocked ? TEXT.stillLocked : TEXT.manual}</span>{/key}
+      {#key stillLocked}<span in:fade={STATUS_FADE}>{stillLocked ? TEXT.stillLocked : TEXT.manual}</span>{/key}
     </p>
     <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={signOut}>{TEXT.signOut}</button>
     </div>

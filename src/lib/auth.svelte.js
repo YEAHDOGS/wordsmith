@@ -91,7 +91,7 @@ class Auth {
       this.user = JSON.parse(cached);
       this.status = 'signed_in';
       // Trial or lapsed accounts ask the server once in the background: an approval since the last start, or the
-      // trial running out, must not wait for a 401 to be noticed.
+      // trial running out, must not wait for a refused request (a 402 from the next sync) to be noticed.
       if (this.user?.access && this.user.access !== 'member') this.refresh();
       return;
     }
