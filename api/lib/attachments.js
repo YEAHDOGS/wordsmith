@@ -15,6 +15,19 @@ const DEFAULT_MAX_GB = 1;
 const DEFAULT_MAX_MONTHLY_WRITES = 100_000;
 const DEFAULT_MAX_MONTHLY_READS = 1_000_000;
 const INSUFFICIENT_STORAGE = 507;
+// Stored files never change, so browsers cache them for a year and repeat views cost no requests.
+const CACHE_FOREVER = 'private, max-age=31536000, immutable';
+const NOT_MODIFIED = 304;
+const PARTIAL_CONTENT = 206;
+const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
+// Served from the app's origin, so never let a file act like a page. Browsers won't show a PDF in a sandboxed
+// document, and Chrome's viewer embeds the file itself, so PDFs drop the sandbox and allow only that embed; the
+// viewer runs apart from the app and can't reach it.
+const SANDBOXED = "default-src 'none'; sandbox";
+const PDF_POLICY = "default-src 'none'; object-src 'self'; form-action 'none'; frame-ancestors 'none'";
+const PDF = 'application/pdf';
+// Text is sent as UTF-8 so notes in any language read right.
+const TEXT_CHARSET = '; charset=utf-8';
 
 /** Throws 503 when no R2 bucket is bound (attachments switched off). @param {Record<string, any>} env */
 export function bucket(env) {
@@ -82,6 +95,49 @@ export function checkUpload(type, size, name) {
 export async function assertRoomOnNote(env, noteId) {
   const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM attachments WHERE note_id = ? AND deleted_at IS NULL').bind(noteId).first();
   if (Number(row?.n) >= MAX_ATTACHMENTS_PER_NOTE) throw new HttpError(400, `A note can hold at most ${MAX_ATTACHMENTS_PER_NOTE} attachments`);
+}
+
+/**
+ * Streams a stored file to its owner: Range requests (so audio and video seek), a year in the browser cache, and
+ * headers that keep it from ever running as a page. Attachments and tape audio both go through here.
+ * @param {{ request: Request, env: Record<string, any> }} context
+ * @param {{ key: string, size: number, type: string, name: string, etag: string }} file
+ */
+export async function streamFile({ request, env }, { key, size, type, name, etag }) {
+  const files = bucket(env);
+  if (request.headers.get('If-None-Match') === `"${etag}"`) return new Response(null, { status: NOT_MODIFIED });
+
+  /** @type {{ offset: number, length: number } | undefined} */
+  let range;
+  const match = RANGE_PATTERN.exec(request.headers.get('Range') || '');
+  if (match && (match[1] || match[2])) {
+    const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+    const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+    if (start <= end && start < size) range = { offset: start, length: end - start + 1 };
+  }
+
+  await reserve(env, { reads: 1 });
+  const object = await files.get(key, range ? { range } : undefined);
+  if (!object) throw new HttpError(404, 'File is missing from storage');
+
+  // Images, video, audio and PDFs show in the browser; other documents always download.
+  const disposition = attachmentKind(type) !== 'document' || type === PDF ? 'inline' : 'attachment';
+  const headers = new Headers({
+    'Content-Type': type.startsWith('text/') ? type + TEXT_CHARSET : type,
+    'Cache-Control': CACHE_FOREVER,
+    ETag: `"${etag}"`,
+    'Accept-Ranges': 'bytes',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': type === PDF ? PDF_POLICY : SANDBOXED,
+    'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`,
+  });
+  if (!range) {
+    headers.set('Content-Length', String(size));
+    return new Response(object.body, { headers });
+  }
+  headers.set('Content-Length', String(range.length));
+  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${size}`);
+  return new Response(object.body, { status: PARTIAL_CONTENT, headers });
 }
 
 /** Attachment as clients see it. @param {Record<string, any>} row */

@@ -19,6 +19,7 @@
   import BellDot from '@lucide/svelte/icons/bell-dot';
   import Network from '@lucide/svelte/icons/network';
   import Mic from '@lucide/svelte/icons/mic';
+  import CassetteTape from '@lucide/svelte/icons/cassette-tape';
   import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
@@ -50,6 +51,7 @@
     { view: 'features', label: 'Features', icon: Kanban },
     { view: 'design', label: 'Design', icon: Network },
     { view: 'scribe', label: 'Scribe (beta)', icon: Mic },
+    { view: 'tapes', label: 'Tapes', icon: CassetteTape },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';

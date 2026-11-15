@@ -25,6 +25,7 @@
   import DESIGN_TEXT from './design.json';
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
+  import TAPES_TEXT from './tapes.json';
   import { scribe } from '../lib/scribe.svelte.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
@@ -40,6 +41,8 @@
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
   const loadDesign = () => import('./Design.svelte');
+  // Tapes (player, importer, encoders) load on first visit too.
+  const loadTapes = () => import('./Tapes.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
@@ -85,6 +88,7 @@
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
       case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
       case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
+      case 'tapes': return { title: TAPES_TEXT.title, subtitle: TAPES_TEXT.subtitle.replace('{count}', String(store.tapes.filter((tape) => !tape.deleted_at).length)) };
       case 'trash': return { title: TRASH_TEXT.title, subtitle: TRASH_TEXT.subtitle.replace('{days}', String(TRASH_DAYS)) };
       case 'settings': return { title: 'Settings', subtitle: '' };
       case 'features-settings': return { title: 'Features', subtitle: 'Board settings' };
@@ -182,6 +186,8 @@
             <LazyPage load={loadDesign} id={route.id} />
           {:else if route.view === 'scribe'}
             <Scribe />
+          {:else if route.view === 'tapes'}
+            <LazyPage load={loadTapes} />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}

@@ -54,9 +54,10 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
  * @param {string} path
  * @param {File} file
  * @param {(fraction: number) => void} onProgress
+ * @param {Record<string, string>} [headers] more request headers (a tape's X-Tape)
  * @returns {Promise<any>}
  */
-export function uploadFile(path, file, onProgress) {
+export function uploadFile(path, file, onProgress, headers = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API_BASE + path);
@@ -65,11 +66,12 @@ export function uploadFile(path, file, onProgress) {
     xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
     const token = sessionToken.get();
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total);
     xhr.onload = () => {
       const data = JSON.parse(xhr.responseText || '{}');
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-      else reject(new ApiError(xhr.status, data.error || `Upload failed (${xhr.status})`));
+      else reject(new ApiError(xhr.status, data.error || `Upload failed (${xhr.status})`, data.code));
     };
     xhr.onerror = () => reject(new TypeError('Network error during upload'));
     xhr.send(file);

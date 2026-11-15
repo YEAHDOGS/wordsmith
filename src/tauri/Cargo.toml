@@ -31,6 +31,12 @@ sha2 = "0.10"
 # In-app updates (src/updates.rs): downloads a signed newer release and installs it on restart. Desktop only: phones
 # update through a new APK (src/lib/updates.svelte.js).
 tauri-plugin-updater = "2"
+# Tapes (src/tapes/): shrinking voice recordings before they upload. symphonia decodes what phone recorders save
+# (MP3 first, also M4A/AAC, WAV, FLAC, Ogg Vorbis) in pure Rust; opus encodes libopus (compiled from source by
+# CMake, like the speech engine), the codec built for voice: a fifth of a 128 kbps MP3 and still clear. The browser's
+# own encoder (WebCodecs) can't stream an hour-long file through without holding all of it in memory.
+symphonia = { version = "0.6", default-features = false, features = ["mp3", "aac", "isomp4", "wav", "pcm", "flac", "ogg", "vorbis"] }
+opus = "0.4"
 
 # Apple GPUs through Metal. Windows and Linux run on the CPU until their builds carry the Vulkan SDK
 # (the speech-vulkan feature below).

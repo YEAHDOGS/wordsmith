@@ -85,6 +85,21 @@ export function attachmentKind(type) {
  * extension. '' when the file can't be attached. @param {{ name: string, type: string }} file
  */
 export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : audioType(file.name) || documentType(file.name));
+// Tapes (the tapes table, the Tapes page): voice recordings shrunk to Opus on the device before they upload
+// (src/lib/tape-encode.js). At TAPE_BITRATE an hour is about 11 MB, so MAX_TAPE_BYTES holds a two-hour session.
+export const TAPE_TYPE = 'audio/ogg';
+export const TAPE_EXTENSION = '.ogg';
+export const TAPE_BITRATE = 24_000;
+export const MAX_TAPE_BYTES = 25 * 1024 * 1024;
+// Originals this large are still read on the device to be shrunk; anything bigger isn't a phone recording.
+export const MAX_TAPE_SOURCE_BYTES = 500 * 1024 * 1024;
+export const MAX_TAPES = 20_000;
+export const TAPE_EXISTS = 'tape_exists';
+export const TAPE_LIMIT = 'tape_limit';
+// A SHA-256 in hex: how a tape remembers which original file it came from.
+export const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
+// Longest recording a tape can say it is (ms): past this a duration is a mistake, not a recording.
+export const MAX_TAPE_DURATION_MS = 24 * 3_600_000;
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
@@ -221,6 +236,12 @@ export const MODELS = {
     // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
     folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
+  // Voice recordings. Created only by uploading their audio (POST /api/tapes); sync edits these fields.
+  tapes: {
+    title: { type: 'text', max: MAX_TITLE, default: '' },
+    // The owner's notes or lyrics, Markdown.
+    body: { type: 'text', max: MAX_BODY, default: '' },
+  },
   // Design diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
   diagrams: {
     project_id: { type: 'id', nullable: true, default: null },
@@ -234,12 +255,14 @@ export const MODELS = {
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 // purged_at: when a deleted row left the trash for good (migration 20261028100000); restoring it clears it.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [] };
+export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [],
+  // Set from the upload (POST /api/tapes); audio_size drops to 0 once a deleted tape's audio is gone.
+  tapes: ['source_name', 'source_hash', 'source_size', 'recorded_at', 'duration_ms', 'audio_type', 'audio_size'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns', 'nodes', 'edges'];
 // Every table the app keeps on the device and syncs (api/functions/api/sync.js, src/lib/store.svelte.js).
-export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams']);
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'tapes']);
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
