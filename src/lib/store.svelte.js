@@ -31,7 +31,7 @@ const FIRST_COPY = 2;
 const COPY_SUFFIX = / \(\d+\)$/;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
-/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups' | 'diagrams'} Table */
+/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups' | 'diagrams' | 'tapes'} Table */
 
 /** @param {any} value */
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -43,6 +43,7 @@ class Store {
   /** Custom feature boards, one per scope (models.js FEATURES_SCOPE or a project id). @type {any[]} */ boards = $state([]);
   /** Note groups in projects (src/lib/groups.js). @type {any[]} */ note_groups = $state([]);
   /** Design diagrams (src/lib/diagram.js). @type {any[]} */ diagrams = $state([]);
+  /** Voice recordings (src/lib/tapes.svelte.js), created by upload and edited through sync. @type {any[]} */ tapes = $state([]);
   /** @type {any[]} */ events = $state([]);
   /** @type {any[]} */ attachments = $state([]);
   /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);
@@ -95,13 +96,13 @@ class Store {
     this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
-    const [projects, labels, notes, boards, note_groups, diagrams, events, attachments, cursor, outbox] = await Promise.all([
-      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('diagrams'), this.#db.all('events'), this.#db.all('attachments'),
+    const [projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments, cursor, outbox] = await Promise.all([
+      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('diagrams'), this.#db.all('tapes'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
     ]);
     // Notes cached before migration 20261027040000 only carry the old 0..3 priority; derive the 0..5 level.
     for (const note of notes) note.priority_level ??= Math.max(0, LEGACY_PRIORITY.indexOf(note.priority));
-    Object.assign(this, { projects, labels, notes, boards, note_groups, diagrams, events, attachments });
+    Object.assign(this, { projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments });
     this.#cursor = cursor || 0;
     this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));
     this.pending = this.#outbox.size;
@@ -127,7 +128,7 @@ class Store {
     this.close();
     await this.#db?.destroy().catch(() => {});
     this.#db = null;
-    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
+    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], tapes: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
     this.#outbox.clear();
     this.#cursor = 0;
   }
@@ -170,6 +171,16 @@ class Store {
     clearTimeout(this.#debounce);
     this.#debounce = setTimeout(() => this.sync(), SYNC_DEBOUNCE_MS);
     return next;
+  }
+
+  /**
+   * Takes in rows the server made outside sync (a tape created by its upload), unless a local edit is waiting.
+   * @param {Table} table @param {any[]} rows
+   */
+  adopt(table, rows) {
+    const fresh = rows.filter((row) => !this.#outbox.has(`${table}:${row.id}`));
+    for (const row of fresh) this.#upsertLocal(table, row);
+    this.#db?.put(table, fresh);
   }
 
   /** @param {Table} table @param {Record<string, any>} [values] */
@@ -330,6 +341,11 @@ class Store {
             this.#upsertLocal('diagrams', settled);
             await this.#db?.put('diagrams', [settled]);
             this.#refused = `A design change was not saved: ${error}`;
+          } else if (refusedTable === 'tapes') {
+            // Tapes only exist once uploaded, so a refused one is settled to the server's copy, or dropped.
+            this.#outbox.delete(key);
+            if (current) this.adopt('tapes', [current]);
+            else this.tapes = this.tapes.filter((tape) => tape.id !== id);
           } else {
             rejection = `A change was rejected: ${error}`;
           }
