@@ -31,7 +31,13 @@
   "found": "{count} models found",
   "detected": "Found a model server on this machine and picked {model}.",
   "project": "Tickets go to",
-  "noProject": "No project",
+  "locked": {
+    "title": "Scribe needs a project",
+    "text": "Everything you say becomes tickets in a project. Create one to start using Scribe.",
+    "name": "Project name",
+    "create": "Create project",
+    "taken": "You already have a project called \"{name}\"."
+  },
   "privacy": "Your browser turns speech into text; Chrome, Edge and Safari send the audio to their maker's speech service to do it. The text then goes only to the model server above, and tickets sync to wordsmith like anything you type.",
   "problems": {
     "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press the mic again.",

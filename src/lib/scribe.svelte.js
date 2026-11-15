@@ -7,6 +7,9 @@
 // One session for the whole app (the page and the floating pill share it), so it keeps running while you move
 // between pages and watch the board fill in. Settings stay on this device: a local model's address means nothing on
 // another machine.
+// Scribe needs a project: tickets always land in one, so with none the page asks for a project first and the mic stays
+// off. The picked project is kept valid (a trashed one hands over to the next by name).
+// While listening it also records the microphone (src/lib/recorder.svelte.js) unless recording is switched off.
 // The model can be any provider in scribe-providers.json: wordsmith cloud (Workers AI through wordsmith's Worker), a
 // model server on this machine, or any OpenAI-compatible server. Each provider remembers its own address and model.
 import { auth } from './auth.svelte.js';
@@ -15,6 +18,8 @@ import { store } from './store.svelte.js';
 import { topPosition } from './reorder.svelte.js';
 import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages } from './scribe-llm.js';
 import { listen, listenEngine } from './listen.js';
+import { byName } from './nav-order.js';
+import { recorder } from './recorder.svelte.js';
 import PROVIDERS from './scribe-providers.json';
 
 const SETTINGS_KEY = 'ws_scribe';
@@ -144,6 +149,23 @@ class Scribe {
     return listenEngine();
   }
 
+  /** Projects tickets can go to, by name. */
+  get projects() {
+    return byName(store.projects);
+  }
+
+  /** Scribe works only with a project to write tickets into. */
+  get hasProject() {
+    return this.projects.length > 0;
+  }
+
+  /** Keeps the picked project a live one: an empty or trashed pick moves to the first project by name. */
+  ensureProject() {
+    const projects = this.projects;
+    if (projects.some((project) => project.id === this.settings.projectId)) return;
+    this.configure({ projectId: projects[0]?.id ?? '' });
+  }
+
   /** The provider Scribe sends speech to. */
   get provider() {
     return providerOf(this.settings.provider);
@@ -267,7 +289,9 @@ class Scribe {
   /** One press: start listening, or stop. Speech already heard is still sent after a stop. */
   toggle() {
     if (this.listening) return this.stop();
-    if (!this.engine) return;
+    if (!this.engine || !this.hasProject) return;
+    this.ensureProject();
+    if (recorder.enabled) recorder.start(store.find('projects', this.settings.projectId)?.name ?? '');
     this.problem = '';
     this.detail = '';
     this.listening = true;
@@ -297,6 +321,7 @@ class Scribe {
         this.#session = null;
         this.listening = false;
         this.interim = '';
+        recorder.stop();
         this.#flush();
       },
     });
@@ -305,6 +330,7 @@ class Scribe {
   stop() {
     this.listening = false;
     this.interim = '';
+    recorder.stop();
     // A local model still hands over the sentence it was hearing; onEnd then sends it on.
     this.#session?.stop();
     this.#flush();
@@ -344,6 +370,8 @@ class Scribe {
     this.interim = '';
     this.#session?.stop();
     this.#session = null;
+    // The recording is this account's too: gone with the session.
+    recorder.discard();
     this.clear();
   }
 
@@ -354,7 +382,7 @@ class Scribe {
    */
   hear(text, typed = false) {
     const line = text.trim();
-    if (!line) return;
+    if (!line || !this.hasProject) return;
     const meaningful = meaningfulWords(line) > 0;
     this.transcript.push({ id: crypto.randomUUID(), text: line, handled: !meaningful });
     if (this.transcript.length > MAX_TRANSCRIPT) this.transcript.shift();
@@ -404,9 +432,9 @@ class Scribe {
     this.thinking = true;
     try {
       const tickets = this.#tickets();
+      // A project trashed since it was picked takes no more tickets: the next one by name does.
+      this.ensureProject();
       const target = this.settings.projectId ? store.find('projects', this.settings.projectId) : null;
-      // A project trashed since it was picked takes no more tickets.
-      if (this.settings.projectId && (!target || target.deleted_at)) this.configure({ projectId: '' });
       const project = target && !target.deleted_at ? target.name : '';
       const answer = await this.#ask({ project, tickets, earlier: this.#earlier, speech }, request.signal);
       // The session was reset, or the account changed, while the model was thinking: this answer is for someone gone.

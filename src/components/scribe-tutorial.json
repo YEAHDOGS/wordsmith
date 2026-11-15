@@ -1,0 +1,13 @@
+{
+  "label": "Scribe tutorial",
+  "step": "{step} of {total}",
+  "next": "Next",
+  "done": "Start talking",
+  "skip": "Skip tutorial",
+  "steps": [
+    { "target": "project", "text": "Select a Project here" },
+    { "target": "record", "text": "Hit record, everything you say gets turned into notes for the project" },
+    { "target": "settings", "text": "Connect your claude or ai in the settings to have them update notes while they work" },
+    { "target": "settings", "text": "Connect wordsmith to github actions, and github will send tickets to your ai agents as you speak (work in progress)" }
+  ]
+}

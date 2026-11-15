@@ -1,9 +1,11 @@
-// GET /api/auth/session - who is signed in, which providers are available and which are linked.
+// GET /api/auth/session - who is signed in, which providers are available and which are linked, and which first-run
+// tutorials this account has already seen (tutorials_seen).
 // DELETE /api/auth/session - signs out this device.
 import { SESSION_COOKIE, cookie, getAuth } from '../../../lib/auth.js';
 import { json } from '../../../lib/http.js';
 import { devLoginEnabled, previewLoginEnabled, signupLocked } from '../../../lib/login.js';
 import { configuredProviders } from '../../../lib/oauth.js';
+import { seenTutorials } from '../tutorials.js';
 
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestGet({ request, env }) {
@@ -11,8 +13,11 @@ export async function onRequestGet({ request, env }) {
   const base = { providers: configuredProviders(env), dev_login: devLoginEnabled(request, env), preview_login: previewLoginEnabled(request, env), signup_locked: signupLocked(env) };
   if (!auth || auth.via === 'token') return json({ ...base, user: null });
   // provider_user_id is the account's public id at the provider (GitHub's numeric user id): Settings uses it to link the profile
-  const { results } = await env.DB.prepare('SELECT provider, provider_user_id, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all();
-  return json({ ...base, user: auth.user, linked: results });
+  const [{ results }, tutorials] = await Promise.all([
+    env.DB.prepare('SELECT provider, provider_user_id, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all(),
+    seenTutorials(env, auth.user.id),
+  ]);
+  return json({ ...base, user: auth.user, linked: results, tutorials });
 }
 
 /** @param {{ request: Request, env: Record<string, any> }} context */

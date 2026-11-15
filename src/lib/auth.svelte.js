@@ -25,6 +25,8 @@ class Auth {
   user = $state(null);
   /** @type {string[]} */ providers = $state([]);
   /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
+  /** First-run tutorials this account has seen, from the session (null until a session was fetched). @type {string[] | null} */
+  tutorials = $state(null);
   devLogin = $state(false);
   /** Worker Previews: sign in with the Preview password (PREVIEW_PASSWORD, see api/lib/login.js). */
   previewLogin = $state(false);
@@ -65,6 +67,7 @@ class Auth {
       this.previewLogin = Boolean(session.preview_login);
       this.signupLocked = Boolean(session.signup_locked);
       this.linked = session.linked || [];
+      this.tutorials = Array.isArray(session.tutorials) ? session.tutorials : null;
       this.sessionFetched = true;
       this.#setUser(session.user);
     } catch (error) {

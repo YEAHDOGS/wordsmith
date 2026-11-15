@@ -31,7 +31,7 @@
   <button class="{ITEM} {active('project') ? 'text-accent' : ''}" onclick={() => (ui.drawerOpen = true)}>
     <span class="{INDICATOR} {active('project') ? 'scale-x-100' : 'scale-x-0'}"></span><Folder class="size-5" />Projects
   </button>
-  <button class="{ITEM} {active('settings') ? 'text-accent' : ''}" onclick={() => router.go('settings')} aria-current={active('settings') ? 'page' : undefined}>
+  <button class="{ITEM} {active('settings') ? 'text-accent' : ''}" data-tour="settings" onclick={() => router.go('settings')} aria-current={active('settings') ? 'page' : undefined}>
     <span class="{INDICATOR} {active('settings') ? 'scale-x-100' : 'scale-x-0'}"></span><Settings class="size-5" />Settings
   </button>
 </nav>

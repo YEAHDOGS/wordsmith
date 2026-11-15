@@ -291,7 +291,7 @@
         <span class="flex spring {active('trash') ? '-translate-y-px scale-110' : ''}"><Trash2 class="size-4 tv:size-6" /></span>
       </button>
       <button class="{FOOTER_BUTTON} {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
-        onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>
+        data-tour="settings" onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>
         <span class="flex spring {active('settings') ? 'rotate-90' : ''}"><Settings class="size-4 tv:size-6" /></span>
       </button>
     </div>
