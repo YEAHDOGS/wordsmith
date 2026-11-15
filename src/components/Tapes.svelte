@@ -16,6 +16,7 @@
   import TapeRow from './TapeRow.svelte';
   import TapeImportPanel from './TapeImportPanel.svelte';
   import TapePlayerBar from './TapePlayerBar.svelte';
+  import DesktopAppNudge from './DesktopAppNudge.svelte';
   import { store } from '../lib/store.svelte.js';
   import { tapeImport } from '../lib/tapes.svelte.js';
   import { transcriber } from '../lib/tape-transcribe.svelte.js';
@@ -151,6 +152,8 @@
 
   <div class={CONTENT}>
     {#if panel && (tapeImport.active || tapeImport.total)}<TapeImportPanel onclose={() => (panel = false)} />{/if}
+    <!-- No local engine here: a few free cloud minutes a day, and the desktop app for the rest -->
+    {#if speech.checked && !speech.available && store.tapes.length}<DesktopAppNudge />{/if}
     <!-- Rating filters: one row that swipes sideways on narrow screens instead of wrapping -->
     <div class="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain border-b border-line px-2 py-1.5 [scrollbar-width:none] sm:px-4" role="radiogroup" aria-label={TEXT.filterLabel}>
       {#each FILTERS as level (level)}

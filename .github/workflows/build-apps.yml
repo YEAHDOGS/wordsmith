@@ -273,6 +273,7 @@ jobs:
           else
             gh release create "$tag" "${files[@]}" --draft --target "$GITHUB_SHA" --title "wordsmith ${version}" --notes-file notes.md --generate-notes
             if [ -f build/latest.json ]; then gh release upload "$tag" build/latest.json; fi
-            gh release edit "$tag" --draft=false --latest
           fi
+          # Published either way, so a re-run finishes a release an earlier run left as a draft.
+          gh release edit "$tag" --draft=false --latest
           { echo "# wordsmith ${version}"; echo; echo "Release: ${repo_url}/releases/tag/${tag}"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"

@@ -98,6 +98,13 @@
           "kept": "Until you remove it, which deletes the file right away, or until its note is purged from Trash after 30 days."
         },
         {
+          "name": "Tapes",
+          "what": "Voice recordings you import on the Tapes page, shrunk on your device before upload, with their title, notes, rating, transcript, the original file's name, size and fingerprint (a SHA-256 hash, to skip files already imported), and when it was recorded. The original files stay on your device.",
+          "where": "r2",
+          "why": "To play, search and rate your recordings on every device, and so your AI agents can search their transcripts with your API tokens.",
+          "kept": "Until you delete the tape, which deletes its audio from storage."
+        },
+        {
           "name": "Shared notes",
           "what": "If you share a note publicly, anyone with its link can read its title, body, state, status and dates, along with your display name and profile picture. Attachments are never included. Cloudflare caches the page for up to 60 seconds.",
           "where": "edge",
@@ -209,7 +216,8 @@
         "Cloudflare hosts wordsmith: the app, the API, the database (D1), file storage (R2) and logs all run on Cloudflare's network, and it handles your data only to provide that service.",
         "GitHub, Google and Apple handle sign-in when you choose them. GitHub also answers the repository and pull request lookups made with your token, and sends pull request updates to wordsmith if you set up a webhook. Each of them has its own privacy policy.",
         "Google Fonts serves the app's typefaces, so your browser contacts Google's font servers when the app loads.",
-        "Speech: when you press a microphone button, a speech model you downloaded (desktop apps) turns your voice into text on your own device, and no audio leaves it. Those model files download from Hugging Face straight to your device, which shows Hugging Face your IP address. Without a downloaded model, your browser's own speech recognition is used; Chrome, Edge and Safari send the audio to their maker to do it. Scribe then sends the text to the model server you entered, normally one on your own machine. wordsmith's servers never receive audio.",
+        "Speech: when you press a microphone button, a speech model you downloaded (desktop apps) turns your voice into text on your own device, and no audio leaves it. Those model files download from Hugging Face straight to your device, which shows Hugging Face your IP address. Without a downloaded model, your browser's own speech recognition is used; Chrome, Edge and Safari send the audio to their maker to do it. Scribe then sends the text to the model server you entered, normally one on your own machine. wordsmith's servers never receive Scribe's audio.",
+        "Tape transcripts: the desktop apps transcribe tapes on your own computer. Where there's no local speech model (the web app, phones), pressing Transcribe on a tape sends its stored audio to Cloudflare Workers AI (OpenAI's Whisper model, run by Cloudflare), which returns the text and keeps none of the audio; a few minutes a day are free.",
         "Your AI agents read and write your notes with the API tokens you create. What an agent, or the AI service behind it, does with that data is between you and that service. Revoke a token in Settings to cut it off."
       ]
     },
