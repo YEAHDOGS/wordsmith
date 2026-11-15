@@ -6,7 +6,8 @@
 // or a squash ending in "(#N)"). No API, so no rate limits or tokens. Workers Builds clones shallow, so a build
 // deepens the clone from the public repo first; offline (the dev server) it counts what's there. If git is missing
 // or the history is still shallow, the version is VERSION_PREFIX + "dev". It never throws.
-// Run `node scripts/version.js` to print what a build would use.
+// Run `node scripts/version.js` to print what a build would use, or `node scripts/version.js --native` for the version
+// the native apps carry (nativeVersion below).
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -28,6 +29,10 @@ const FIELD_SEPARATOR = '\x1f';
 const LOG_FORMAT = ['%s', '%b', '%ct'].join('%x1f') + '%x1e';
 const RECORD_SEPARATOR = '\x1e';
 const MS_PER_SECOND = 1000;
+// Tauri, the updater, Android's versionCode and Windows installers all need a three-part semver that keeps rising, so
+// the native apps carry 1.0.NN for app version 1.0.0.NN (the build number becomes the patch).
+const NATIVE_PREFIX = '1.0.';
+const NATIVE_FLAG = '--native';
 
 /** @typedef {{ number: number, title: string, url: string, mergedAt: number }} PullRequestRef */
 /** @typedef {{ version: string, latestPr: PullRequestRef | null, source: 'git' | 'none' }} AppVersion */
@@ -93,4 +98,16 @@ export async function readVersion({ offline = false } = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) console.log(JSON.stringify(await readVersion(), null, 2));
+/**
+ * The version the native apps are built with: "1.0.17" for "1.0.0.17". Null for a dev version, which keeps the one in
+ * tauri.conf.json. @param {string} version
+ */
+export function nativeVersion(version) {
+  const build = Number(version.slice(VERSION_PREFIX.length));
+  return version.startsWith(VERSION_PREFIX) && Number.isInteger(build) ? `${NATIVE_PREFIX}${build}` : null;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const found = await readVersion();
+  console.log(process.argv.includes(NATIVE_FLAG) ? nativeVersion(found.version) ?? '' : JSON.stringify(found, null, 2));
+}

@@ -26,7 +26,7 @@
   import { DOT_BG, DOT_TEXT } from '../lib/colors.js';
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
-  import { githubProfileUrl } from './settings-data.js';
+  import { githubProfileUrl } from '../lib/github-public.js';
   import { agentInstructions, mcpSetup, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';

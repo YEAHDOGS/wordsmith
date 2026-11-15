@@ -24,6 +24,8 @@ dist-ssr
 # Tauri native build output
 src/tauri/target/
 src/tauri/gen/
+# Version and updater settings the build workflow writes for each release build
+src/tauri/tauri.release.conf.json
 
 # Editor directories and files
 .vscode/*

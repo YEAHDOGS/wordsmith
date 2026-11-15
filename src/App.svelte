@@ -1,14 +1,17 @@
 <script>
   // Root: restores the session, reads one-time notices from OAuth redirects (?auth=, ?auth_error=, ?device=),
-  // opens the signed-in user's local store, and shows the sign-in screen or the app.
+  // opens the signed-in user's local store, and shows the sign-in screen or the app. The native apps also look for
+  // updates in the background from here, signed in or not (src/lib/updates.svelte.js).
   import { fade } from 'svelte/transition';
   import { cubicIn } from 'svelte/easing';
   import Login from './components/Login.svelte';
   import Shell from './components/Shell.svelte';
   import LazyPage from './components/LazyPage.svelte';
+  import UpdatePill from './components/UpdatePill.svelte';
   import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
+  import { updates } from './lib/updates.svelte.js';
   import { fileShare } from './share-capture.js';
 
   const NOTICE_PARAMS = ['auth', 'auth_error', 'device', 'provider', 'code'];
@@ -31,6 +34,7 @@
   store.onUnauthorized = () => auth.expired();
   store.onOtherUser = () => auth.load();
   auth.load(!returning);
+  updates.start();
 
   let openedFor = '';
   $effect(() => {
@@ -62,3 +66,5 @@
     <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Shell /></div>
   {/if}
 </div>
+
+<UpdatePill />

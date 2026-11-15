@@ -1,0 +1,19 @@
+{
+  "heading": "Updates",
+  "hint": "wordsmith checks for a new version every few hours and gets it ready in the background. Nothing installs until you restart.",
+  "check": "Check for updates",
+  "checking": "Checking…",
+  "downloading": "Downloading {percent}%",
+  "ready": "Update ready",
+  "readyDetail": "wordsmith {version} is downloaded.",
+  "restart": "Restart",
+  "restarting": "Restarting…",
+  "available": "wordsmith {version} is out",
+  "availableDetail": "Install it over this one; your notes stay put.",
+  "get": "Get it",
+  "current": "You're on the newest version.",
+  "error": "Couldn't check for updates: {error}",
+  "checked": "Checked {time}",
+  "later": "Not now",
+  "pillLabel": "A new version of wordsmith is ready"
+}

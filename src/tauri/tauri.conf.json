@@ -10,12 +10,42 @@
     "frontendDist": "../../dist"
   },
   "app": {
-    "windows": [{ "title": "wordsmith", "width": 1200, "height": 800, "minWidth": 320, "minHeight": 320 }],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "title": "wordsmith",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 320,
+        "minHeight": 320
+      }
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/YEAHDOGS/wordsmith/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNENEZBQkM5QjAzNUUyMTEKUldRUjRqV3d5YXRQUGJEODJFRmtQdmpvOUlVSWdnZzBPWXRIVS9ZTjgwa3JjaTZOQU4yUnplWXEK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
