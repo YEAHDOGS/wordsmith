@@ -1,13 +1,10 @@
 // Sign-in state. Web logins redirect through the OAuth provider and come back with a cookie.
 // Native apps open the system browser (Google and Apple block embedded WebViews) and poll for their session.
 import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken, whenTrialEnds } from './api.js';
-import { DAY_MS } from './models.js';
 
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
 const DEVICE_GONE = 410;
-// The trial countdown (and the lock when it runs out) refreshes this often.
-const CLOCK_MS = 60_000;
 // Demo mode's stand-in user. Never cached or sent anywhere.
 const DEMO_USER = { id: 'demo', email: null, name: 'Demo', avatar_url: null };
 
@@ -29,8 +26,6 @@ class Auth {
   user = $state(null);
   /** The server answered 402: the free trial is over. Cleared when the session is loaded again. */
   trialEnded = $state(false);
-  /** Now, to the minute, so the trial countdown and lock keep up while the app stays open. */
-  now = $state(Date.now());
   /** @type {string[]} */ providers = $state([]);
   /** @type {{ provider: string, provider_user_id?: string, email: string | null, created_at: number }[]} */ linked = $state([]);
   devLogin = $state(false);
@@ -52,7 +47,6 @@ class Auth {
     whenTrialEnds(() => {
       if (!this.demo) this.trialEnded = true;
     });
-    setInterval(() => (this.now = Date.now()), CLOCK_MS);
   }
 
   /**
@@ -66,13 +60,13 @@ class Auth {
     return this.trialEnded || this.user.has_access === false;
   }
 
-  /** Whole days left on the free trial (rounded up), or null when not on one. */
-  get trialDaysLeft() {
+  /** When the free trial ends (ms), for the countdown in the top bar, or null when not on one. */
+  get trialEndsAt() {
     const user = this.user;
     // trial_ends_at comes from the server (models.js trialEndsAt), so the end is worked out in one place.
     // Only while the trial is the best plan held: a membership that started during the trial hides the countdown.
     if (!user || this.demo || user.plan !== 'trial' || user.trial_ends_at === undefined) return null;
-    return Math.max(0, Math.ceil((user.trial_ends_at - this.now) / DAY_MS));
+    return user.trial_ends_at;
   }
 
   /**

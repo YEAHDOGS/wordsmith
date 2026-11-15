@@ -17,15 +17,18 @@
   "stillLocked": "No membership found for {email} yet. It usually shows up within a minute of joining; a different email gets linked by hand.",
   "manual": "Join with the email you sign in with here ({email}) and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand.",
   "signOut": "Sign out",
-  "trialLeft": "Free trial: {days} left",
-  "trialLastDay": "Free trial: last day",
-  "days": "{count} days",
+  "trialLeft": "Free trial: {time} left",
   "subscribe": "Subscribe",
-  "trialShort": "{count}d",
   "unreachable": "Couldn't reach wordsmith just now. Check your connection and try again.",
   "plansLabel": "DOGS memberships",
   "price": "${price}/mo",
   "scribe": "{neurons} Scribe AI neurons a day",
   "tapes": "{size} of tapes",
-  "manualNoEmail": "Join with the email you sign in with here and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand."
+  "manualNoEmail": "Join with the email you sign in with here and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand.",
+  "units": {
+    "d": "d",
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  }
 }
