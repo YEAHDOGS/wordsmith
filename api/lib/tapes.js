@@ -62,6 +62,11 @@ export function readTapeHeader(request) {
 export async function eraseTapeAudio(env, userId, tapes) {
   if (!tapes.length) return;
   const files = bucket(env);
-  await files.delete(tapes.map((tape) => tapeKey(userId, tape.id)));
-  await release(env, tapes.reduce((sum, tape) => sum + Number(tape.audio_size || 0), 0));
+  // The storage is given back even if R2 refuses the delete: the rows no longer count it, and a counter that kept it
+  // would stay too high forever, since nothing tries the delete again.
+  try {
+    await files.delete(tapes.map((tape) => tapeKey(userId, tape.id)));
+  } finally {
+    await release(env, tapes.reduce((sum, tape) => sum + Number(tape.audio_size || 0), 0));
+  }
 }

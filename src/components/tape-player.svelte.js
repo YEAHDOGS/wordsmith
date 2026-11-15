@@ -69,9 +69,10 @@ class TapePlayer {
       await audio.play();
       if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: tape.title || tape.source_name, artist: 'wordsmith' });
     } catch {
-      this.error = 'error';
+      // Only for the tape still loaded: a tape picked meanwhile has its own load to report.
+      if (this.tape?.id === tape.id) this.error = 'error';
     } finally {
-      this.loading = false;
+      if (this.tape?.id === tape.id) this.loading = false;
     }
   }
 
@@ -94,7 +95,8 @@ class TapePlayer {
 
   next() {
     const index = this.order.findIndex((tape) => tape.id === this.tape?.id);
-    const following = this.order[index + 1];
+    // The tape playing isn't in the list any more (filtered or searched away): stop rather than jump to the top.
+    const following = index < 0 ? null : this.order[index + 1];
     if (following) this.play(following);
     else this.#audio?.pause();
   }

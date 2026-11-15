@@ -2,11 +2,16 @@
 // title, notes, transcript, rating, when and how long. q matches title, notes and transcript; rating is 0-3 (TAPE_RATINGS);
 // transcribed=1 keeps only tapes with a transcript. Newest recording first, at most MAX_LIMIT a page.
 import { json } from '../../../../lib/http.js';
+import { rateLimit } from '../../../../lib/rate-limit.js';
 import { TAPE_RATINGS } from '../../../../../src/lib/models.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_QUERY = 200;
+// Each call reads every tape the owner has (search can't use an index), so a looping agent is stopped well before it
+// spends the free tier's daily row reads.
+const READS_PER_DAY = 600;
+const DAY_MS = 86_400_000;
 const COLUMNS = 'id, title, body, transcript, transcript_model, transcribed_at, rating, recorded_at, duration_ms, source_name, created_at';
 
 /** A whole number from the query string, held within bounds. @param {string | null} value @param {number} fallback @param {number} max */
@@ -17,6 +22,7 @@ function bounded(value, fallback, max) {
 
 /** @param {{ request: Request, env: Record<string, any>, data: Record<string, any> }} context */
 export async function onRequestGet({ request, env, data }) {
+  await rateLimit(env, `tape-list:${data.auth.user.id}`, READS_PER_DAY, DAY_MS);
   const params = new URL(request.url).searchParams;
   const query = (params.get('q') || '').trim().slice(0, MAX_QUERY).toLowerCase();
   const rating = bounded(params.get('rating'), -1, TAPE_RATINGS.length - 1);

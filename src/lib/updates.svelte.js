@@ -42,6 +42,7 @@ class Updates {
   supported = IS_NATIVE && !DEV_BUILD.test(APP_VERSION) && !import.meta.env.DEV && visitorPlatform() !== 'ios';
   #platform = visitorPlatform();
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #timer;
+  #checking = false;
 
   /** Starts the background checks. Safe to call more than once. */
   start() {
@@ -59,19 +60,28 @@ class Updates {
    * @param {{ manual?: boolean }} [options]
    */
   async check({ manual = false } = {}) {
-    if (!this.supported || ['checking', 'downloading', 'installing'].includes(this.status)) return;
+    if (!this.supported || this.#checking || ['downloading', 'installing'].includes(this.status)) return;
     // Already downloaded: only a press looks again (the next restart installs what's there).
     if (this.status === 'ready' && !manual) return;
-    this.status = 'checking';
+    // An update already found stays on offer while it looks again, and if looking again fails.
+    const found = ['ready', 'available'].includes(this.status) ? this.status : '';
+    if (!found) this.status = 'checking';
+    this.#checking = true;
     this.error = '';
     try {
       if (this.#platform !== 'android' && await this.#fetchNative()) return;
+      // A downloaded update the updater couldn't re-check is still waiting to install.
+      if (found === 'ready') {
+        this.status = 'ready';
+        return;
+      }
       await this.#compareWithRelease(manual);
     } catch (error) {
-      this.status = 'error';
-      this.error = /** @type {Error} */ (error).message || String(error);
+      this.status = found || 'error';
+      if (!found) this.error = /** @type {Error} */ (error).message || String(error);
     } finally {
       this.checkedAt = Date.now();
+      this.#checking = false;
     }
   }
 

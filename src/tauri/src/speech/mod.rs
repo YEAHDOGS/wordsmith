@@ -16,7 +16,7 @@ use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, sync_channel, Sender, SyncSender};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 
@@ -45,6 +45,9 @@ const LANGUAGE_HEADER: &str = "speech-language";
 const EXTENSION_HEADER: &str = "tape-extension";
 /// Audio goes to the engine in one-second pieces.
 const FEED_SAMPLES: usize = engine::SAMPLE_RATE;
+/// Seconds of a recording decoded ahead of the engine. Few, so memory stays flat however long the tape, and Scribe's
+/// Stop waits behind only this much audio.
+const FILE_QUEUE_CHUNKS: usize = 4;
 const LINE_BREAK: &str = "
 ";
 
@@ -111,6 +114,23 @@ impl Download {
     }
 }
 
+/// Where a session's audio comes from: the microphone (Scribe), or a recording being transcribed, which goes through
+/// a short bounded queue so decoding can't run far ahead of the engine.
+enum Feed {
+    Live(Sender<engine::Input>),
+    File(SyncSender<engine::Input>),
+}
+
+impl Feed {
+    /// Asks the session to finish what it has heard and end. Blocks only while a recording's short queue is full.
+    fn stop(&self) {
+        let _ = match self {
+            Feed::Live(input) => input.send(engine::Input::Stop),
+            Feed::File(input) => input.send(engine::Input::Stop),
+        };
+    }
+}
+
 /// The speech state lib.rs adds to the app (its commands are registered there too).
 #[derive(Default)]
 pub struct Speech {
@@ -118,7 +138,7 @@ pub struct Speech {
     vad: Mutex<Option<(String, Model)>>,
     /// The running listening session's audio input, and the thread it runs on. A new session waits for the one
     /// before it to finish, so two never share a model.
-    session: Mutex<Option<(Sender<engine::Input>, JoinHandle<()>)>>,
+    session: Mutex<Option<(Feed, JoinHandle<()>)>>,
     download: Mutex<Option<Download>>,
     /// Goes up whenever a session starts, so a transcription can tell that Scribe took the engine mid-way.
     generation: AtomicU64,
@@ -277,14 +297,13 @@ pub fn speech_start<R: Runtime>(
     let (sender, receiver) = channel();
     let mut session = state.session.lock().unwrap_or_else(PoisonError::into_inner);
     state.generation.fetch_add(1, Ordering::SeqCst);
-    let previous = session.take().map(|(input, worker)| {
-        let _ = input.send(engine::Input::Stop);
-        worker
-    });
+    let previous = session.take();
     let worker = std::thread::spawn(move || {
-        // The session this one replaces finishes the speech it already heard first, then lets go of its model.
-        if let Some(previous) = previous {
-            let _ = previous.join();
+        // The session this one replaces finishes the speech it already heard first, then lets go of its model. (Its
+        // stop is sent here, off the lock: a recording's full queue may take a moment to make room for it.)
+        if let Some((feed, worker)) = previous {
+            feed.stop();
+            let _ = worker.join();
         }
         let state = app.state::<Speech>();
         let _ = on_event.send(SpeechEvent::Loading);
@@ -314,7 +333,7 @@ pub fn speech_start<R: Runtime>(
             Err(message) => SpeechEvent::Error { message },
         });
     });
-    *session = Some((sender, worker));
+    *session = Some((Feed::Live(sender), worker));
     Ok(())
 }
 
@@ -325,7 +344,8 @@ pub fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(),
         return Err("Expected audio bytes".into());
     };
     let samples = bytes.chunks_exact(BYTES_PER_SAMPLE).map(|sample| f32::from_le_bytes([sample[0], sample[1], sample[2], sample[3]])).collect();
-    if let Some((input, _)) = state.session.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
+    // Only to Scribe's own session: a late chunk must never end up in a recording being transcribed.
+    if let Some((Feed::Live(input), _)) = state.session.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
         let _ = input.send(engine::Input::Audio(samples));
     }
     Ok(())
@@ -334,7 +354,7 @@ pub fn speech_feed(request: Request<'_>, state: State<'_, Speech>) -> Result<(),
 /// Stops listening. Speech already heard is still transcribed and reported before Stopped.
 #[tauri::command]
 pub fn speech_stop(state: State<'_, Speech>) {
-    if let Some((input, _)) = state.session.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
+    if let Some((Feed::Live(input), _)) = state.session.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
         let _ = input.send(engine::Input::Stop);
     }
 }
@@ -366,7 +386,7 @@ pub fn speech_transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>, st
     let extension: String = header(&request, EXTENSION_HEADER).chars().filter(char::is_ascii_alphanumeric).collect();
     let dir = models_dir(&app)?;
 
-    let (input, receiver) = channel();
+    let (input, receiver) = sync_channel(FILE_QUEUE_CHUNKS);
     let (answer, result) = channel::<Result<String, String>>();
     let generation;
     {
@@ -393,12 +413,15 @@ pub fn speech_transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>, st
             .unwrap_or_else(|_| Err(ENGINE_CRASHED.into()));
             let _ = answer.send(outcome);
         });
-        *session = Some((input.clone(), worker));
+        *session = Some((Feed::File(input.clone()), worker));
     }
 
-    // Decode here while the engine works through what it already has.
-    let fed = feed(bytes, &extension, &input);
+    // Decode here while the engine works through what it already has. Decoding stops as soon as Scribe starts (the
+    // generation moves on) or the engine is gone.
+    let current = || state.generation.load(Ordering::SeqCst) == generation;
+    let fed = feed(bytes, &extension, &input, &current);
     let _ = input.send(engine::Input::Stop);
+    drop(input);
     let text = result.recv().map_err(|_| ENGINE_CRASHED.to_string())??;
     fed?;
     if state.generation.load(Ordering::SeqCst) != generation {
@@ -407,27 +430,31 @@ pub fn speech_transcribe<R: Runtime>(app: AppHandle<R>, request: Request<'_>, st
     Ok(text)
 }
 
-/// Decodes a recording and sends it to the engine as 16 kHz mono.
-fn feed(bytes: &[u8], extension: &str, input: &Sender<engine::Input>) -> Result<(), String> {
-    let mut resampler: Option<crate::tapes::audio::Resampler> = None;
+/// Decodes a recording and sends it to the engine as 16 kHz mono, a second at a time, while `current` holds.
+fn feed(bytes: &[u8], extension: &str, input: &SyncSender<engine::Input>, current: &dyn Fn() -> bool) -> Result<(), String> {
+    let mut converter = crate::tapes::audio::Converter::new(engine::SAMPLE_RATE as u32);
     let mut chunk: Vec<f32> = Vec::with_capacity(FEED_SAMPLES);
+    let mut open = true;
     let mut sink = |samples: &[f32], rate: u32| {
-        let resampler = resampler.get_or_insert_with(|| crate::tapes::audio::Resampler::new(rate, engine::SAMPLE_RATE as u32));
-        resampler.push(samples, &mut |sample| {
+        converter.push(samples, rate, &mut |sample| {
             chunk.push(sample);
-            if chunk.len() == FEED_SAMPLES {
-                let _ = input.send(engine::Input::Audio(std::mem::replace(&mut chunk, Vec::with_capacity(FEED_SAMPLES))));
+            if chunk.len() == FEED_SAMPLES && open {
+                let full = std::mem::replace(&mut chunk, Vec::with_capacity(FEED_SAMPLES));
+                // Blocks while the engine catches up; fails once it has gone (an error, or Scribe took over).
+                open = current() && input.send(engine::Input::Audio(full)).is_ok();
             }
         });
+        open
     };
     if crate::tapes::audio::is_ogg_opus(bytes) {
         crate::tapes::audio::decode_ogg_opus(bytes, &mut sink)?;
     } else {
         crate::tapes::audio::decode_mono(bytes.to_vec(), extension, &mut sink)?;
     }
-    if let Some(mut resampler) = resampler {
-        resampler.finish(&mut |sample| chunk.push(sample));
+    if !open {
+        return Ok(());
     }
+    converter.finish(&mut |sample| chunk.push(sample));
     if !chunk.is_empty() {
         let _ = input.send(engine::Input::Audio(chunk));
     }

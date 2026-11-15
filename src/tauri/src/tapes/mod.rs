@@ -55,14 +55,14 @@ fn encode(bytes: Vec<u8>, extension: &str) -> Result<Vec<u8>, String> {
     let pre_skip = encoder.get_lookahead().map_err(|error| error.to_string())? as u32;
 
     let mut packer = Packer { encoder, frame: Vec::with_capacity(FRAME), packets: Vec::new(), samples: 0, failure: None };
-    let mut resampler: Option<audio::Resampler> = None;
+    let mut converter = audio::Converter::new(OPUS_RATE);
     audio::decode_mono(bytes, extension, &mut |input, rate| {
-        resampler.get_or_insert_with(|| audio::Resampler::new(rate, OPUS_RATE)).push(input, &mut |sample| packer.push(sample));
+        converter.push(input, rate, &mut |sample| packer.push(sample));
+        packer.failure.is_none()
     })?;
-    let Some(mut resampler) = resampler else {
+    if !converter.finish(&mut |sample| packer.push(sample)) {
         return Err(EMPTY.into());
-    };
-    resampler.finish(&mut |sample| packer.push(sample));
+    }
     if packer.samples == 0 {
         return Err(EMPTY.into());
     }
