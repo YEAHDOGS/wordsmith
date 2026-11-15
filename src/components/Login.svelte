@@ -191,7 +191,7 @@
           <button class="{BUTTON_CLASS} border-dashed font-mono text-ink-muted" onclick={() => auth.devSignIn()}>{TEXT.dev}</button>
         {/if}
       </div>
-      <p class="short:hidden -mt-4 text-center text-xs text-ink-faint">{TEXT.demoHint}</p>
+      <!-- <p class="short:hidden -mt-4 text-center text-xs text-ink-faint">{TEXT.demoHint}</p> -->
       {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}
