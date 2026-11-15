@@ -4,7 +4,6 @@ import { SESSION_COOKIE, cookie, getAuth } from '../../../lib/auth.js';
 import { json } from '../../../lib/http.js';
 import { devLoginEnabled, previewLoginEnabled, signupLocked } from '../../../lib/login.js';
 import { configuredProviders } from '../../../lib/oauth.js';
-import { hasAccess } from '../../../../src/lib/models.js';
 
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestGet({ request, env }) {
@@ -13,8 +12,8 @@ export async function onRequestGet({ request, env }) {
   if (!auth || auth.via === 'token') return json({ ...base, user: null });
   // provider_user_id is the account's public id at the provider (GitHub's numeric user id): Settings uses it to link the profile
   const { results } = await env.DB.prepare('SELECT provider, provider_user_id, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all();
-  // has_access is the server's verdict on the free trial (models.js hasAccess), so the app never judges by its own clock.
-  return json({ ...base, user: { ...auth.user, has_access: hasAccess(auth.user) }, linked: results });
+  // has_access is the server's verdict (an account holds a plan: models.js planOf), so the app never judges by its own clock.
+  return json({ ...base, user: { ...auth.user, has_access: auth.user.plan !== null }, linked: results });
 }
 
 /** @param {{ request: Request, env: Record<string, any> }} context */

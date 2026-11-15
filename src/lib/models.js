@@ -13,23 +13,66 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 // The Needs you page (agent questions and the review queue, one card at a time). false hides it: no navigation entry,
 // and its address opens All notes, while its data and the agent API (ask, snooze) keep working.
 export const NEEDS_YOU_ENABLED = true;
-// Free trial (users.access): new accounts get TRIAL_DAYS of full access from when they signed up, then every route but
-// sign-in and sign-out answers 402 with TRIAL_ENDED until a membership is approved by hand (scripts/access.js).
+// Free trial and plans. New accounts get TRIAL_DAYS of full access from when they signed up, then every route but
+// sign-in and sign-out answers 402 with TRIAL_ENDED until the account holds a plan: a DOGS membership on Buy Me a
+// Coffee (the memberships table, kept by api/functions/api/webhooks/bmc.js), or one given by hand (users.access =
+// 'member' with users.plan, scripts/access.js). users.access = 'lapsed' locks an account whatever it holds.
 export const DAY_MS = 86_400_000;
 export const TRIAL_DAYS = 5;
 export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
 export const TRIAL_ENDED = 'trial_ended';
-// Where people subscribe to DOGS ($1 a month, or 50 cents) to keep using wordsmith.
-export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs';
+// DOGS's memberships on Buy Me a Coffee, from $1 a month.
+export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs/membership';
+const MB = 1024 * 1024;
+// What each plan unlocks, lowest first. `level` is the Buy Me a Coffee membership_level_id, and `monthly` and `yearly`
+// its prices in USD, which place a level added later (one with no id here) at the highest plan it pays for.
+// scribeNeurons: Scribe's daily wordsmith cloud allowance (Workers AI neurons, api/functions/api/scribe.js; everyone's
+// total is still capped by SCRIBE_DAILY_NEURONS in wrangler.jsonc). tapeBytes: the audio all of an account's tapes may
+// hold in R2 (api/functions/api/tapes/index.js; R2_MAX_GB caps everyone's total).
+export const PLANS = {
+  trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB },
+  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 10, scribeNeurons: 2_500, tapeBytes: 250 * MB },
+  animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB },
+  megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB },
+};
+/** @typedef {keyof typeof PLANS} Plan */
+const PLAN_RANK = /** @type {Plan[]} */ (Object.keys(PLANS));
+const PAID_PLANS = PLAN_RANK.filter((plan) => PLANS[plan].level !== null);
+// The plan scripts/access.js gives when approving by hand without naming one.
+export const GRANTED_PLAN = 'rockstar';
 /** When an account's trial ends (ms). @param {{ created_at: number }} user */
 export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
+
 /**
- * Whether an account may use wordsmith now: members always, trial accounts until their trial ends, lapsed never.
- * @param {{ access?: string, created_at: number }} user @param {number} [now]
+ * The plan a Buy Me a Coffee membership pays for, or null while it isn't paid up (paused, or canceled and past the end
+ * of its paid period). A level not in PLANS gets the highest plan its price covers, and at least the lowest paid one.
+ * @param {{ level_id: number | null, duration: string, amount: number, status: string, period_end: number | null }} membership
+ * @param {number} now
+ * @returns {Plan | null}
  */
-export function hasAccess(user, now = Date.now()) {
-  if (user.access === 'member') return true;
-  return user.access !== 'lapsed' && now < trialEndsAt(user);
+export function membershipPlan(membership, now) {
+  const paidUp = membership.status === 'active' || (membership.status === 'canceled' && Number(membership.period_end) > now);
+  if (!paidUp) return null;
+  const known = PAID_PLANS.find((plan) => PLANS[plan].level === Number(membership.level_id));
+  if (known) return known;
+  const price = (/** @type {Plan} */ plan) => (membership.duration === 'year' ? PLANS[plan].yearly : PLANS[plan].monthly);
+  // Not findLast: Firefox 97 (the Potato Target) lacks it.
+  return [...PAID_PLANS].reverse().find((plan) => Number(membership.amount) >= price(plan)) ?? PAID_PLANS[0];
+}
+
+/**
+ * The best plan an account holds now, or null when it is locked (the paywall). The server works this out
+ * (api/lib/auth.js) and sends it as user.plan, so the app never judges by its own clock.
+ * @param {{ access?: string, plan?: string | null, created_at: number, memberships?: any[] }} user @param {number} [now]
+ * @returns {Plan | null}
+ */
+export function planOf(user, now = Date.now()) {
+  if (user.access === 'lapsed') return null;
+  /** @type {Plan[]} */
+  const held = (user.memberships ?? []).map((membership) => membershipPlan(membership, now)).filter((plan) => plan !== null);
+  if (user.access === 'member') held.push(Object.hasOwn(PLANS, user.plan ?? '') ? /** @type {Plan} */ (user.plan) : GRANTED_PLAN);
+  if (now < trialEndsAt(user)) held.push('trial');
+  return held.sort((a, b) => PLAN_RANK.indexOf(b) - PLAN_RANK.indexOf(a))[0] ?? null;
 }
 // Longest Preview or beta password the sign-in screen accepts and the server checks.
 export const MAX_PASSWORD_LENGTH = 200;
@@ -114,6 +157,8 @@ export const MAX_TAPE_SOURCE_BYTES = 500 * 1024 * 1024;
 export const MAX_TAPES = 20_000;
 export const TAPE_EXISTS = 'tape_exists';
 export const TAPE_LIMIT = 'tape_limit';
+// The account's tapes already hold its plan's tapeBytes (PLANS above).
+export const TAPE_STORAGE = 'tape_storage';
 // A SHA-256 in hex: how a tape remembers which original file it came from.
 export const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
 // Longest recording a tape can say it is (ms): past this a duration is a mistake, not a recording.

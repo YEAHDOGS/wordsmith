@@ -1,7 +1,7 @@
 // Sessions (web cookie or native bearer) and agent API tokens.
 import { HttpError, isTrustedOrigin } from './http.js';
 import { randomToken, sha256 } from './crypto.js';
-import { TRIAL_ENDED, hasAccess, trialEndsAt } from '../../src/lib/models.js';
+import { TRIAL_ENDED, planOf, trialEndsAt } from '../../src/lib/models.js';
 
 export const SESSION_COOKIE = 'ws_session';
 export const SESSION_PREFIX = 'wss_';
@@ -14,8 +14,14 @@ const TOKEN_TOUCH_MS = 3_600_000;
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 const MAX_USER_AGENT = 200;
 const PAYMENT_REQUIRED = 402;
+// The account's Buy Me a Coffee memberships, as a JSON array: every row whose email is one of the account's (its own,
+// or any sign-in identity's). models.js planOf turns them into a plan.
+const MEMBERSHIPS = `(SELECT json_group_array(json_object('level_id', m.level_id, 'duration', m.duration, 'amount', m.amount, 'status', m.status, 'period_end', m.period_end))
+  FROM memberships m WHERE m.email IN (SELECT lower(i.email) FROM identities i WHERE i.user_id = u.id UNION SELECT lower(u.email))) AS memberships`;
+const USER_COLUMNS = `u.id, u.email, u.name, u.avatar_url, u.created_at, u.access, u.plan, ${MEMBERSHIPS}`;
 
-/** @typedef {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at: number, access: string, trial_ends_at: number }} User */
+/** plan: the best plan the account holds now (models.js planOf), null when locked.
+ * @typedef {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at: number, access: string, plan: import('../../src/lib/models.js').Plan | null, trial_ends_at: number }} User */
 /** @typedef {{ user: User, via: 'cookie' | 'bearer' | 'token', tokenHash: string, tokenName?: string, tokenColor?: string }} Auth */
 
 /** @param {Request} request @param {string} name */
@@ -73,7 +79,7 @@ export async function getAuth(request, env) {
 
   if (token.startsWith(API_TOKEN_PREFIX)) {
     const row = await env.DB.prepare(
-      `SELECT t.last_used_at, t.name AS token_name, t.color AS token_color, u.id, u.email, u.name, u.avatar_url, u.created_at, u.access FROM api_tokens t JOIN users u ON u.id = t.user_id
+      `SELECT t.last_used_at, t.name AS token_name, t.color AS token_color, ${USER_COLUMNS} FROM api_tokens t JOIN users u ON u.id = t.user_id
        WHERE t.token_hash = ? AND t.revoked_at IS NULL`,
     ).bind(tokenHash).first();
     if (!row) return null;
@@ -84,7 +90,7 @@ export async function getAuth(request, env) {
   }
 
   const row = await env.DB.prepare(
-    `SELECT u.id, u.email, u.name, u.avatar_url, u.created_at, u.access FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT ${USER_COLUMNS} FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ?`,
   ).bind(tokenHash, now).first();
   if (!row) return null;
@@ -99,7 +105,8 @@ export async function getAuth(request, env) {
 function pickUser(row) {
   const created_at = Number(row.created_at);
   const access = String(row.access || 'trial');
-  return { id: row.id, email: row.email, name: row.name, avatar_url: row.avatar_url, created_at, access, trial_ends_at: trialEndsAt({ created_at }) };
+  const plan = planOf({ created_at, access, plan: row.plan, memberships: JSON.parse(row.memberships || '[]') });
+  return { id: row.id, email: row.email, name: row.name, avatar_url: row.avatar_url, created_at, access, plan, trial_ends_at: trialEndsAt({ created_at }) };
 }
 
 /**
@@ -110,8 +117,8 @@ function pickUser(row) {
 export async function requireAuth({ request, env }, { allowToken = false } = {}) {
   const auth = await getAuth(request, env);
   if (!auth) throw new HttpError(401, 'Sign in required');
-  // The free trial is over and no membership is approved: nothing works but signing in and out (and agent tokens stop).
-  if (!hasAccess(auth.user)) throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
+  // The free trial is over and the account holds no plan: nothing works but signing in and out (and agent tokens stop).
+  if (!auth.user.plan) throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
   if (auth.via === 'token' && !allowToken) throw new HttpError(403, 'API tokens cannot use this route');
   return auth;
 }

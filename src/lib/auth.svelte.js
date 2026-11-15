@@ -24,8 +24,8 @@ async function openExternal(url) {
 class Auth {
   /** @type {'loading' | 'signed_out' | 'signed_in'} */
   status = $state('loading');
-  /** access and trial_ends_at come from the server (models.js hasAccess); older cached users may not have them yet.
-   * @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at?: number, access?: string, trial_ends_at?: number, has_access?: boolean } | null} */
+  /** access, plan and trial_ends_at come from the server (models.js planOf); older cached users may not have them yet.
+   * @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at?: number, access?: string, plan?: string | null, trial_ends_at?: number, has_access?: boolean } | null} */
   user = $state(null);
   /** The server answered 402: the free trial is over. Cleared when the session is loaded again. */
   trialEnded = $state(false);
@@ -70,7 +70,8 @@ class Auth {
   get trialDaysLeft() {
     const user = this.user;
     // trial_ends_at comes from the server (models.js trialEndsAt), so the end is worked out in one place.
-    if (!user || this.demo || user.access !== 'trial' || user.trial_ends_at === undefined) return null;
+    // Only while the trial is the best plan held: a membership that started during the trial hides the countdown.
+    if (!user || this.demo || user.plan !== 'trial' || user.trial_ends_at === undefined) return null;
     return Math.max(0, Math.ceil((user.trial_ends_at - this.now) / DAY_MS));
   }
 
@@ -89,11 +90,13 @@ class Auth {
     this.#endDemo();
     const cached = localStorage.getItem(USER_CACHE_KEY);
     if (useCache && cached) {
-      this.user = JSON.parse(cached);
+      // has_access is only ever the server's word for this start (#setUser never caches it); strip it from caches
+      // written before that rule, so a start from the cache can never lock.
+      this.user = { ...JSON.parse(cached), has_access: undefined };
       this.status = 'signed_in';
-      // Trial or lapsed accounts ask the server once in the background: an approval since the last start, or the
-      // trial running out, must not wait for a refused request (a 402 from the next sync) to be noticed.
-      if (this.user?.access && this.user.access !== 'member') this.refresh();
+      // Accounts on the trial, or on no plan, ask the server once in the background: a membership since the last start,
+      // or the trial running out, must not wait for a refused request (a 402 from the next sync) to be noticed.
+      if (this.user?.plan === 'trial' || !this.user?.plan) this.refresh();
       return;
     }
     try {
@@ -111,7 +114,7 @@ class Auth {
         this.error = error instanceof ApiError ? error.message : '';
         return;
       }
-      this.user = JSON.parse(cached);
+      this.user = { ...JSON.parse(cached), has_access: undefined };
       this.status = 'signed_in';
     }
   }

@@ -6,7 +6,7 @@
 import { ApiError, uploadFile } from './api.js';
 import { NATIVE_ENCODER, encodeTape, tooLarge } from './tape-encode.js';
 import { store } from './store.svelte.js';
-import { TAPE_EXISTS, TAPE_LIMIT, audioType } from './models.js';
+import { TAPE_EXISTS, TAPE_LIMIT, TAPE_STORAGE, audioType } from './models.js';
 
 // The desktop encoder runs on its own threads, so two files encode while others upload; a phone does one at a time.
 const WORKERS = NATIVE_ENCODER ? 2 : 1;
@@ -161,7 +161,7 @@ class TapeImport {
       item.error = failure instanceof TypeError ? OFFLINE : failure.message;
       this.failed++;
       const status = failure instanceof ApiError ? failure.status : 0;
-      if (STOPPERS.includes(status) || (failure instanceof ApiError && failure.code === TAPE_LIMIT)) this.stopped = failure.message;
+      if (STOPPERS.includes(status) || (failure instanceof ApiError && [TAPE_LIMIT, TAPE_STORAGE].includes(failure.code ?? ''))) this.stopped = failure.message;
     }
   }
 

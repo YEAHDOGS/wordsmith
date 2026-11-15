@@ -1,12 +1,15 @@
-// Free trial memberships, approved by hand (users.access, src/lib/models.js). Runs wrangler against production D1
-// (or staging with --staging), so it needs your own Cloudflare login (`npx wrangler login`); nothing here ships.
-//   npm run access -- list                 accounts and where they stand (trial days left, member, lapsed)
-//   npm run access -- approve <email>      full access: they subscribed to DOGS on Buy Me a Coffee
-//   npm run access -- lapse <email>        membership ended: locked again (the app shows the paywall)
-//   npm run access -- trial <email>        back on the trial clock (from when they signed up)
+// Plans by hand (users.access and users.plan, src/lib/models.js). Buy Me a Coffee memberships unlock accounts by
+// themselves (api/functions/api/webhooks/bmc.js); this is for everything else: someone who joined with a different
+// email, a gift, a ban. Runs wrangler against production D1 (or staging with --staging), so it needs your own
+// Cloudflare login (`npx wrangler login`); nothing here ships.
+//   npm run access -- list                    accounts and where they stand, with any Buy Me a Coffee membership
+//   npm run access -- approve <email> [plan]  give a plan by hand (rockstar, animal or megaman; GRANTED_PLAN if left out)
+//   npm run access -- lapse <email>           locked, whatever they hold (the app shows the paywall)
+//   npm run access -- trial <email>           take back what was given by hand: the trial clock (from when they signed
+//                                             up) and any membership decide again
 // Add --staging to use the staging database instead, or --local for the machine-local one.
 import { execFileSync } from 'node:child_process';
-import { DAY_MS, TRIAL_MS } from '../src/lib/models.js';
+import { DAY_MS, GRANTED_PLAN, PLANS, TRIAL_MS, membershipPlan } from '../src/lib/models.js';
 
 const DATABASES = { production: 'wordsmith-production', staging: 'wordsmith-staging' };
 const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
@@ -14,10 +17,11 @@ const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
 const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 // `list` shows at most this many accounts, newest first.
 const LIST_LIMIT = 500;
-const USAGE = 'Usage: npm run access -- list | approve <email> | lapse <email> | trial <email> [--staging | --local]';
+const USAGE = `Usage: npm run access -- list | approve <email> [${Object.keys(PLANS).filter((plan) => PLANS[plan].level !== null).join('|')}] | lapse <email> | trial <email> [--staging | --local]`;
 
 const args = process.argv.slice(2);
-const [command, email] = args.filter((arg) => !arg.startsWith('--'));
+const [command, email, planArg] = args.filter((arg) => !arg.startsWith('--'));
+const plan = planArg ?? GRANTED_PLAN;
 const staging = args.includes('--staging');
 const local = args.includes('--local');
 const where = local ? ['--local', '--persist-to', '.wrangler/state'] : ['--remote', ...(staging ? ['--env', 'preview'] : [])];
@@ -37,18 +41,23 @@ function query(sql) {
 }
 
 if (command === 'list') {
-  const rows = query(`SELECT email, name, access, created_at, access_changed_at FROM users ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`);
+  const rows = query(`SELECT u.email, u.access, u.plan, u.created_at, m.level_id, m.level_name, m.duration, m.amount, m.status, m.period_end, m.live FROM users u LEFT JOIN memberships m ON m.email = lower(u.email) ORDER BY u.created_at DESC LIMIT ${LIST_LIMIT}`);
   const now = Date.now();
   for (const row of rows) {
     const left = Math.ceil((Number(row.created_at) + TRIAL_MS - now) / DAY_MS);
-    const standing = row.access === 'trial' ? (left > 0 ? `trial, ${left} day(s) left` : 'trial over: locked') : row.access;
-    console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${standing}`);
+    const trial = left > 0 ? `trial, ${left} day(s) left` : 'trial over';
+    const given = row.access === 'member' ? `given ${row.plan ?? GRANTED_PLAN}` : row.access === 'lapsed' ? 'LAPSED (locked)' : trial;
+    const paid = row.status ? ` · Buy Me a Coffee: ${row.level_name || row.level_id} ${row.status}${membershipPlan(row, now) ? '' : ' (not paid up)'}${row.live ? '' : ' (test event)'}` : '';
+    console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${given}${paid}`);
   }
+  console.log('Memberships are matched by sign-in email too (identities), so one not shown here may still apply.');
 // Object.hasOwn, not `in`: `in` also matches inherited names like toString, which would write junk into access.
-} else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '')) {
-  // The email matched EMAIL above (letters, digits and . _ + - only), so it is safe to put in the statement.
-  const rows = query(`UPDATE users SET access = '${LEVELS[/** @type {keyof typeof LEVELS} */ (command)]}', access_changed_at = ${Date.now()} WHERE lower(email) = lower('${email}') RETURNING email, access`);
-  console.log(rows.length ? `${rows[0].email}: ${rows[0].access}` : `No account with the email ${email}.`);
+} else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '') && (command === 'approve' ? Object.hasOwn(PLANS, plan) && plan !== 'trial' : !planArg)) {
+  // The email matched EMAIL above (letters, digits and . _ + - only) and the plan is a PLANS key, so both are safe to
+  // put in the statement. Only approve sets a plan; the others clear it.
+  const given = command === 'approve' ? `'${plan}'` : 'NULL';
+  const rows = query(`UPDATE users SET access = '${LEVELS[/** @type {keyof typeof LEVELS} */ (command)]}', plan = ${given}, access_changed_at = ${Date.now()} WHERE lower(email) = lower('${email}') RETURNING email, access, plan`);
+  console.log(rows.length ? `${rows[0].email}: ${rows[0].access}${rows[0].plan ? ` (${rows[0].plan})` : ''}` : `No account with the email ${email}.`);
 } else {
   console.error(USAGE);
   process.exit(1);

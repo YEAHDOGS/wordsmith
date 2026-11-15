@@ -39,7 +39,7 @@
 
   let openedFor = '';
   $effect(() => {
-    // A locked account (free trial over, src/lib/models.js hasAccess) gets no store: it would only sync into 402s.
+    // A locked account (free trial over and no plan held, src/lib/models.js planOf) gets no store: it would only sync into 402s.
     const userId = auth.status === 'signed_in' && !auth.locked ? auth.user?.id ?? '' : '';
     if (userId === openedFor) return;
     // Close, don't wipe: an expired session must not lose unsynced edits. Settings' sign out wipes explicitly.
