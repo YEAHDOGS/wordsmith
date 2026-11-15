@@ -1,6 +1,7 @@
 //! Audio plumbing for tapes, with no Tauri in it: decode a recording held in memory to mono samples as it goes
-//! (symphonia), and change their sample rate on the fly (a small windowed-sinc resampler). Nothing here holds a whole
-//! decoded file, so an hour-long recording takes no more memory than a short one.
+//! (symphonia for what recorders save, libopus for tapes as stored), and change their sample rate on the fly (a small
+//! windowed-sinc resampler). Nothing here holds a whole decoded file, so an hour-long recording takes no more memory
+//! than a short one.
 use std::f32::consts::PI;
 use std::io::Cursor;
 
@@ -16,6 +17,19 @@ const NOT_AUDIO: &str = "This file has no audio wordsmith can read";
 const HALF_TAPS: usize = 8;
 /// Fractional positions the filter is precomputed for; each output sample uses the nearest.
 const PHASES: usize = 512;
+/// Opus decodes at 48 kHz.
+const OPUS_RATE: u32 = 48_000;
+/// The longest Opus frame (120 ms at 48 kHz), per channel.
+const MAX_OPUS_FRAME: usize = 5_760;
+const MAX_OPUS_CHANNELS: usize = 2;
+const OGG_CAPTURE: &[u8] = b"OggS";
+const OPUS_HEAD: &[u8] = b"OpusHead";
+/// OpusHead sits in the first page, a few dozen bytes in.
+const OGG_HEAD_SEARCH: usize = 64;
+const OGG_PAGE_HEADER: usize = 27;
+const OGG_SEGMENT_MAX: usize = 255;
+const OPUS_HEAD_CHANNELS: usize = 9;
+const OPUS_HEAD_PRE_SKIP: usize = 10;
 
 /// Decodes `bytes` (MP3, M4A/AAC, WAV, FLAC or Ogg Vorbis; `extension` is a hint) and hands `sink` mono samples at
 /// the file's own rate, one decoded packet at a time. Damaged packets are skipped, as players do.
@@ -129,4 +143,67 @@ impl Resampler {
             self.push(&vec![0.0; 2 * self.reach], out);
         }
     }
+}
+
+/// Whether `bytes` is an Ogg Opus file (a tape as stored), which symphonia can't decode.
+pub fn is_ogg_opus(bytes: &[u8]) -> bool {
+    bytes.starts_with(OGG_CAPTURE) && bytes.windows(OPUS_HEAD.len()).take(OGG_HEAD_SEARCH).any(|window| window == OPUS_HEAD)
+}
+
+/// Decodes an Ogg Opus file held in memory, handing `sink` mono samples at 48 kHz page by page. The encoder's delay
+/// (the header's pre-skip) is dropped, as players do.
+pub fn decode_ogg_opus(bytes: &[u8], sink: &mut dyn FnMut(&[f32], u32)) -> Result<(), String> {
+    let mut decoder: Option<(opus::Decoder, usize)> = None;
+    let mut skip = 0usize;
+    let mut packets = 0usize;
+    let mut packet: Vec<u8> = Vec::new();
+    let mut output = vec![0.0f32; MAX_OPUS_FRAME * MAX_OPUS_CHANNELS];
+    let mut mono: Vec<f32> = Vec::new();
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        let header = bytes.get(offset..offset + OGG_PAGE_HEADER).ok_or(NOT_AUDIO)?;
+        if !header.starts_with(OGG_CAPTURE) {
+            return Err(NOT_AUDIO.into());
+        }
+        let segments = usize::from(header[OGG_PAGE_HEADER - 1]);
+        let lacing = bytes.get(offset + OGG_PAGE_HEADER..offset + OGG_PAGE_HEADER + segments).ok_or(NOT_AUDIO)?;
+        let mut body = offset + OGG_PAGE_HEADER + segments;
+        for &lace in lacing {
+            let lace = usize::from(lace);
+            packet.extend_from_slice(bytes.get(body..body + lace).ok_or(NOT_AUDIO)?);
+            body += lace;
+            // A packet ends on a segment shorter than 255 bytes; a full one carries on into the next.
+            if lace == OGG_SEGMENT_MAX {
+                continue;
+            }
+            match packets {
+                // OpusHead: channel count at byte 9, pre-skip at 10.
+                0 => {
+                    let channels = usize::from(*packet.get(OPUS_HEAD_CHANNELS).ok_or(NOT_AUDIO)?).clamp(1, MAX_OPUS_CHANNELS);
+                    skip = usize::from(u16::from_le_bytes([*packet.get(OPUS_HEAD_PRE_SKIP).ok_or(NOT_AUDIO)?, *packet.get(OPUS_HEAD_PRE_SKIP + 1).ok_or(NOT_AUDIO)?]));
+                    let layout = if channels == 1 { opus::Channels::Mono } else { opus::Channels::Stereo };
+                    decoder = Some((opus::Decoder::new(OPUS_RATE, layout).map_err(|error| error.to_string())?, channels));
+                }
+                // OpusTags: nothing the engine needs.
+                1 => {}
+                _ => {
+                    let (opus, channels) = decoder.as_mut().ok_or(NOT_AUDIO)?;
+                    // A damaged packet is skipped, as players do.
+                    if let Ok(frames) = opus.decode_float(&packet, &mut output, false) {
+                        mono.clear();
+                        mono.extend(output[..frames * *channels].chunks_exact(*channels).map(|frame| frame.iter().sum::<f32>() / *channels as f32));
+                        let dropped = skip.min(mono.len());
+                        skip -= dropped;
+                        if mono.len() > dropped {
+                            sink(&mono[dropped..], OPUS_RATE);
+                        }
+                    }
+                }
+            }
+            packets += 1;
+            packet.clear();
+        }
+        offset = body;
+    }
+    Ok(())
 }

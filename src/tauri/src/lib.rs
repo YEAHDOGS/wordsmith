@@ -26,6 +26,7 @@ pub fn run() {
             speech::speech_feed,
             speech::speech_stop,
             speech::speech_unload,
+            speech::speech_transcribe,
             tapes::tape_encode,
             updates::update_fetch,
             updates::update_install,

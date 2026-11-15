@@ -38,6 +38,8 @@ import * as v1NoteAnalysis from './functions/api/v1/notes/[id]/analysis.js';
 import * as v1Batches from './functions/api/v1/batches.js';
 import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
+import * as v1Tapes from './functions/api/v1/tapes/index.js';
+import * as v1Tape from './functions/api/v1/tapes/[id].js';
 import * as v1Events from './functions/api/v1/events.js';
 import * as v1Context from './functions/api/v1/context.js';
 import * as v1Diagrams from './functions/api/v1/diagrams/index.js';
@@ -93,6 +95,8 @@ const ROUTES = [
   ['/api/v1/batches', v1Batches, true],
   ['/api/v1/boards', v1Boards, true],
   ['/api/v1/labels', v1Labels, true],
+  ['/api/v1/tapes', v1Tapes, true],
+  ['/api/v1/tapes/:id', v1Tape, true],
   ['/api/v1/events', v1Events, true],
   ['/api/v1/context', v1Context, true],
   ['/api/v1/diagrams', v1Diagrams, true],

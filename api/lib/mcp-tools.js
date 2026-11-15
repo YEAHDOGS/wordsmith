@@ -17,7 +17,9 @@ import * as v1Context from '../functions/api/v1/context.js';
 import * as v1ProjectContext from '../functions/api/v1/projects/[project]/context.js';
 import * as v1Diagrams from '../functions/api/v1/diagrams/index.js';
 import * as v1Diagram from '../functions/api/v1/diagrams/[id].js';
-import { COLORS, DIFFICULTY_LABELS, EDGE_STYLES, FEATURE_STATES, NODE_KINDS, PRIORITY_LABELS } from '../../src/lib/models.js';
+import * as v1Tapes from '../functions/api/v1/tapes/index.js';
+import * as v1Tape from '../functions/api/v1/tapes/[id].js';
+import { COLORS, DIFFICULTY_LABELS, EDGE_STYLES, FEATURE_STATES, NODE_KINDS, PRIORITY_LABELS, TAPE_RATINGS } from '../../src/lib/models.js';
 
 const STRING = { type: 'string' };
 const ID = { type: 'string', description: 'Note or feature id' };
@@ -25,6 +27,7 @@ const PROJECT = { type: 'string', description: 'Project id or name' };
 const PRIORITY = { type: 'integer', minimum: 0, maximum: PRIORITY_LABELS.length - 1, description: `0 none to ${PRIORITY_LABELS.length - 1} critical` };
 const DIFFICULTY = { type: 'integer', minimum: 0, maximum: DIFFICULTY_LABELS.length - 1, description: DIFFICULTY_LABELS.map((label, level) => `${level} ${label}`).join(', ') };
 const LABELS = { type: 'array', items: STRING, description: 'Label names. The list replaces the note\'s labels: send every one it should keep. The label of the group a note is in always stays.' };
+const TAPE_RATING = { type: 'integer', minimum: 0, maximum: TAPE_RATINGS.length - 1, description: TAPE_RATINGS.map((label, level) => `${level} ${label}`).join(', ') };
 const DIAGRAM_ID = { type: 'string', description: 'Design diagram id, from list_diagrams' };
 const NODES = {
   type: 'array',
@@ -81,6 +84,12 @@ export const TOOLS = [
   { name: 'list_batches', description: 'Notes grouped by batch: what ships together, how much is open, which PRs carry it.', method: 'GET', module: v1Batches, path: '/api/v1/batches' },
   { name: 'list_boards', description: 'Every board with its columns in order.', method: 'GET', module: v1Boards, path: '/api/v1/boards' },
   { name: 'list_labels', description: 'Every label: id, name, color.', method: 'GET', module: v1Labels, path: '/api/v1/labels' },
+  { name: 'list_tapes', description: "The owner's voice recordings (raps, verses, song ideas): title, notes, transcript, rating, when recorded, length. Search with q (title, notes, transcript), filter by rating or transcribed. Use it to find the bars worth keeping.",
+    method: 'GET', module: v1Tapes, path: '/api/v1/tapes',
+    properties: { q: STRING, rating: TAPE_RATING, transcribed: { type: 'string', enum: ['1'], description: 'Only tapes with a transcript' }, limit: { type: 'integer', minimum: 1, maximum: 100 }, offset: { type: 'integer', minimum: 0 } },
+    query: ['q', 'rating', 'transcribed', 'limit', 'offset'] },
+  { name: 'update_tape', description: 'Give a tape your verdict after reading its transcript: rate it (gold for bars worth keeping), retitle it after its best line, or add notes (body_append) on what is good and where.',
+    method: 'PATCH', module: v1Tape, path: '/api/v1/tapes/:id', properties: { id: { type: 'string', description: 'Tape id, from list_tapes' }, rating: TAPE_RATING, title: STRING, body: STRING, body_append: STRING }, required: ['id'] },
   { name: 'claim_next', description: 'Claim the next requested feature (atomic: two agents never get the same one). Empty when the queue is.', method: 'POST', module: v1FeaturesNext, path: '/api/v1/features/next', properties: { project: PROJECT } },
   { name: 'claim_note', description: 'Claim one specific requested feature. Fails if it is taken.', method: 'POST', module: v1NoteClaim, path: '/api/v1/notes/:id/claim', properties: { id: ID }, required: ['id'] },
   { name: 'update_note', description: 'Report progress, ask the owner (ask), or move work along. body_append adds to the body; title, body and labels replace what is there.',
