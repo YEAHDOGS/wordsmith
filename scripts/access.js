@@ -16,6 +16,8 @@ const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
 // Letters, digits and . _ + - only: nothing a shell or SQL would read as syntax.
 const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 const DAY_MS = 86_400_000;
+// `list` shows at most this many accounts, newest first.
+const LIST_LIMIT = 500;
 const USAGE = 'Usage: npm run access -- list | approve <email> | lapse <email> | trial <email> [--staging | --local]';
 
 const args = process.argv.slice(2);
@@ -45,14 +47,15 @@ function query(sql) {
 }
 
 if (command === 'list') {
-  const rows = query('SELECT email, name, access, created_at, access_changed_at FROM users ORDER BY created_at DESC LIMIT 500');
+  const rows = query(`SELECT email, name, access, created_at, access_changed_at FROM users ORDER BY created_at DESC LIMIT ${LIST_LIMIT}`);
   const now = Date.now();
   for (const row of rows) {
     const left = Math.ceil((Number(row.created_at) + TRIAL_MS - now) / DAY_MS);
     const standing = row.access === 'trial' ? (left > 0 ? `trial, ${left} day(s) left` : 'trial over: locked') : row.access;
     console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${standing}`);
   }
-} else if (command in LEVELS && EMAIL.test(email ?? '')) {
+// Object.hasOwn, not `in`: `in` also matches inherited names like toString, which would write junk into access.
+} else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '')) {
   // The email matched EMAIL above (letters, digits and . _ + - only), so it is safe to put in the statement.
   const rows = query(`UPDATE users SET access = '${LEVELS[/** @type {keyof typeof LEVELS} */ (command)]}', access_changed_at = ${Date.now()} WHERE lower(email) = lower('${email}') RETURNING email, access`);
   console.log(rows.length ? `${rows[0].email}: ${rows[0].access}` : `No account with the email ${email}.`);
