@@ -9,7 +9,8 @@
 // another machine.
 // Scribe needs a project: tickets always land in one, so with none the page asks for a project first and the mic stays
 // off. The picked project is kept valid (a trashed one hands over to the next by name).
-// While listening it also records the microphone (src/lib/recorder.svelte.js) unless recording is switched off.
+// While listening it also records the microphone (src/lib/recorder.svelte.js) unless recording is switched off, and
+// each session's recording becomes a tape with its transcript when it stops (src/lib/scribe-tapes.svelte.js).
 // The model can be any provider in scribe-providers.json: wordsmith cloud (Workers AI through wordsmith's Worker), a
 // model server on this machine, or any OpenAI-compatible server. Each provider remembers its own address and model.
 import { auth } from './auth.svelte.js';
@@ -20,6 +21,7 @@ import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT
 import { listen, listenEngine } from './listen.js';
 import { byName } from './nav-order.js';
 import { recorder } from './recorder.svelte.js';
+import { scribeTapes } from './scribe-tapes.svelte.js';
 import PROVIDERS from './scribe-providers.json';
 
 const SETTINGS_KEY = 'ws_scribe';
@@ -57,6 +59,8 @@ const BUZZ_MS = 35;
 // The live caption beside the mic: the newest words, this many characters at most.
 const CAPTION_CHARS = 160;
 const MAX_TRANSCRIPT = 200;
+// A session's tape keeps its transcript one utterance per line.
+const TRANSCRIPT_LINE_BREAK = '\n';
 const UNDO_FIELDS = ['title', 'body', 'priority_level', 'state'];
 
 /** @typedef {{ id: string, kind: 'created' | 'updated', noteId: string, title: string, at: number, before: Record<string, any> | null, undone: boolean }} LogEntry */
@@ -133,6 +137,7 @@ class Scribe {
    * still count. @type {object | null}
    */
   #live = null;
+  /** What was said since the mic was last pressed, for the session's tape. @type {string[]} */ #sessionLines = [];
   /** Counts sessions: reset() moves it on, and anything still arriving from the session before is ignored. */ #run = 0;
   /** The model request in flight. @type {AbortController | null} */ #request = null;
   /** The account this session belongs to (see claim). @type {string | undefined} */ #owner;
@@ -291,7 +296,11 @@ class Scribe {
     if (this.listening) return this.stop();
     if (!this.engine || !this.hasProject) return;
     this.ensureProject();
-    if (recorder.enabled) recorder.start(store.find('projects', this.settings.projectId)?.name ?? '');
+    if (recorder.enabled) {
+      // A sealed recording (already a tape) means this press starts a new session, transcript included.
+      if (recorder.sealed || !recorder.duration) this.#sessionLines = [];
+      recorder.start(store.find('projects', this.settings.projectId)?.name ?? '');
+    }
     this.problem = '';
     this.detail = '';
     this.listening = true;
@@ -321,7 +330,7 @@ class Scribe {
         this.#session = null;
         this.listening = false;
         this.interim = '';
-        recorder.stop();
+        this.#endRecording();
         this.#flush();
       },
     });
@@ -330,10 +339,16 @@ class Scribe {
   stop() {
     this.listening = false;
     this.interim = '';
-    recorder.stop();
+    this.#endRecording();
     // A local model still hands over the sentence it was hearing; onEnd then sends it on.
     this.#session?.stop();
     this.#flush();
+  }
+
+  /** Stops the recorder and, the one time it actually stops, saves the session as a tape. */
+  #endRecording() {
+    const project = store.find('projects', this.settings.projectId)?.name ?? '';
+    recorder.stop().then((stopped) => stopped && scribeTapes.save({ project, transcript: this.#sessionLines.join(TRANSCRIPT_LINE_BREAK) }));
   }
 
   /**
@@ -384,6 +399,7 @@ class Scribe {
     const line = text.trim();
     if (!line || !this.hasProject) return;
     const meaningful = meaningfulWords(line) > 0;
+    if (recorder.recording) this.#sessionLines.push(line);
     this.transcript.push({ id: crypto.randomUUID(), text: line, handled: !meaningful });
     if (this.transcript.length > MAX_TRANSCRIPT) this.transcript.shift();
     if (!meaningful) return;

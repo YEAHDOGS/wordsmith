@@ -30,9 +30,6 @@ const PEAK_CAPACITY = PEAKS_PER_SECOND * 60;
 // File names keep letters, digits and dashes, and this many characters of the label.
 const MAX_LABEL_CHARS = 40;
 const NOT_NAME = /[^a-z0-9]+/g;
-const TOUCH_ONLY = '(hover: none) and (pointer: coarse)';
-// A download's address is freed this long after the click, once the browser has taken the file.
-const REVOKE_MS = 1_000;
 const MIC_CONSTRAINTS = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
 
 // Runs on the audio thread. Converts each input to 16-bit, keeps the loudest sample of every block as a peak, and
@@ -132,6 +129,8 @@ class Recorder {
   startedAt = $state(0);
   /** Name used in file names, usually the project's. */
   label = $state('');
+  /** This recording was saved as a tape (src/lib/scribe-tapes.svelte.js): the next start begins a new one. */
+  sealed = false;
   /** Loudness peaks, 0..1, PEAKS_PER_SECOND of them per second; only the first peakCount are real. Not reactive: watch peaksVersion. */
   peaks = new Float32Array(PEAK_CAPACITY);
   peakCount = 0;
@@ -153,6 +152,7 @@ class Recorder {
   #frame = 0;
   /** Resolves when the worklet's last batch arrived. @type {(() => void) | null} */ #flushed = null;
   /** Counts starts, so a stop that lands while the microphone is still opening wins. */ #take = 0;
+  /** A stop is flushing the last batch. */ #stopping = false;
 
   get recording() {
     return this.status === 'recording' || this.status === 'starting';
@@ -188,6 +188,7 @@ class Recorder {
   /** Starts (or continues) recording from the microphone. @param {string} [label] name for exported files */
   async start(label = '') {
     if (this.recording) return;
+    if (this.sealed) this.discard();
     if (this.duration >= MAX_RECORDING_SECONDS) {
       this.problem = 'limit';
       return;
@@ -264,9 +265,11 @@ class Recorder {
     }
   }
 
-  /** Stops recording; what was recorded becomes playable. */
+  /** Stops recording; what was recorded becomes playable. @returns {Promise<boolean>} true for the call that stopped it */
   async stop() {
-    if (!this.recording) return;
+    // Scribe's stop and the speech engine's end both land here: only the first call stops (and saves) it.
+    if (!this.recording || this.#stopping) return false;
+    this.#stopping = true;
     this.#take++;
     const node = this.#node;
     if (node) {
@@ -291,7 +294,9 @@ class Recorder {
     this.#chunks = [];
     this.#wav = this.#samples ? new Blob([wavHeader(this.#samples, this.sampleRate), this.#pcm], { type: WAV_TYPE }) : null;
     this.status = this.#wav ? 'ready' : 'idle';
+    this.#stopping = false;
     this.#load();
+    return true;
   }
 
   /** Points the player at the latest WAV, keeping the playhead where it was. */
@@ -400,6 +405,11 @@ class Recorder {
     return this.#wav;
   }
 
+  /** The recording's raw 16-bit mono samples at sampleRate, for encoding without decoding. */
+  pcm() {
+    return this.#pcm;
+  }
+
   /**
    * The recording as an MP3, encoded by lame in a worker.
    * @param {(progress: number) => void} onProgress
@@ -407,34 +417,7 @@ class Recorder {
    * @returns {Promise<Blob>}
    */
   async mp3(onProgress, signal) {
-    const input = { pcm: await this.#pcm.arrayBuffer(), sampleRate: this.sampleRate, kbps: MP3_KBPS };
-    /** @type {Worker} */
-    let worker;
-    try {
-      worker = new Worker(new URL('./mp3-worker.js', import.meta.url), { type: 'module' });
-    } catch {
-      // No module workers (older Firefox): encode here, a slice at a time.
-      const { encodeMp3 } = await import('./mp3-encode.js');
-      return encodeMp3(input, onProgress);
-    }
-    return new Promise((resolve, reject) => {
-      const finish = () => worker.terminate();
-      signal?.addEventListener('abort', () => {
-        finish();
-        reject(new DOMException('Cancelled', 'AbortError'));
-      });
-      worker.onmessage = ({ data }) => {
-        if (data.progress !== undefined) return onProgress(data.progress);
-        finish();
-        if (data.blob) resolve(data.blob);
-        else reject(new Error(data.error));
-      };
-      worker.onerror = (event) => {
-        finish();
-        reject(new Error(event.message || 'MP3 encoding failed'));
-      };
-      worker.postMessage(input, [input.pcm]);
-    });
+    return encodeMp3InWorker({ pcm: await this.#pcm.arrayBuffer(), sampleRate: this.sampleRate, kbps: MP3_KBPS }, onProgress, signal);
   }
 
   /** Forgets the recording: stops it, frees the memory, and starts the next one fresh. */
@@ -457,32 +440,47 @@ class Recorder {
     this.peaks = new Float32Array(PEAK_CAPACITY);
     this.peakCount = 0;
     this.sampleRate = 0;
-    Object.assign(this, { status: 'idle', problem: '', duration: 0, position: 0, playing: false, startedAt: 0 });
+    Object.assign(this, { status: 'idle', problem: '', duration: 0, position: 0, playing: false, startedAt: 0, sealed: false });
+    this.#stopping = false;
     this.peaksVersion++;
   }
 }
 
 /**
- * Saves a file to the device. Phones (and the mobile apps, whose WebViews ignore downloads) get the share sheet, which
- * saves to Files or sends it on; everything else downloads it.
- * @param {Blob} blob @param {string} name
+ * Encodes 16-bit mono samples to MP3 with lame in a worker (src/lib/mp3-worker.js), or here, a slice at a time, on
+ * browsers that can't start module workers.
+ * @param {{ pcm: ArrayBuffer, sampleRate: number, kbps: number }} input
+ * @param {(progress: number) => void} onProgress
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Blob>}
  */
-export async function saveFile(blob, name) {
-  const file = new File([blob], name, { type: blob.type });
-  if (matchMedia(TOUCH_ONLY).matches && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] });
-      return;
-    } catch (error) {
-      if (/** @type {Error} */ (error)?.name === 'AbortError') return;
-    }
+export async function encodeMp3InWorker(input, onProgress, signal) {
+  /** @type {Worker} */
+  let worker;
+  try {
+    worker = new Worker(new URL('./mp3-worker.js', import.meta.url), { type: 'module' });
+  } catch {
+    const { encodeMp3 } = await import('./mp3-encode.js');
+    return encodeMp3(input, onProgress);
   }
-  const url = URL.createObjectURL(file);
-  const link = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), REVOKE_MS);
+  return new Promise((resolve, reject) => {
+    const finish = () => worker.terminate();
+    signal?.addEventListener('abort', () => {
+      finish();
+      reject(new DOMException('Cancelled', 'AbortError'));
+    });
+    worker.onmessage = ({ data }) => {
+      if (data.progress !== undefined) return onProgress(data.progress);
+      finish();
+      if (data.blob) resolve(data.blob);
+      else reject(new Error(data.error));
+    };
+    worker.onerror = (event) => {
+      finish();
+      reject(new Error(event.message || 'MP3 encoding failed'));
+    };
+    worker.postMessage(input, [input.pcm]);
+  });
 }
 
 export const recorder = new Recorder();

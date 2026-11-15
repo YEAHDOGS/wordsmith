@@ -5,6 +5,7 @@
 // skips the pull right after it when one ran recently, the poll slows down once you stop using the app and stops
 // while it's hidden, and coming back only syncs if the last pull is a little stale. The server answers "nothing
 // new" polls with a single small query (api/functions/api/sync.js).
+import { forgetOriginals } from './recordings.js';
 import { api, uploadFile } from './api.js';
 import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
@@ -143,6 +144,8 @@ class Store {
   async wipe() {
     this.close();
     await this.#db?.destroy().catch(() => {});
+    // Scribe sessions' full-quality originals (src/lib/recordings.js) go too.
+    if (this.#userId) await forgetOriginals(this.#userId).catch(() => {});
     this.#db = null;
     this.demo = false;
     Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], tapes: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });

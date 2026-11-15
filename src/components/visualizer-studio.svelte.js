@@ -4,7 +4,8 @@
 // is what gets recorded. Exporting plays the recording from the start in real time while MediaRecorder captures the
 // canvas and the audio together: MP4 where the browser records it (Chrome and Edge 126+, Safari), WebM otherwise.
 // Choices are remembered on this device; a picked background is not (it stays on the device, and only for now).
-import { recorder, saveFile } from '../lib/recorder.svelte.js';
+import { recorder } from '../lib/recorder.svelte.js';
+import { saveFile } from '../lib/save-file.js';
 import { Visualizer, hexColor, tokenColor } from './visualizer-gl.js';
 import { SCENES } from './visualizer-scenes.js';
 

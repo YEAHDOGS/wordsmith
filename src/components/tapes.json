@@ -64,5 +64,10 @@
   "transcribeProgress": "Transcribing on this device: {done} done, {left} to go",
   "transcribeWaiting": "Waiting for Scribe to stop listening…",
   "transcribeDone": "Every tape has a transcript.",
-  "transcribeFailed": "Couldn't transcribe: {error}"
+  "transcribeFailed": "Couldn't transcribe: {error}",
+  "download": "Download",
+  "downloadOriginal": "Download original (WAV)",
+  "removeOriginal": "Remove original from this device",
+  "downloading": "Downloading…",
+  "downloadFailed": "Download failed: {error}"
 }

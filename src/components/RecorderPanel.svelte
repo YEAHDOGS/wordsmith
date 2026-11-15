@@ -1,8 +1,8 @@
 <script>
   // The recording band on the Scribe page, between the mic and the lists: the big waveform (Waveform.svelte), and one
   // row of controls under it: back to start, back 5 s, play, forward 5 s, the time, the speed, then Export (MP3, WAV,
-  // or a video with a visualizer, VisualizerStudio.svelte, loaded on first use), Save to Tapes, Discard and the record
-  // switch. Its height is fixed per screen size, so recording, stopping and playing never move the lists below.
+  // or a video with a visualizer, VisualizerStudio.svelte, loaded on first use), the Save-to-Tapes switch (each
+  // session becomes a tape when Scribe stops: src/lib/scribe-tapes.svelte.js), Discard and the record switch. Its height is fixed per screen size, so recording, stopping and playing never move the lists below.
   // On narrow screens the buttons drop their labels; on short screens (phones on their side) the band shrinks.
   import { fade, fly, scale } from 'svelte/transition';
   import { backOut, quintOut } from 'svelte/easing';
@@ -23,11 +23,17 @@
   import { recorderExports } from './recorder-exports.svelte.js';
   import { PEAKS_PER_SECOND, SPEEDS, recorder } from '../lib/recorder.svelte.js';
   import { auth } from '../lib/auth.svelte.js';
+  import { scribeTapes } from '../lib/scribe-tapes.svelte.js';
+  import { router } from '../lib/router.svelte.js';
+  import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import TEXT from './recorder.json';
 
   const SKIP_SECONDS = 5;
   // A Discard press waits this long for the second press that confirms it.
   const CONFIRM_MS = 3_000;
+  // A "saved to Tapes" note stays this long.
+  const TAPES_NOTE_MS = 6_000;
+  const PERCENT = 100;
   const BUTTON = 'spring press inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 bg-surface px-2 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink disabled:pointer-events-none disabled:opacity-40 short:min-h-8 tv:min-h-14 tv:min-w-14 tv:text-lg';
   const ICON = 'size-4 tv:size-6';
   const MENU_IN = { y: -6, duration: 160, easing: quintOut };
@@ -43,6 +49,20 @@
 
   const ready = $derived(recorder.hasAudio && !recorder.recording);
   const problem = $derived(recorder.problem ? TEXT.problems[/** @type {'mic-denied' | 'mic' | 'limit'} */ (recorder.problem)] : '');
+  // How the last session's tape is doing; a saved note fades after a while, a failure stays until Retry.
+  let tapesNoteHidden = $state(false);
+  $effect(() => {
+    if (scribeTapes.status !== 'saved') {
+      tapesNoteHidden = false;
+      return;
+    }
+    const timer = setTimeout(() => (tapesNoteHidden = true), TAPES_NOTE_MS);
+    return () => clearTimeout(timer);
+  });
+  const tapesNote = $derived(
+    scribeTapes.status === 'saving' ? TEXT.tapesSaving.replace('{percent}', String(Math.round(scribeTapes.progress * PERCENT)))
+      : scribeTapes.status === 'failed' ? TEXT.tapesFailed.replace('{detail}', scribeTapes.error === 'offline' ? TEXT.tapesOffline : scribeTapes.error)
+        : scribeTapes.status === 'saved' && !tapesNoteHidden ? TEXT.tapesSaved : '');
   const loadStudio = () => import('./VisualizerStudio.svelte');
 
   /** @param {boolean} active */
@@ -100,10 +120,16 @@
     {/if}
   </div>
 
-  {#if problem || recorderExports.note}
-    <p class="absolute inset-x-0 top-full z-20 border-b px-3 py-1.5 text-center text-xs {problem || recorderExports.failed ? 'border-accent bg-accent-soft text-ink' : 'border-complete bg-complete-soft text-ink'}" role="status" transition:fade={{ duration: 150 }}>
-      {problem || recorderExports.note}
-    </p>
+  {#if problem || recorderExports.note || tapesNote}
+    {@const bad = Boolean(problem) || (!problem && recorderExports.note ? recorderExports.failed : scribeTapes.status === 'failed')}
+    <div class="absolute inset-x-0 top-full z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b px-3 py-1.5 text-center text-xs text-ink {bad ? 'border-accent bg-accent-soft' : scribeTapes.status === 'saving' && !problem && !recorderExports.note ? 'border-progress bg-progress-soft' : 'border-complete bg-complete-soft'}" role="status" transition:fade={{ duration: 150 }}>
+      <span>{problem || recorderExports.note || tapesNote}</span>
+      {#if !problem && !recorderExports.note && scribeTapes.status === 'failed'}
+        <button class="spring press inline-flex items-center gap-1 underline-offset-4 hover:underline" onclick={() => scribeTapes.retry()}><RotateCcw class="size-3" />{TEXT.retry}</button>
+      {:else if !problem && !recorderExports.note && scribeTapes.status === 'saved'}
+        <button class="spring press underline-offset-4 hover:underline" onclick={() => router.go('tapes')}>{TEXT.tapesOpen}</button>
+      {/if}
+    </div>
   {/if}
 
   <div class="flex min-w-0 items-center gap-px border-t border-line bg-line">
@@ -153,7 +179,7 @@
       {/if}
     </div>
     {#if !auth.demo}
-      <button class={BUTTON} aria-label={TEXT.tapes} title={TEXT.tapes} disabled={!ready || Boolean(recorderExports.busy)} onclick={() => recorderExports.tapes()}>
+      <button class="{BUTTON} {scribeTapes.enabled ? 'text-accent' : ''}" role="switch" aria-checked={scribeTapes.enabled} aria-label={TEXT.tapes} title={TEXT.tapes} onclick={() => scribeTapes.setEnabled(!scribeTapes.enabled)}>
         <CassetteTape class={ICON} /><span class="max-lg:hidden">{TEXT.tapes}</span>
       </button>
     {/if}

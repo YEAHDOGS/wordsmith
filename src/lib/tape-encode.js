@@ -31,6 +31,10 @@ const PACKET_LENGTH_BYTES = 2;
 const NATIVE_FRAME_SAMPLES = 960;
 const EXTENSION_HEADER = 'tape-extension';
 const BYTES_PER_MB = 1024 * 1024;
+// A recording made here is read 10 seconds of 16-bit samples at a time.
+const PCM_SLICE_SECONDS = 10;
+const PCM_BYTES = 2;
+const INT16_SCALE = 32_768;
 const WEB_CONFIG = { codec: 'opus', sampleRate: WEB_RATE, numberOfChannels: 1, bitrate: TAPE_BITRATE, opus: { frameDuration: WEB_FRAME_US, application: 'audio' } };
 
 /** The desktop apps carry libopus; Android and iOS don't. */
@@ -104,19 +108,15 @@ function webEncoderReady() {
   return webSupport;
 }
 
-/** The browser's encoder. @param {ArrayBuffer} bytes @returns {Promise<Packets>} */
-async function webPackets(bytes) {
-  // decodeAudioData reads every format the browser plays and converts it to WEB_RATE on the way.
-  const decoded = await new OfflineAudioContext(1, 1, WEB_RATE).decodeAudioData(bytes.slice(0));
-  const mono = new Float32Array(decoded.length);
-  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
-    const data = decoded.getChannelData(channel);
-    for (let index = 0; index < data.length; index++) mono[index] += data[index] / decoded.numberOfChannels;
-  }
-
+/**
+ * The browser's Opus encoder (WebCodecs) at WEB_RATE, fed a slice at a time: encode() takes mono samples, finish()
+ * flushes it and hands back the packets.
+ */
+function opusEncoder() {
   /** @type {import('./ogg-opus.js').OpusPacket[]} */
   const packets = [];
   let preSkip = DEFAULT_PRE_SKIP;
+  let sent = 0;
   /** @type {Error | null} */
   let failure = null;
   const encoder = new AudioEncoder({
@@ -130,18 +130,91 @@ async function webPackets(bytes) {
     error: (error) => (failure = error),
   });
   encoder.configure(WEB_CONFIG);
-  for (let start = 0; start < mono.length && !failure; start += WEB_CHUNK_FRAMES) {
-    const frames = mono.subarray(start, start + WEB_CHUNK_FRAMES);
-    const audio = new AudioData({ format: 'f32', sampleRate: WEB_RATE, numberOfChannels: 1, numberOfFrames: frames.length, timestamp: Math.round((start * US_PER_SECOND) / WEB_RATE), data: frames });
-    encoder.encode(audio);
-    audio.close();
-    // Keep the encoder fed without queueing the whole recording at once.
-    while (encoder.encodeQueueSize > MAX_QUEUED) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+  return {
+    /** @param {Float32Array} frames mono at WEB_RATE */
+    async encode(frames) {
+      if (failure) throw failure;
+      const audio = new AudioData({ format: 'f32', sampleRate: WEB_RATE, numberOfChannels: 1, numberOfFrames: frames.length, timestamp: Math.round((sent * US_PER_SECOND) / WEB_RATE), data: frames });
+      encoder.encode(audio);
+      audio.close();
+      sent += frames.length;
+      // Keep the encoder fed without queueing the whole recording at once.
+      while (encoder.encodeQueueSize > MAX_QUEUED) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+    },
+    /** @param {number} inputRate @returns {Promise<Packets>} */
+    async finish(inputRate) {
+      await encoder.flush();
+      encoder.close();
+      if (failure) throw failure;
+      return { packets, preSkip, samples: Math.round((sent * OPUS_RATE) / WEB_RATE), inputRate };
+    },
+  };
+}
+
+/** The browser's encoder, for an imported file. @param {ArrayBuffer} bytes @returns {Promise<Packets>} */
+async function webPackets(bytes) {
+  // decodeAudioData reads every format the browser plays and converts it to WEB_RATE on the way.
+  const decoded = await new OfflineAudioContext(1, 1, WEB_RATE).decodeAudioData(bytes.slice(0));
+  const mono = new Float32Array(decoded.length);
+  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+    const data = decoded.getChannelData(channel);
+    for (let index = 0; index < data.length; index++) mono[index] += data[index] / decoded.numberOfChannels;
   }
-  await encoder.flush();
-  encoder.close();
-  if (failure) throw failure;
-  return { packets, preSkip, samples: Math.round((mono.length * OPUS_RATE) / WEB_RATE), inputRate: decoded.sampleRate };
+  const encoder = opusEncoder();
+  for (let start = 0; start < mono.length; start += WEB_CHUNK_FRAMES) await encoder.encode(mono.subarray(start, start + WEB_CHUNK_FRAMES));
+  return encoder.finish(decoded.sampleRate);
+}
+
+/**
+ * The browser's encoder, for a recording made here (src/lib/recorder.svelte.js): reads the raw 16-bit samples a slice
+ * at a time and resamples them to WEB_RATE on the way (linear), so an hour never sits in memory decoded.
+ * @param {Blob} pcm 16-bit mono samples @param {number} rate their sample rate @param {(progress: number) => void} onProgress
+ * @returns {Promise<Packets>}
+ */
+async function recordingPackets(pcm, rate, onProgress) {
+  const encoder = opusEncoder();
+  const step = rate / WEB_RATE;
+  const sliceBytes = rate * PCM_SLICE_SECONDS * PCM_BYTES;
+  const out = new Float32Array(WEB_CHUNK_FRAMES);
+  let filled = 0;
+  // Where the next output sample falls in the whole recording (in input samples), the input index this slice starts
+  // at, and the last sample of the slice before, for interpolating across the seam.
+  let position = 0;
+  let base = 0;
+  let carry = 0;
+  for (let offset = 0; offset < pcm.size; offset += sliceBytes) {
+    const samples = new Int16Array(await pcm.slice(offset, Math.min(pcm.size, offset + sliceBytes)).arrayBuffer());
+    for (;;) {
+      const index = Math.floor(position) - base;
+      if (index + 1 >= samples.length) break;
+      const before = index < 0 ? carry : samples[index] / INT16_SCALE;
+      const after = samples[index + 1] / INT16_SCALE;
+      out[filled++] = before + (after - before) * (position - Math.floor(position));
+      position += step;
+      if (filled < out.length) continue;
+      await encoder.encode(out.slice());
+      filled = 0;
+    }
+    carry = samples[samples.length - 1] / INT16_SCALE;
+    base += samples.length;
+    onProgress(Math.min(1, (offset + sliceBytes) / pcm.size));
+  }
+  if (filled) await encoder.encode(out.slice(0, filled));
+  return encoder.finish(rate);
+}
+
+/**
+ * A Scribe recording as a tape: Opus from the desktop apps' libopus (fed the WAV) or the browser's encoder (fed the raw
+ * samples, streamed). Null where neither exists; the caller then uploads an MP3 instead.
+ * @param {{ wav: Blob, pcm: Blob, rate: number, name: string }} recording name without extension
+ * @param {(progress: number) => void} onProgress
+ * @returns {Promise<EncodedTape | null>}
+ */
+export async function encodeRecording({ wav, pcm, rate, name }, onProgress) {
+  const file = name + TAPE_EXTENSION;
+  if (NATIVE_ENCODER) return packed(await nativePackets(new File([wav], `${name}.wav`), await wav.arrayBuffer()), file);
+  if (!(await webEncoderReady())) return null;
+  return packed(await recordingPackets(pcm, rate, onProgress), file);
 }
 
 /** How long a file plays, from the browser's own player (no decoding). 0 when it can't tell. @param {File} file */

@@ -1,19 +1,18 @@
 // Export jobs for the recording panel (src/components/RecorderPanel.svelte): WAV straight away, MP3 through lame in a
-// worker, and Save to Tapes (an MP3, which the Tapes queue shrinks to Opus and uploads). One job at a time; progress
-// and the outcome are shown in the panel. The video export lives in VisualizerStudio.svelte.
-import { recorder, saveFile } from '../lib/recorder.svelte.js';
-import { tapeImport } from '../lib/tapes.svelte.js';
+// worker. One job at a time; progress and the outcome are shown in the panel. Sessions save to Tapes by themselves
+// (src/lib/scribe-tapes.svelte.js). The video export lives in VisualizerStudio.svelte.
+import { recorder } from '../lib/recorder.svelte.js';
+import { saveFile } from '../lib/save-file.js';
 import TEXT from './recorder.json';
 
 const MP3_EXTENSION = '.mp3';
 const WAV_EXTENSION = '.wav';
-const MP3_TYPE = 'audio/mpeg';
 // A finished job's note stays this long.
 const NOTE_MS = 4_000;
 const PERCENT = 100;
 
 class RecorderExports {
-  /** @type {'' | 'mp3' | 'tapes'} */
+  /** @type {'' | 'mp3'} */
   busy = $state('');
   progress = $state(0);
   /** What just happened, or what went wrong. */
@@ -42,10 +41,9 @@ class RecorderExports {
     this.#tell(TEXT.saved.replace('{name}', name));
   }
 
-  /** @param {'mp3' | 'tapes'} kind */
-  async #encode(kind) {
+  async #encode() {
     if (this.busy || !recorder.hasAudio) return null;
-    this.busy = kind;
+    this.busy = 'mp3';
     this.progress = 0;
     this.#job = new AbortController();
     try {
@@ -60,19 +58,11 @@ class RecorderExports {
   }
 
   async mp3() {
-    const blob = await this.#encode('mp3');
+    const blob = await this.#encode();
     if (!blob) return;
     const name = recorder.fileName(MP3_EXTENSION);
     await saveFile(blob, name);
     this.#tell(TEXT.saved.replace('{name}', name));
-  }
-
-  async tapes() {
-    const blob = await this.#encode('tapes');
-    if (!blob) return;
-    // The name carries the start time, which Tapes reads as when it was recorded.
-    tapeImport.add([new File([blob], recorder.fileName(MP3_EXTENSION), { type: MP3_TYPE, lastModified: recorder.startedAt || Date.now() })]);
-    this.#tell(TEXT.savedTapes);
   }
 
   cancel() {

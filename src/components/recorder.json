@@ -22,9 +22,7 @@
   "wavNote": "Uncompressed, for editing",
   "video": "Video",
   "videoNote": "With an animated visualizer",
-  "tapes": "Save to Tapes",
-  "saving": "Encoding {percent}%",
-  "savedTapes": "Sent to Tapes: it uploads in the background.",
+  "tapes": "Save sessions to Tapes",
   "saved": "Saved {name}",
   "discard": "Discard recording",
   "discardConfirm": "Discard this recording? It isn't saved anywhere yet.",
@@ -34,5 +32,12 @@
     "mic": "The recorder couldn't open the microphone. Scribe still hears you; press the mic again to retry.",
     "limit": "This recording is an hour long, the most one can hold. Export or discard it to record more.",
     "export": "Export failed ({detail})."
-  }
+  },
+  "saving": "Encoding {percent}%",
+  "tapesSaving": "Saving to Tapes {percent}%",
+  "tapesSaved": "Saved to Tapes, with the transcript. The full-quality original stays on this device.",
+  "tapesOpen": "Open Tapes",
+  "tapesFailed": "Couldn't save to Tapes ({detail}). The recording is kept on this device.",
+  "tapesOffline": "you're offline",
+  "retry": "Retry"
 }

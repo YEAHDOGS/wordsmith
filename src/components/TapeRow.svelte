@@ -1,7 +1,8 @@
 <script>
   // One tape in the Tapes list: play button, title, when it was recorded, how long it runs, and a gold star. Opening it
   // shows its rating, title, notes and transcript for editing (saved as you type, synced like notes), a Transcribe
-  // button in the desktop apps, what it took to store, and delete.
+  // button in the desktop apps, what it took to store, downloads (the stored copy, and the full-quality original of a
+  // Scribe session recorded on this device: tape-downloads.js), and delete.
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import Play from '@lucide/svelte/icons/play';
@@ -11,6 +12,11 @@
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Star from '@lucide/svelte/icons/star';
   import AudioLines from '@lucide/svelte/icons/audio-lines';
+  import Download from '@lucide/svelte/icons/download';
+  import HardDrive from '@lucide/svelte/icons/hard-drive';
+  import { auth } from '../lib/auth.svelte.js';
+  import { hasOriginal, removeOriginal } from '../lib/recordings.js';
+  import { downloadOriginal, downloadStored } from './tape-downloads.js';
   import { store } from '../lib/store.svelte.js';
   import { GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
   import { speech } from '../lib/speech.svelte.js';
@@ -28,6 +34,35 @@
   const RECORDED = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   let confirming = $state(false);
+  /** This device holds the tape's full-quality original. */
+  let original = $state(false);
+  /** @type {'' | 'stored' | 'original'} */
+  let downloading = $state('');
+  let downloadError = $state('');
+
+  // Looked up when the tape opens: a Scribe session recorded here keeps its original in IndexedDB.
+  $effect(() => {
+    if (!open || !auth.user || auth.demo) return;
+    hasOriginal(auth.user.id, tape.id).then((found) => (original = found));
+  });
+
+  /** @param {'stored' | 'original'} which */
+  async function download(which) {
+    downloading = which;
+    downloadError = '';
+    try {
+      await (which === 'stored' ? downloadStored(tape) : downloadOriginal(tape));
+    } catch (error) {
+      downloadError = TEXT.downloadFailed.replace('{error}', /** @type {Error} */ (error).message);
+    }
+    downloading = '';
+  }
+
+  async function forgetOriginal() {
+    if (!auth.user) return;
+    await removeOriginal(auth.user.id, tape.id);
+    original = false;
+  }
 
   const current = $derived(player.tape?.id === tape.id);
   const title = $derived(tape.title || tape.source_name || TEXT.untitled);
@@ -98,6 +133,18 @@
         {#if failure}<p class="text-accent">{TEXT.transcribeFailed.replace('{error}', failure)}</p>
         {:else if tape.transcribed_at}<p>{TEXT.transcriptBy.replace('{model}', modelName)}</p>{/if}
       </div>
+      {#if !auth.demo}
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <button class="spring press inline-flex items-center gap-1.5 border border-line px-2.5 py-1.5 text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-40"
+            disabled={Boolean(downloading)} onclick={() => download('stored')}><Download class="size-3.5" />{downloading === 'stored' ? TEXT.downloading : TEXT.download}</button>
+          {#if original}
+            <button class="spring press inline-flex items-center gap-1.5 border border-accent px-2.5 py-1.5 text-accent hover:bg-accent-soft disabled:opacity-40"
+              disabled={Boolean(downloading)} onclick={() => download('original')}><HardDrive class="size-3.5" />{downloading === 'original' ? TEXT.downloading : TEXT.downloadOriginal}</button>
+            <button class="spring press px-2 py-1.5 text-ink-faint underline-offset-4 hover:text-ink hover:underline" onclick={forgetOriginal}>{TEXT.removeOriginal}</button>
+          {/if}
+          {#if downloadError}<p class="w-full text-accent" role="alert">{downloadError}</p>{/if}
+        </div>
+      {/if}
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-ink-muted">
         <p class="min-w-0 break-all"><span class="text-ink-faint">{TEXT.original}</span> {tape.source_name} · {size(tape.source_size)}
           <span class="text-ink-faint"> → {TEXT.stored}</span> {size(tape.audio_size)}</p>

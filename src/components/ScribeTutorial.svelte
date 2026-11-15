@@ -85,12 +85,12 @@
   <!-- Presses outside the card do nothing, so the page can't be changed mid-tutorial -->
   <div class="absolute inset-0" aria-hidden="true"></div>
 
-  <section bind:this={card} class="absolute top-0 left-0 flex w-[min(24rem,calc(100vw-1rem))] flex-col gap-4 border border-line-strong bg-surface p-4 shadow-2xl transition-transform duration-300 ease-spring short:gap-2 short:p-3 tv:w-[40rem] tv:gap-6 tv:p-8"
+  <section bind:this={card} class="absolute top-0 left-0 flex w-[min(18rem,calc(100vw-1rem))] flex-col gap-2.5 border border-line-strong bg-surface p-3 shadow-2xl transition-transform duration-300 ease-spring short:gap-1.5 short:p-2.5 tv:w-[28rem] tv:gap-4 tv:p-5"
     style:transform="translate({cardAt.x}px, {cardAt.y}px)" in:fly={CARD_IN}>
     <div class="flex items-center justify-between gap-3">
       <ol class="flex gap-1.5" aria-label={TEXT.step.replace('{step}', String(step + 1)).replace('{total}', String(STEPS.length))}>
         {#each STEPS as _, index (index)}
-          <li class="h-1 w-6 origin-left transition-[transform,background-color] duration-300 ease-spring tv:h-2 tv:w-10 {index <= step ? 'bg-accent' : 'scale-x-50 bg-line-strong'}"></li>
+          <li class="h-1 w-5 origin-left transition-[transform,background-color] duration-300 ease-spring tv:h-2 tv:w-10 {index <= step ? 'bg-accent' : 'scale-x-50 bg-line-strong'}"></li>
         {/each}
       </ol>
       <span class="font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint tv:text-sm">{TEXT.step.replace('{step}', String(step + 1)).replace('{total}', String(STEPS.length))}</span>
@@ -99,20 +99,20 @@
     <!-- Every step's words sit invisibly in one grid cell, so the card keeps the tallest one's height and never jumps -->
     <div class="grid overflow-hidden">
       {#each STEPS as { text }, index (index)}
-        <p class="invisible col-start-1 row-start-1 text-fluid-lg leading-snug font-bold tv:text-5xl" aria-hidden="true">{text}</p>
+        <p class="invisible col-start-1 row-start-1 text-sm leading-snug font-bold sm:text-base tv:text-2xl" aria-hidden="true">{text}</p>
       {/each}
       {#key step}
-        <p id="scribe-tutorial-text" class="col-start-1 row-start-1 text-fluid-lg leading-snug font-bold text-ink tv:text-5xl" in:fly={TEXT_IN} out:fly={TEXT_OUT}>{STEPS[step].text}</p>
+        <p id="scribe-tutorial-text" class="col-start-1 row-start-1 text-sm leading-snug font-bold text-ink sm:text-base tv:text-2xl" in:fly={TEXT_IN} out:fly={TEXT_OUT}>{STEPS[step].text}</p>
       {/key}
     </div>
 
-    <button bind:this={next} class="spring press group flex min-h-16 w-full items-center justify-center gap-3 bg-accent px-6 text-fluid-lg font-bold text-accent-ink hover:bg-accent-hover short:min-h-12 tv:min-h-28 tv:text-4xl" onclick={advance}>
+    <button bind:this={next} class="spring press group flex min-h-11 w-full items-center justify-center gap-2 bg-accent px-4 text-base font-bold text-accent-ink hover:bg-accent-hover short:min-h-9 tv:min-h-16 tv:text-2xl" onclick={advance}>
       {last ? TEXT.done : TEXT.next}
       <span class="flex transition-transform duration-150 ease-spring group-hover:translate-x-1">
-        {#if last}<Check class="size-6 tv:size-10" />{:else}<ArrowRight class="size-6 tv:size-10" />{/if}
+        {#if last}<Check class="size-5 tv:size-7" />{:else}<ArrowRight class="size-5 tv:size-7" />{/if}
       </span>
     </button>
     <!-- Kept on the last step too (hidden), so the card's height holds -->
-    <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline short:-mt-1 tv:text-lg {last ? 'invisible' : ''}" tabindex={last ? -1 : 0} onclick={finish}>{TEXT.skip}</button>
+    <button class="spring press -mt-1 self-center px-2 py-0.5 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline short:-mt-1 tv:text-lg {last ? 'invisible' : ''}" tabindex={last ? -1 : 0} onclick={finish}>{TEXT.skip}</button>
   </section>
 </div>
