@@ -99,6 +99,32 @@
   --ws-dot-pink: #b8237a;
 }
 
+/* Video visualizer palettes (src/components/visualizer-scenes.js, the Video export on the Scribe page). Videos look the
+   same in either theme, so these sit outside the light/dark blocks. Each scene takes a, b and c; the glow color is the
+   theme's accent unless one is picked in the studio. The scene buttons use them as swatches too. */
+:root {
+  --ws-viz-spine-a: #050508;    /* spine: background */
+  --ws-viz-spine-b: #1a1a24;    /* spine: the 1px grid */
+  --ws-viz-spine-c: #ff3344;    /* spine: low bars, fading to the glow color up top */
+  --ws-viz-sakura-a: #0b0a24;   /* sakura: night sky overhead, and the hills */
+  --ws-viz-sakura-b: #3a1f5c;   /* sakura: sky at the horizon */
+  --ws-viz-sakura-c: #ffb7d5;   /* sakura: petals and the moon's halo */
+  --ws-viz-sunset-a: #12002b;   /* sunset: sky overhead, mountains and floor */
+  --ws-viz-sunset-b: #ff2a6d;   /* sunset: the sun's base and the grid */
+  --ws-viz-sunset-c: #ffb347;   /* sunset: the horizon's glow */
+  --ws-viz-impact-a: #f4f1e8;   /* impact: manga paper */
+  --ws-viz-impact-b: #0d0d0f;   /* impact: ink: halftone, speed lines, border */
+  --ws-viz-impact-c: #ff3344;   /* impact: the burst on each beat */
+  --ws-viz-magic-a: #04060f;    /* magic: background */
+  --ws-viz-magic-b: #3d1f7a;    /* magic: the haze behind the circle */
+  --ws-viz-magic-c: #7ee8ff;    /* magic: the circle's light */
+  --ws-viz-warp-a: #02030a;     /* warp: deep space */
+  --ws-viz-warp-b: #7aa2ff;     /* warp: cool star streaks */
+  --ws-viz-warp-c: #ff7ac6;     /* warp: warm star streaks */
+  --ws-viz-text: #ffffff;       /* title, subtitle and mark drawn on the video */
+  --ws-viz-shadow: #000000b3;   /* the shadow under that text, so it reads on any scene */
+}
+
 /* Custom colors (Settings → Appearance) are not written here: src/lib/appearance.svelte.js reads the values above
    as defaults and overrides the --ws-* properties inline on <html> with the user's picks and shades derived from them. */
 

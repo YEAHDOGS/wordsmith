@@ -3,6 +3,9 @@
   // spine starts and stops it. Under it, what you said (words still being heard are dimmed) beside what Scribe did
   // with it, each ticket openable and undoable. Model settings sit in a third column on wide screens and in a panel
   // that floats over the page below that, so opening it never moves the columns. Only the two lists scroll.
+  // Between the mic and the lists, the recording band (RecorderPanel.svelte): Scribe records while it listens.
+  // Scribe needs a project: with none, the page offers to create one instead. The first visit with a project shows
+  // the tutorial (ScribeTutorial.svelte), once per account.
   import { tick } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
@@ -14,7 +17,14 @@
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Eraser from '@lucide/svelte/icons/eraser';
   import X from '@lucide/svelte/icons/x';
+  import FolderPlus from '@lucide/svelte/icons/folder-plus';
+  import { untrack } from 'svelte';
   import { scribe } from '../lib/scribe.svelte.js';
+  import RecorderPanel from './RecorderPanel.svelte';
+  import ScribeTutorial from './ScribeTutorial.svelte';
+  import { tutorials } from '../lib/tutorials.svelte.js';
+  import { MAX_NAME, projectKey } from '../lib/models.js';
+  import { ui } from '../lib/ui.svelte.js';
   import ScribeSettings from './ScribeSettings.svelte';
   import { speech } from '../lib/speech.svelte.js';
   import { store } from '../lib/store.svelte.js';
@@ -64,6 +74,38 @@
     tick().then(() => transcriptBox?.scrollTo({ top: transcriptBox.scrollHeight }));
   });
 
+  // Always a live project picked; with none left, the mic stops.
+  $effect(() => {
+    const projects = scribe.projects;
+    untrack(() => {
+      scribe.ensureProject();
+      if (!projects.length && scribe.listening) scribe.stop();
+    });
+  });
+
+  // The tutorial: only once D1 has said this account hasn't seen it, and only with a project to point at.
+  tutorials.check();
+  let tutorialClosed = $state(false);
+  const tutorial = $derived(scribe.hasProject && !tutorialClosed && tutorials.shouldShow('scribe'));
+
+  let newProject = $state('');
+  let projectError = $state('');
+
+  /** @param {SubmitEvent} event */
+  function createProject(event) {
+    event.preventDefault();
+    const name = newProject.trim();
+    if (!name) return;
+    if (store.projects.some((other) => !other.deleted_at && projectKey(other.name) === projectKey(name))) {
+      projectError = TEXT.locked.taken.replace('{name}', name);
+      return;
+    }
+    const project = store.create('projects', { name });
+    ui.newProjectId = project.id;
+    scribe.configure({ projectId: project.id });
+    newProject = '';
+  }
+
   /** @param {SubmitEvent} event */
   function send(event) {
     event.preventDefault();
@@ -77,11 +119,30 @@
   {#if detected}<p class="text-xs leading-relaxed text-ink-muted" role="status" in:fade>{detected}</p>{/if}
 {/snippet}
 
+{#if !scribe.hasProject}
+  <!-- No project: Scribe has nowhere to write, so the page asks for one, centered on the spine -->
+  <div class="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8 short:py-3" in:fade={{ duration: 200 }}>
+    <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
+    <div class="relative flex w-full max-w-md flex-col items-center gap-4 border border-line bg-app p-6 text-center short:flex-row short:gap-4 short:p-4 short:text-left tv:max-w-2xl tv:gap-8 tv:p-12" in:fly={ROW_IN}>
+      <span class="flex size-16 shrink-0 items-center justify-center border-2 border-line-strong text-accent short:size-12 tv:size-28"><FolderPlus class="size-7 tv:size-12" /></span>
+      <div class="flex min-w-0 flex-col gap-3 short:gap-2 tv:gap-6">
+        <h2 class="text-fluid-xl font-bold leading-tight text-ink">{TEXT.locked.title}</h2>
+        <p class="text-fluid-sm leading-relaxed text-ink-muted">{TEXT.locked.text}</p>
+        <form class="flex w-full gap-px" onsubmit={createProject}>
+          <input class="{FIELD} min-w-0 flex-1" bind:value={newProject} maxlength={MAX_NAME} placeholder={TEXT.locked.name} aria-label={TEXT.locked.name}
+            aria-invalid={Boolean(projectError)} aria-describedby={projectError ? 'scribe-project-error' : undefined} oninput={() => (projectError = '')} />
+          <button type="submit" class="spring press shrink-0 bg-accent px-3 text-sm font-bold text-accent-ink hover:bg-accent-hover disabled:opacity-40 tv:px-6 tv:text-xl" disabled={!newProject.trim()}>{TEXT.locked.create}</button>
+        </form>
+        {#if projectError}<p id="scribe-project-error" class="text-xs text-accent" role="alert" in:fade={{ duration: 150 }}>{projectError}</p>{/if}
+      </div>
+    </div>
+  </div>
+{:else}
 <div class="relative flex min-h-0 flex-1 flex-col">
   <!-- The mic sits on the spine: one line the page hangs from -->
   <section class="relative flex shrink-0 flex-col items-center gap-2 border-b border-line px-3 py-4 short:flex-row short:justify-center short:gap-4 short:py-2 sm:py-6">
     <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line short:hidden" aria-hidden="true"></div>
-    <button class="spring press relative flex size-20 shrink-0 items-center justify-center border-2 short:size-12 tv:size-28 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-surface text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
+    <button data-tour="record" class="spring press relative flex size-20 shrink-0 items-center justify-center border-2 short:size-12 tv:size-28 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-surface text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
       aria-label={scribe.listening ? TEXT.stop : TEXT.start} aria-pressed={scribe.listening} disabled={!scribe.engine} onclick={() => scribe.toggle()}>
       {#if scribe.listening}
         <span class="live-dot pointer-events-none absolute inset-0 border border-accent" aria-hidden="true"></span>
@@ -106,6 +167,12 @@
       <p class="h-[2.75em] w-full max-w-md overflow-hidden text-center text-fluid-sm leading-snug text-ink short:hidden sm:w-96" aria-hidden="true">
         {#if scribe.listening || scribe.interim}{scribe.interim ? scribe.caption.slice(0, scribe.caption.length - scribe.interim.length) : scribe.caption}<span class="text-ink-faint">{scribe.interim ? scribe.caption.slice(-scribe.interim.length) : ''}</span>{/if}
       </p>
+      <label class="flex w-full max-w-md items-center gap-2 sm:w-96" data-tour="project">
+        <span class="shrink-0 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint tv:text-sm">{TEXT.project}</span>
+        <select class="{FIELD} min-w-0 flex-1 py-1" value={scribe.settings.projectId} onchange={(event) => scribe.configure({ projectId: event.currentTarget.value })}>
+          {#each scribe.projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
+        </select>
+      </label>
       <form class="flex w-full max-w-md gap-px sm:w-96" onsubmit={send}>
         <input class="{FIELD} min-w-0 flex-1" bind:value={typed} placeholder={TEXT.typePlaceholder} aria-label={TEXT.typePlaceholder} />
         <button type="submit" class="{SMALL_BUTTON} min-h-9" disabled={!typed.trim()} aria-label={TEXT.send}><Send class="size-4" /></button>
@@ -124,6 +191,8 @@
       {/each}
     </ol>
   </section>
+
+  <RecorderPanel />
 
   {#if problem}
     <div class="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-accent bg-accent-soft px-3 py-2 text-center text-fluid-sm text-ink" role="alert" transition:fade={{ duration: 150 }}>
@@ -185,3 +254,8 @@
     </aside>
   {/if}
 </div>
+{/if}
+
+{#if tutorial}
+  <ScribeTutorial onclose={() => (tutorialClosed = true)} />
+{/if}

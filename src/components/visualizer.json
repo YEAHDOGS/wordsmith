@@ -1,0 +1,38 @@
+{
+  "title": "Video studio",
+  "close": "Close the studio",
+  "preview": "Preview",
+  "scene": "Scene",
+  "scenes": {
+    "spine": { "name": "Spine", "note": "The DOGS spine: bars branch off a glowing line" },
+    "sakura": { "name": "Sakura night", "note": "Full moon ringed by your voice, petals falling" },
+    "sunset": { "name": "Neon sunset", "note": "Striped sun, spectrum mountains, racing grid" },
+    "impact": { "name": "Impact panel", "note": "Manga speed lines and a burst on every beat" },
+    "magic": { "name": "Magic circle", "note": "Turning runes, a hexagram, rising sparks" },
+    "warp": { "name": "Hyperspace", "note": "Stars rush past faster the louder you get" }
+  },
+  "shape": "Shape",
+  "formats": { "landscape": "16:9", "square": "1:1", "portrait": "9:16", "hd": "1080p" },
+  "words": "Words on the video",
+  "videoTitle": "Title",
+  "videoSubtitle": "Subtitle",
+  "background": "Background",
+  "pickBackground": "Image or video",
+  "clearBackground": "Remove the background",
+  "noBackground": "The scene's own",
+  "glow": "Glow color",
+  "glowTheme": "Use the theme's accent",
+  "mark": "Show the wordsmith mark",
+  "play": "Play the preview",
+  "pause": "Pause the preview",
+  "record": "Record {format}",
+  "recording": "Recording {percent}%",
+  "cancel": "Cancel",
+  "realtime": "Records in real time ({length}) while it plays. Keep this window open and in front.",
+  "webm": "This browser records WebM, not MP4. Chrome, Edge (126 and later) and Safari record MP4.",
+  "unsupported": "This browser can't record video. Try Chrome, Edge or Safari.",
+  "problems": {
+    "webgl": "This device can't draw the visualizers (WebGL is off or missing).",
+    "record": "Recording the video failed ({detail})."
+  }
+}

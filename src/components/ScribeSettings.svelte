@@ -11,8 +11,6 @@
   import { auth } from '../lib/auth.svelte.js';
   import { speech } from '../lib/speech.svelte.js';
   import { router } from '../lib/router.svelte.js';
-  import { store } from '../lib/store.svelte.js';
-  import { byName } from '../lib/nav-order.js';
   import TEXT from './scribe.json';
 
   /** @type {{ field: string, label: string, button: string }} */
@@ -35,7 +33,6 @@
   const ORIGINS = location.hostname.endsWith(WORKERS_DEV) ? `https://*.${location.hostname.split('.').slice(1).join('.')}` : SITE;
   const CODE = 'selectable block whitespace-pre-wrap break-all border border-line bg-app px-2 py-1.5 pr-8 font-mono text-[0.6875rem] leading-relaxed text-ink tv:text-sm';
 
-  const projects = $derived(byName(store.projects.filter((project) => !project.deleted_at)));
   const provider = $derived(scribe.provider);
   const cloud = $derived(provider.kind === CLOUD_KIND);
   // Which engine hears you: a model on this device (desktop apps), or the browser's recognition.
@@ -98,13 +95,6 @@
     </button>
   </div>
 {/snippet}
-
-<label class={label}>{TEXT.project}
-  <select class={field} value={scribe.settings.projectId} onchange={(event) => scribe.configure({ projectId: event.currentTarget.value })}>
-    <option value="">{TEXT.noProject}</option>
-    {#each projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
-  </select>
-</label>
 
 <label class={label}>{TEXT.provider}
   <select class={field} value={provider.id} onchange={(event) => choose(event.currentTarget.value)}>

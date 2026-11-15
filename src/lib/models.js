@@ -13,6 +13,8 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 // The Needs you page (agent questions and the review queue, one card at a time). false hides it: no navigation entry,
 // and its address opens All notes, while its data and the agent API (ask, snooze) keep working.
 export const NEEDS_YOU_ENABLED = true;
+// First-run tutorials (tutorials_seen in D1): each shows once per account, on every device. POST /api/tutorials marks one seen.
+export const TUTORIALS = ['scribe'];
 // Longest Preview or beta password the sign-in screen accepts and the server checks.
 export const MAX_PASSWORD_LENGTH = 200;
 // Timeline entries in note_events, written by the server on every interaction.
