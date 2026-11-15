@@ -6,6 +6,7 @@
   // The X in the corner doesn't let anyone in: each press makes a smaller, more desperate offer, and after the second
   // the X is gone. The card shakes on each press and its words slide across; its height holds, so nothing jumps.
   // Layout: one centered card on the spine at every size; bigger type and spacing on TVs; compact on short screens.
+  import { onMount, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import X from '@lucide/svelte/icons/x';
@@ -31,10 +32,19 @@
   let checking = $state(false);
   let stillLocked = $state(false);
   const last = $derived(stage === STAGES.length - 1);
+  /** @type {HTMLElement | undefined} */
+  let card = $state();
+  /** @type {HTMLAnchorElement | undefined} */
+  let subscribeLink = $state();
+
+  // Focus starts in the paywall, so keyboards and screen readers land on it.
+  onMount(() => card?.focus());
 
   function dismiss() {
     if (last) return;
     stage++;
+    // The X disappears on the last stage: hand focus to the offer instead of dropping it.
+    if (last) tick().then(() => subscribeLink?.focus());
     shaking = true;
     setTimeout(() => (shaking = false), SHAKE_MS);
   }
@@ -58,7 +68,7 @@
 <div class="relative flex h-dvh w-full justify-center overflow-y-auto bg-app px-3 py-6 short:py-2" role="dialog" aria-modal="true" aria-label={TEXT.label}>
   <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
 
-  <section class="relative my-auto flex h-fit w-full max-w-md flex-col gap-5 border border-line-strong bg-surface p-6 shadow-2xl short:gap-3 short:p-4 short:sm:max-w-3xl short:sm:flex-row short:sm:items-center short:sm:gap-4 short:sm:pr-12 tv:max-w-3xl tv:gap-10 tv:p-14 {shaking ? 'paywall-shake' : ''}" in:fly={CARD_IN}>
+  <section bind:this={card} tabindex="-1" class="relative my-auto focus:outline-none flex h-fit w-full max-w-md flex-col gap-5 border border-line-strong bg-surface p-6 shadow-2xl short:gap-3 short:p-4 short:sm:max-w-3xl short:sm:flex-row short:sm:items-center short:sm:gap-4 short:sm:pr-12 tv:max-w-3xl tv:gap-10 tv:p-14 {shaking ? 'paywall-shake' : ''}" in:fly={CARD_IN}>
     <!-- The X: top right, as promised. Gone after the second press (its space is kept). -->
     <button class="spring press absolute top-2 right-2 flex size-10 items-center justify-center text-ink-muted hover:rotate-90 hover:bg-surface-raised hover:text-ink tv:size-16 {last ? 'invisible' : ''}"
       aria-label={TEXT.dismiss} title={TEXT.dismiss} tabindex={last ? -1 : 0} onclick={dismiss}>
@@ -89,7 +99,7 @@
 
     <div class="flex min-w-0 flex-col gap-5 short:flex-1 short:gap-2 tv:gap-10">
     <div class="flex flex-col gap-2 short:gap-1.5 tv:gap-4">
-      <a class="{BUTTON} bg-accent text-accent-ink hover:bg-accent-hover" href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" onclick={subscribe}>
+      <a bind:this={subscribeLink} class="{BUTTON} bg-accent text-accent-ink hover:bg-accent-hover" href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" onclick={subscribe}>
         <Coffee class="size-4 tv:size-7" />{TEXT.dollar}
       </a>
       <!-- Space for the 50 cent offer is kept from the start, so it slides in without moving anything -->

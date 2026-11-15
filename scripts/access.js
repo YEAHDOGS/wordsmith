@@ -6,11 +6,15 @@
 //   npm run access -- trial <email>        back on the trial clock (from when they signed up)
 // Add --staging to use the staging database instead, or --local for the machine-local one.
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { TRIAL_MS } from '../src/lib/models.js';
 
 const DATABASES = { production: 'wordsmith-production', staging: 'wordsmith-staging' };
 const LEVELS = { approve: 'member', lapse: 'lapsed', trial: 'trial' };
-const EMAIL = /^[^\s@']+@[^\s@']+\.[^\s@']+$/;
+// Letters, digits and . _ + - only: nothing a shell or SQL would read as syntax.
+const EMAIL = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/;
 const DAY_MS = 86_400_000;
 const USAGE = 'Usage: npm run access -- list | approve <email> | lapse <email> | trial <email> [--staging | --local]';
 
@@ -21,12 +25,23 @@ const local = args.includes('--local');
 const where = local ? ['--local', '--persist-to', '.wrangler/state'] : ['--remote', ...(staging ? ['--env', 'preview'] : [])];
 const database = staging ? DATABASES.staging : DATABASES.production;
 
-/** Runs SQL through wrangler and returns the rows. @param {string} sql */
+/**
+ * Runs SQL through wrangler and returns the rows. The statement goes in a temporary file (--file), so the only
+ * arguments the shell sees are fixed ones (Windows runs npx through a shell).
+ * @param {string} sql
+ */
 function query(sql) {
-  // Windows runs npx through a shell, which would split the statement into words: quote it (it never holds a double quote).
-  const windows = process.platform === 'win32';
-  const out = execFileSync('npx', ['--yes', 'wrangler', 'd1', 'execute', database, ...where, '--json', '--command', windows ? `"${sql}"` : sql], { encoding: 'utf8', shell: windows });
-  return JSON.parse(out)[0]?.results ?? [];
+  const folder = mkdtempSync(join(tmpdir(), 'wordsmith-access-'));
+  const file = join(folder, 'query.sql');
+  writeFileSync(file, sql);
+  try {
+    const windows = process.platform === 'win32';
+    // Quoted for the shell in case the temp folder's path has a space in it (it can't hold a quote).
+    const out = execFileSync('npx', ['--yes', 'wrangler', 'd1', 'execute', database, ...where, '--json', '--file', windows ? `"${file}"` : file], { encoding: 'utf8', shell: windows });
+    return JSON.parse(out)[0]?.results ?? [];
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 }
 
 if (command === 'list') {
@@ -38,7 +53,7 @@ if (command === 'list') {
     console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${standing}`);
   }
 } else if (command in LEVELS && EMAIL.test(email ?? '')) {
-  // The email is checked against EMAIL above (no quotes or spaces), so it is safe to put in the statement.
+  // The email matched EMAIL above (letters, digits and . _ + - only), so it is safe to put in the statement.
   const rows = query(`UPDATE users SET access = '${LEVELS[/** @type {keyof typeof LEVELS} */ (command)]}', access_changed_at = ${Date.now()} WHERE lower(email) = lower('${email}') RETURNING email, access`);
   console.log(rows.length ? `${rows[0].email}: ${rows[0].access}` : `No account with the email ${email}.`);
 } else {

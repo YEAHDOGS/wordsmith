@@ -99,7 +99,7 @@
   {#if trialText}
     <a class="spring press flex shrink-0 items-center gap-1.5 border border-accent px-2 py-1 font-mono text-[0.6875rem] text-accent hover:bg-accent-soft tv:px-3 tv:py-2 tv:text-base"
       href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" title="{trialText} · {PAYWALL.dollar}" aria-label="{trialText}. {PAYWALL.dollar}" onclick={subscribe} transition:scale={BADGE}>
-      <Coffee class="size-3.5 tv:size-5" /><span class="max-md:hidden">{trialText} ·</span><span>{PAYWALL.subscribe}</span>
+      <Coffee class="size-3.5 tv:size-5" /><span class="max-md:hidden">{trialText} ·</span><span class="md:hidden">{PAYWALL.trialShort.replace('{count}', String(trialDays))} ·</span><span>{PAYWALL.subscribe}</span>
     </a>
   {/if}
 

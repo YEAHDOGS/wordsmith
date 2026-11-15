@@ -24,7 +24,7 @@
   "signOut": "Sign out",
   "trialLeft": "Free trial: {days} left",
   "trialLastDay": "Free trial: last day",
-  "day": "1 day",
   "days": "{count} days",
-  "subscribe": "Subscribe"
+  "subscribe": "Subscribe",
+  "trialShort": "{count}d"
 }

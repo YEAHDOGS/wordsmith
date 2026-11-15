@@ -1,7 +1,7 @@
 // Sign-in state. Web logins redirect through the OAuth provider and come back with a cookie.
 // Native apps open the system browser (Google and Apple block embedded WebViews) and poll for their session.
 import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken, whenTrialEnds } from './api.js';
-import { hasAccess, trialEndsAt } from './models.js';
+import { trialEndsAt } from './models.js';
 
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
@@ -26,7 +26,7 @@ class Auth {
   /** @type {'loading' | 'signed_out' | 'signed_in'} */
   status = $state('loading');
   /** access and trial_ends_at come from the server (models.js hasAccess); older cached users may not have them yet.
-   * @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at?: number, access?: string, trial_ends_at?: number } | null} */
+   * @type {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at?: number, access?: string, trial_ends_at?: number, has_access?: boolean } | null} */
   user = $state(null);
   /** The server answered 402: the free trial is over. Cleared when the session is loaded again. */
   trialEnded = $state(false);
@@ -55,12 +55,15 @@ class Auth {
     setInterval(() => (this.now = Date.now()), CLOCK_MS);
   }
 
-  /** The free trial is over and no membership is approved: the app shows the paywall (Paywall.svelte). */
+  /**
+   * The free trial is over and no membership is approved: the app shows the paywall (Paywall.svelte). Only the server
+   * decides: a 402 from any request, or has_access: false in a session fetched this start. Never this device's clock
+   * or a cached user, so a fast clock or a stale cache can't lock out someone who has paid. A trial that runs out
+   * while the app is open locks at the next sync, which answers 402.
+   */
   get locked() {
-    const user = this.user;
-    if (!user || this.demo) return false;
-    // Only a server-sent access level counts, so a user cached before trials existed is never locked by mistake.
-    return this.trialEnded || (Boolean(user.access) && user.created_at !== undefined && !hasAccess(/** @type {any} */ (user), this.now));
+    if (!this.user || this.demo) return false;
+    return this.trialEnded || this.user.has_access === false;
   }
 
   /** Whole days left on the free trial (rounded up), or null when not on one. */
@@ -87,6 +90,9 @@ class Auth {
     if (useCache && cached) {
       this.user = JSON.parse(cached);
       this.status = 'signed_in';
+      // Trial or lapsed accounts ask the server once in the background: an approval since the last start, or the
+      // trial running out, must not wait for a 401 to be noticed.
+      if (this.user?.access && this.user.access !== 'member') this.#refresh();
       return;
     }
     try {
@@ -109,13 +115,24 @@ class Auth {
     }
   }
 
+  /** Re-reads the session quietly; offline, the cached user stays as it is. */
+  async #refresh() {
+    try {
+      const session = await api('/api/auth/session');
+      if (session.user) this.#setUser(session.user);
+    } catch {
+      // Offline: nothing changes, and the server still refuses anything a locked account asks for.
+    }
+  }
+
   /** @param {any} user */
   #setUser(user) {
     if (!user) this.#endDemo();
     this.trialEnded = false;
     this.user = user;
     this.status = user ? 'signed_in' : 'signed_out';
-    if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    // has_access is the server's word for this start only: never cached, so a start from the cache can't lock.
+    if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify({ ...user, has_access: undefined }));
     else localStorage.removeItem(USER_CACHE_KEY);
   }
 
