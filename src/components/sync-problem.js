@@ -4,13 +4,22 @@
 // Server errors that mean the session or account is the problem, not the network.
 const AUTH_HINT = /sign|session|auth|forbidden|unauthori|permission/i;
 
-/** @typedef {{ title: string, detail: string, advice: string }} SyncProblem */
+/** @typedef {{ title: string, detail: string, advice: string, demo?: boolean }} SyncProblem */
+
+// Demo mode never syncs; the icon explains why instead, so it is never mistaken for a fault.
+const DEMO = {
+  title: 'Demo mode',
+  detail: 'You are exploring sample data, read-only. Nothing can be changed, and nothing is sent to the server.',
+  advice: 'Sign in with Google or GitHub to keep your own notes.',
+  demo: true,
+};
 
 /**
- * @param {{ online: boolean, pending: number, error: string }} state the sync fields of the store
+ * @param {{ online: boolean, pending: number, error: string, demo?: boolean }} state the sync fields of the store
  * @returns {SyncProblem | null}
  */
-export function syncProblem({ online, pending, error }) {
+export function syncProblem({ online, pending, error, demo }) {
+  if (demo) return DEMO;
   const waiting = `${pending} change${pending === 1 ? '' : 's'}`;
   if (!online && pending) {
     return {
