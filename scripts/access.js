@@ -43,7 +43,7 @@ function query(sql) {
 }
 
 if (command === 'list') {
-  const rows = query(`SELECT u.email, u.access, u.plan, u.created_at, m.level_id, m.level_name, m.duration, m.amount, m.currency, m.status, m.period_end, m.live FROM users u LEFT JOIN memberships m ON m.email = lower(u.email) ORDER BY u.created_at DESC LIMIT ${LIST_LIMIT}`);
+  const rows = query(`SELECT u.email, u.access, u.plan, u.created_at, m.level_id, m.level_name, m.duration, m.amount, m.currency, m.status, m.period_end, m.live FROM users u LEFT JOIN memberships m ON m.email IN (SELECT lower(i.email) FROM identities i WHERE i.user_id = u.id AND i.email_verified = 1) ORDER BY u.created_at DESC LIMIT ${LIST_LIMIT}`);
   const now = Date.now();
   for (const row of rows) {
     const left = Math.ceil((Number(row.created_at) + TRIAL_MS - now) / DAY_MS);
@@ -54,7 +54,7 @@ if (command === 'list') {
     const paid = row.status ? ` · Buy Me a Coffee: ${row.level_name || row.level_id} ${row.status}${membershipPlan(row, now) ? '' : ' (not paid up)'}${stale}${row.live ? '' : ' (test event)'}` : '';
     console.log(`${String(row.email ?? '(no email)').padEnd(40)} ${given}${paid}`);
   }
-  console.log('Memberships reach accounts through verified sign-in emails (identities), so one not shown here may still apply.');
+  console.log('Memberships reach accounts only through verified sign-in emails (identities.email_verified), as shown.');
 // Object.hasOwn, not `in`: `in` also matches inherited names like toString, which would write junk into access.
 } else if (Object.hasOwn(LEVELS, command ?? '') && EMAIL.test(email ?? '') && (command === 'approve' ? Object.hasOwn(PLANS, plan) && plan !== 'trial' : !planArg)) {
   // The email matched EMAIL above (letters, digits and . _ + - only) and the plan is a PLANS key, so both are safe to

@@ -1,7 +1,7 @@
 -- Buy Me a Coffee memberships, so subscribing to DOGS unlocks wordsmith by itself (api/functions/api/webhooks/bmc.js).
 --   memberships             one row per supporter, written by Buy Me a Coffee's membership.* webhooks. An account holds
---                           a membership when one of its emails (users.email, or any identities.email) matches, so
---                           subscribing before signing up works too. src/lib/models.js planOf reads it.
+--                           a membership when one of its verified sign-in emails matches (identities.email_verified,
+--                           20261119000000), so subscribing before signing up works too. src/lib/models.js planOf reads it.
 --   memberships.email       the supporter's email, lowercased.
 --   memberships.level_id    Buy Me a Coffee's membership_level_id; PLANS in src/lib/models.js says what each unlocks.
 --   memberships.level_name  the level's name when the event arrived, for scripts/access.js list.

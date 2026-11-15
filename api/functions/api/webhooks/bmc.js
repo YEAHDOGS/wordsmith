@@ -18,10 +18,11 @@ const MAX_CURRENCY = 8;
 const DURATIONS = ['month', 'year'];
 const SECOND_MS = 1000;
 const TRUE = 'true';
-// Saves the membership, unless a newer event for the same supporter is already saved (retries can arrive late).
+// Saves the membership, unless a newer event for the same supporter is already saved (retries can arrive late). A NULL
+// status (an update that doesn't say) keeps the saved one; a supporter seen for the first time counts as active.
 const SAVE = `INSERT INTO memberships (email, level_id, level_name, duration, amount, currency, status, period_end, live, event_at, updated_at)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-  ON CONFLICT(email) DO UPDATE SET level_id = ?2, level_name = ?3, duration = ?4, amount = ?5, currency = ?6, status = ?7,
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 'active'), ?8, ?9, ?10, ?11)
+  ON CONFLICT(email) DO UPDATE SET level_id = ?2, level_name = ?3, duration = ?4, amount = ?5, currency = ?6, status = COALESCE(?7, memberships.status),
     period_end = ?8, live = ?9, event_at = ?10, updated_at = ?11 WHERE ?10 >= memberships.event_at`;
 
 /** A Unix time in seconds as ms, or null. @param {unknown} seconds */
@@ -31,14 +32,18 @@ function millis(seconds) {
 }
 
 /**
- * Where a membership stands. Buy Me a Coffee sends its flags as the strings "true" and "false", and spells the event
- * "cancelled" but the status "canceled".
+ * Where a membership stands, or null when the event doesn't say (the saved standing then stays, so an update that
+ * leaves the status out can't bring a canceled membership back). Buy Me a Coffee sends its flags as the strings
+ * "true" and "false", and spells the event "cancelled" but the status "canceled".
  * @param {string} type @param {Record<string, any>} data
+ * @returns {'active' | 'canceled' | 'paused' | null}
  */
 function standing(type, data) {
   if (type === 'membership.paused' || data.status === 'paused' || data.paused === TRUE) return 'paused';
-  if (type === 'membership.cancelled' || data.status === 'canceled' || data.canceled === TRUE) return 'canceled';
-  return 'active';
+  // Canceled at period end still works until period_end (models.js membershipPlan), and un-canceling sends "false".
+  if (type === 'membership.cancelled' || data.status === 'canceled' || data.canceled === TRUE || data.cancel_at_period_end === TRUE) return 'canceled';
+  if (type === 'membership.started' || data.status === 'active') return 'active';
+  return null;
 }
 
 /** @param {{ request: Request, env: Record<string, any> }} context */
