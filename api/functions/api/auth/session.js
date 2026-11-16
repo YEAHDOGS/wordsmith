@@ -12,7 +12,8 @@ export async function onRequestGet({ request, env }) {
   if (!auth || auth.via === 'token') return json({ ...base, user: null });
   // provider_user_id is the account's public id at the provider (GitHub's numeric user id): Settings uses it to link the profile
   const { results } = await env.DB.prepare('SELECT provider, provider_user_id, email, created_at FROM identities WHERE user_id = ?').bind(auth.user.id).all();
-  return json({ ...base, user: auth.user, linked: results });
+  // has_access is the server's verdict (an account holds a plan: models.js planOf), so the app never judges by its own clock.
+  return json({ ...base, user: { ...auth.user, has_access: auth.user.plan !== null }, linked: results });
 }
 
 /** @param {{ request: Request, env: Record<string, any> }} context */

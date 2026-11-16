@@ -108,6 +108,12 @@
       <img src={logo} alt="DOGS logo" class="size-8 short:size-6 object-contain spring group-hover:rotate-12" />
       <span class="spring text-fluid-base font-bold tracking-[0.2em] group-hover:text-accent">DOGS</span>
     </a>
+    <!-- The free trial, centered on the spine and out of the flow, so the branding on either side never moves. Hidden
+         where it would touch the branding: a screen under 20rem, which is a narrow phone with a larger system font. -->
+    <p class="pointer-events-none absolute left-1/2 -translate-x-1/2 max-[20rem]:hidden border border-accent bg-app px-2 py-0.5 text-[0.6875rem] font-bold whitespace-nowrap text-accent tv:px-3 tv:py-1 tv:text-base"
+      in:fly={{ y: -6, delay: 300, duration: 300 }}>
+      {TEXT.trial}<span class="font-medium text-ink-muted max-sm:hidden">&nbsp;· {TEXT.trialMore}</span>
+    </p>
     <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-1.5 text-ink-faint hover:text-ink" aria-label="wordsmith on GitHub">
       <ProviderIcon provider="github" class="size-3.5 spring group-hover:rotate-0" />
       <span class="font-mono text-xs">wordsmith</span>

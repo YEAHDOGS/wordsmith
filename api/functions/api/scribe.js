@@ -1,8 +1,8 @@
 // wordsmith cloud for Scribe: turns a stretch of speech into ticket actions with Workers AI, for people who run no model
 // of their own. The prompt is built here from the same code the app uses for local models (src/lib/scribe-llm.js), so
 // the route answers Scribe's question and nothing else, and every field is bounded. Each account gets a daily
-// allowance of Workers AI neurons, and all accounts together stay under SCRIBE_DAILY_NEURONS, so Scribe can never
-// spend the account's whole free allowance. Each request reserves its worst-case cost (the longest answer allowed) in the
+// allowance of Workers AI neurons from its plan (PLANS in src/lib/models.js), and all accounts together stay under
+// SCRIBE_DAILY_NEURONS, so Scribe can never spend the account's whole free allowance. Each request reserves its worst-case cost (the longest answer allowed) in the
 // same statement that checks the cap, so requests arriving together can never carry the total past it; the
 // reservation is then corrected to what the request really used, and given back if it fails.
 // GET  /api/scribe -> { available, models: [{ id, name, note }], default, used, limit }
@@ -13,13 +13,12 @@ import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
 import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
-import { FEATURE_STATES, MAX_PRIORITY } from '../../../src/lib/models.js';
+import { FEATURE_STATES, MAX_PRIORITY, PLANS } from '../../../src/lib/models.js';
 import CLOUD from '../../../src/lib/scribe-cloud-models.json';
 
 const EVERYONE = '*';
 const ALLOWANCE_CODE = 'scribe_allowance';
-// Defaults when the Worker's vars don't say (wrangler.jsonc sets them per environment).
-const DEFAULT_USER_NEURONS = 1_500;
+// Everyone's daily cap when the Worker's vars don't say (wrangler.jsonc sets it per environment).
 const DEFAULT_DAILY_NEURONS = 4_000;
 const TOKENS_PER_MILLION = 1_000_000;
 // The models here tokenize bytes (byte-level BPE, or SentencePiece with byte fallback), so a text never has more
@@ -47,10 +46,13 @@ const ISO_DATE_LENGTH = 10;
 /** @type {CloudModel[]} */
 const MODELS = CLOUD.models;
 
-/** @param {Record<string, any>} env */
-function limits(env) {
+/**
+ * Today's caps: this account's plan's allowance (PLANS in src/lib/models.js) and everyone's together.
+ * @param {Record<string, any>} env @param {import('../../../src/lib/models.js').Plan} plan
+ */
+function limits(env, plan) {
   return {
-    user: Number(env.SCRIBE_USER_NEURONS) || DEFAULT_USER_NEURONS,
+    user: PLANS[plan].scribeNeurons,
     everyone: Number(env.SCRIBE_DAILY_NEURONS) || DEFAULT_DAILY_NEURONS,
   };
 }
@@ -107,7 +109,7 @@ export async function onRequestGet(context) {
     models: MODELS.map(({ id, name, note }) => ({ id, name, note })),
     default: CLOUD.default,
     used: Math.round(mine),
-    limit: limits(env).user,
+    limit: limits(env, user.plan).user,
   });
 }
 
@@ -134,7 +136,7 @@ export async function onRequestPost(context) {
   const maxTokensIn = messages.reduce((sum, message) => sum + UTF8.encode(message.content).length + TEMPLATE_TOKENS_PER_MESSAGE, 0);
   const worst = (maxTokensIn * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
   const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
-  const cap = limits(env);
+  const cap = limits(env, user.plan);
   if (worst > Math.min(cap.user, cap.everyone)) throw new HttpError(413, 'This is more than one request may carry. Say less at once, or use fewer tickets.');
   if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
   if (!(await reserve(env, day, user.id, worst, cap.user))) {

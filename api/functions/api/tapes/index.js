@@ -9,7 +9,7 @@ import { HttpError, json } from '../../../lib/http.js';
 import { rateLimit } from '../../../lib/rate-limit.js';
 import { toApi } from '../../../lib/rows.js';
 import { readTapeHeader, tapeKey } from '../../../lib/tapes.js';
-import { MAX_TAPES, MAX_TAPE_BYTES, TAPE_EXISTS, TAPE_LIMIT, attachmentKind } from '../../../../src/lib/models.js';
+import { MAX_TAPES, MAX_TAPE_BYTES, PLANS, TAPE_EXISTS, TAPE_LIMIT, TAPE_STORAGE, attachmentKind } from '../../../../src/lib/models.js';
 
 // A thousand-file import takes a few days at most; anything faster is a loop eating the free tier.
 const UPLOADS_PER_DAY = 1_500;
@@ -36,8 +36,14 @@ export async function onRequestPost(context) {
     .bind(userId, meta.hash, meta.id).first();
   if (existing) return json({ tape: toApi(existing), code: TAPE_EXISTS });
   await rateLimit(env, `tape-upload:${userId}`, UPLOADS_PER_DAY, DAY_MS);
-  const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM tapes WHERE user_id = ? AND deleted_at IS NULL').bind(userId).first();
-  if (Number(live?.n) >= MAX_TAPES) return json({ error: `You can have at most ${MAX_TAPES} tapes`, code: TAPE_LIMIT }, 400);
+  // Deleted tapes have audio_size 0 (their audio is erased), so this is what the account's live tapes hold. Two uploads
+  // at once can both pass before either lands, overshooting by at most one MAX_TAPE_BYTES; R2_MAX_GB still caps the total.
+  const held = await env.DB.prepare('SELECT COALESCE(SUM(deleted_at IS NULL), 0) AS n, COALESCE(SUM(audio_size), 0) AS bytes FROM tapes WHERE user_id = ?').bind(userId).first();
+  if (Number(held?.n) >= MAX_TAPES) return json({ error: `You can have at most ${MAX_TAPES} tapes`, code: TAPE_LIMIT }, 400);
+  const plan = PLANS[/** @type {import('../../../../src/lib/models.js').Plan} */ (auth.user.plan)];
+  if (Number(held?.bytes) + size > plan.tapeBytes) {
+    return json({ error: `Your tapes are full: ${plan.name} holds ${Math.round(plan.tapeBytes / MB)} MB. Delete some tapes, or join a bigger DOGS membership for more room.`, code: TAPE_STORAGE }, 400);
+  }
 
   await reserve(env, { bytes: size, writes: 1 });
   const key = tapeKey(userId, meta.id);

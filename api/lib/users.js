@@ -13,14 +13,16 @@ import { encryptText } from './crypto.js';
  */
 export async function upsertUserForProfile(env, provider, profile, signedInUserId, mayCreate) {
   const now = Date.now();
+  // Memberships only follow verified emails (identities.email_verified, read in api/lib/auth.js).
+  const verified = profile.email && profile.emailVerified ? 1 : 0;
   const sealedToken = profile.accessToken && env.TOKEN_ENCRYPTION_KEY ? await encryptText(profile.accessToken, env.TOKEN_ENCRYPTION_KEY) : null;
 
   const identity = await env.DB.prepare('SELECT user_id FROM identities WHERE provider = ? AND provider_user_id = ?')
     .bind(provider, profile.providerUserId).first();
   if (identity) {
     await env.DB.batch([
-      env.DB.prepare('UPDATE identities SET email = ?, access_token = COALESCE(?, access_token) WHERE provider = ? AND provider_user_id = ?')
-        .bind(profile.email, sealedToken, provider, profile.providerUserId),
+      env.DB.prepare('UPDATE identities SET email = ?, email_verified = ?, access_token = COALESCE(?, access_token) WHERE provider = ? AND provider_user_id = ?')
+        .bind(profile.email, verified, sealedToken, provider, profile.providerUserId),
       env.DB.prepare('UPDATE users SET name = COALESCE(name, ?), avatar_url = COALESCE(?, avatar_url), email = COALESCE(email, ?) WHERE id = ?')
         .bind(profile.name, profile.avatarUrl, profile.email, identity.user_id),
     ]);
@@ -40,8 +42,8 @@ export async function upsertUserForProfile(env, provider, profile, signedInUserI
     statements.push(env.DB.prepare('INSERT INTO users (id, email, name, avatar_url, created_at) VALUES (?, ?, ?, ?, ?)')
       .bind(userId, profile.email, profile.name, profile.avatarUrl, now));
   }
-  statements.push(env.DB.prepare('INSERT INTO identities (provider, provider_user_id, user_id, email, access_token, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(provider, profile.providerUserId, userId, profile.email, sealedToken, now));
+  statements.push(env.DB.prepare('INSERT INTO identities (provider, provider_user_id, user_id, email, email_verified, access_token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(provider, profile.providerUserId, userId, profile.email, verified, sealedToken, now));
   await env.DB.batch(statements);
   return userId;
 }

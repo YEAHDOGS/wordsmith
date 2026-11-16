@@ -1,5 +1,6 @@
 // Fetch wrapper for the wordsmith API. The web app uses its HttpOnly session cookie; native apps send a bearer token.
 import { isTauri } from '@tauri-apps/api/core';
+import { TRIAL_ENDED } from './models.js';
 
 // Native bundles have no same-origin API, so they are built with VITE_API_BASE=https://wordsmith.dogs.red.
 const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -11,6 +12,13 @@ export const DEMO_CODE = 'demo';
 const DEMO_MESSAGE = 'This is the demo: nothing is sent to the server. Sign in to use this.';
 
 export const IS_NATIVE = isTauri();
+const PAYMENT_REQUIRED = 402;
+/** Called when the server says the free trial is over (auth.svelte.js shows the paywall). @type {() => void} */
+let onTrialEnded = () => {};
+/** @param {() => void} handler */
+export function whenTrialEnds(handler) {
+  onTrialEnded = handler;
+}
 
 /** API error with the HTTP status, and the server's code when it sent one (src/lib/models.js). */
 export class ApiError extends Error {
@@ -62,6 +70,8 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   });
   if (response.status === NO_CONTENT) return null;
   const data = await response.json().catch(() => ({}));
+  // Only the trial's own refusal locks the app, never some other payment-required answer passed along.
+  if (response.status === PAYMENT_REQUIRED && data.code === TRIAL_ENDED) onTrialEnded();
   if (!response.ok && response.status !== 202) throw new ApiError(response.status, data.error || `Request failed (${response.status})`, data.code);
   return data;
 }

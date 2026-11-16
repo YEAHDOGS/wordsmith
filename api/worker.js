@@ -47,6 +47,7 @@ import * as v1Diagram from './functions/api/v1/diagrams/[id].js';
 import * as v1ProjectContext from './functions/api/v1/projects/[project]/context.js';
 import * as mcp from './functions/api/mcp.js';
 import * as scribe from './functions/api/scribe.js';
+import * as bmcWebhook from './functions/api/webhooks/bmc.js';
 import * as sharedNote from './functions/n/[id].js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
@@ -76,6 +77,7 @@ const ROUTES = [
   ['/api/tokens/:id', token, false],
   ['/api/prs/refresh', prsRefresh, false],
   ['/api/github/webhook', githubWebhook, false],
+  ['/api/webhooks/bmc', bmcWebhook, false],
   ['/api/github/repos', githubRepos, false],
   ['/api/github/repo', githubRepo, false],
   ['/api/projects/:id/pulls', projectPulls, false],
