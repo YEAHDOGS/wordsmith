@@ -4,14 +4,14 @@
   "stages": [
     {
       "title": "Your free trial is over",
-      "body": "Thanks for trying wordsmith for five days. It runs on cloud servers that cost real money every month, so keeping it going takes a DOGS membership on Buy Me a Coffee, from $1 a month."
+      "body": "Thanks for trying wordsmith for five days. It runs on cloud servers that cost real money every month, so keeping it going takes a DOGS membership on Buy Me a Coffee: $1 a month, or $5 a year for life."
     },
     {
       "title": "Alright. Same to you, pal.",
       "body": "But honestly? I've been broke before too. I'm broke right now too. It's a dollar. The offer stands whenever you're ready."
     }
   ],
-  "dollar": "Join DOGS from $1 a month",
+  "dollar": "Join DOGS: $1 a month, or $5 a year for life",
   "check": "I subscribed: check again",
   "checking": "Checking…",
   "stillLocked": "No membership found for {email} yet. It usually shows up within a minute of joining; a different email gets linked by hand.",
@@ -22,6 +22,7 @@
   "unreachable": "Couldn't reach wordsmith just now. Check your connection and try again.",
   "plansLabel": "DOGS memberships",
   "price": "${price}/mo",
+  "priceYear": "${price}/yr for life",
   "scribe": "{neurons} Scribe AI neurons a day",
   "tapes": "{size} of tapes",
   "manualNoEmail": "Join with the email you sign in with here and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand.",

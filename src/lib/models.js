@@ -21,17 +21,18 @@ export const DAY_MS = 86_400_000;
 export const TRIAL_DAYS = 5;
 export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
 export const TRIAL_ENDED = 'trial_ended';
-// DOGS's memberships on Buy Me a Coffee, from $1 a month.
+// DOGS's memberships on Buy Me a Coffee: $1 a month, or $5 a year for life.
 export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs/membership';
 const MB = 1024 * 1024;
 // What each plan unlocks, lowest first. `level` is the Buy Me a Coffee membership_level_id, and `monthly` and `yearly`
 // its prices in USD, which place a level added later (one with no id here) at the highest plan it pays for.
+// forLife: the yearly price is promised for life to anyone who takes it (the base plan), and the paywall says so.
 // scribeNeurons: Scribe's daily wordsmith cloud allowance (Workers AI neurons, api/functions/api/scribe.js; everyone's
 // total is still capped by SCRIBE_DAILY_NEURONS in wrangler.jsonc). tapeBytes: the audio all of an account's tapes may
 // hold in R2 (api/functions/api/tapes/index.js; R2_MAX_GB caps everyone's total).
 export const PLANS = {
   trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB },
-  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 10, scribeNeurons: 2_500, tapeBytes: 250 * MB },
+  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 5, forLife: true, scribeNeurons: 2_500, tapeBytes: 250 * MB },
   animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB },
   megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB },
 };
