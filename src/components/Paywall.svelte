@@ -139,6 +139,7 @@
             <a class="spring flex h-full flex-col gap-0.5 p-2 text-[0.6875rem] leading-snug text-ink-faint hover:bg-surface-raised hover:text-ink-muted short:p-1.5 tv:gap-1 tv:p-4 tv:text-lg" href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" onclick={subscribe}>
               <span class="truncate text-xs font-bold text-ink tv:text-xl">{plan.name}</span>
               <span class="font-mono text-accent">{TEXT.price.replace('{price}', String(plan.monthly))}</span>
+              {#if plan.forLife}<span class="font-mono text-accent">{TEXT.priceYear.replace('{price}', String(plan.yearly))}</span>{/if}
               <span class="short:hidden">{TEXT.scribe.replace('{neurons}', plan.scribeNeurons.toLocaleString())}</span>
               <span class="short:hidden">{TEXT.tapes.replace('{size}', size(plan.tapeBytes))}</span>
             </a>

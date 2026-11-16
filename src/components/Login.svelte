@@ -1,6 +1,7 @@
 <script>
   // Sign-in screen, plus the two browser-side steps of a native-app login (confirm code, done).
   // Layout: a centered "wormhole" hero on a vertical spine, with the four steps of the agent loop strung along it.
+  // The wordmark is three grid cells ("word" | "s" | "mith") so the "s" sits on the spine whatever the font or width.
   import { fade, fly } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
@@ -8,7 +9,7 @@
   import ProviderIcon from './ProviderIcon.svelte';
   import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
-  import { MAX_PASSWORD_LENGTH, PROVIDERS } from '../lib/models.js';
+  import { MAX_PASSWORD_LENGTH, PROVIDERS, SUBSCRIBE_URL } from '../lib/models.js';
   import { PRIVACY_PATH, privacy } from './privacy-route.svelte.js';
   import TEXT from './login.json';
 
@@ -108,12 +109,14 @@
       <img src={logo} alt="DOGS logo" class="size-8 short:size-6 object-contain spring group-hover:rotate-12" />
       <span class="spring text-fluid-base font-bold tracking-[0.2em] group-hover:text-accent">DOGS</span>
     </a>
-    <!-- The free trial, centered on the spine and out of the flow, so the branding on either side never moves. Hidden
-         where it would touch the branding: a screen under 20rem, which is a narrow phone with a larger system font. -->
-    <p class="pointer-events-none absolute left-1/2 -translate-x-1/2 max-[20rem]:hidden border border-accent bg-app px-2 py-0.5 text-[0.6875rem] font-bold whitespace-nowrap text-accent tv:px-3 tv:py-1 tv:text-base"
+    <!-- The free trial, centered on the spine and out of the flow, so the branding on either side never moves; it links
+         to the DOGS memberships, like the top bar's countdown and the paywall. Hidden where it would touch the branding:
+         a screen under 20rem, which is a narrow phone with a larger system font. -->
+    <a href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer"
+      class="spring absolute left-1/2 -translate-x-1/2 max-[20rem]:hidden border border-accent bg-app px-2 py-0.5 text-[0.6875rem] font-bold whitespace-nowrap text-accent hover:bg-accent hover:text-accent-ink tv:px-3 tv:py-1 tv:text-base"
       in:fly={{ y: -6, delay: 300, duration: 300 }}>
       {TEXT.trial}<span class="font-medium text-ink-muted max-sm:hidden">&nbsp;· {TEXT.trialMore}</span>
-    </p>
+    </a>
     <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-1.5 text-ink-faint hover:text-ink" aria-label="wordsmith on GitHub">
       <ProviderIcon provider="github" class="size-3.5 spring group-hover:rotate-0" />
       <span class="font-mono text-xs">wordsmith</span>
@@ -122,10 +125,15 @@
 
   <!-- Everything keeps its full height: when it doesn't all fit (a small phone, the keyboard open, a big system font)
        the column scrolls, and safe centering keeps its top reachable instead of pushing it off the screen. -->
-  <section class="relative z-10 mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col items-stretch justify-center-safe gap-6 short:gap-3 overflow-y-auto overscroll-contain px-4 py-6 short:py-2 tv:max-w-2xl *:shrink-0">
+  <!-- A scrollbar, when one appears, takes the same room on both edges, so the column stays centered on the spine. -->
+  <section class="relative z-10 mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col items-stretch justify-center-safe gap-6 short:gap-3 overflow-y-auto overscroll-contain px-4 py-6 short:py-2 tv:max-w-2xl *:shrink-0 [scrollbar-gutter:stable_both-edges]">
     <div class="relative overflow-hidden bg-app py-2 text-center sweep" in:fade={{ duration: 400 }}>
-      <h1 class="text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
-        word<span class="text-accent">smith</span>
+      <!-- "word" ends at the center line, "s" is its own centered cell, "mith" starts there. The side tracks are
+           minmax(0, 1fr), never min-content, so they stay equal and the s stays put even where a word is wider than its half. The "s" keeps no letter-spacing
+           so its box is just the glyph; "mith" takes that spacing as a margin so the gaps on both sides of the s match. -->
+      <h1 class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
+        <span class="sr-only">wordsmith</span>
+        <span class="justify-self-end" aria-hidden="true">word</span><span class="tracking-normal text-accent" aria-hidden="true">s</span><span class="justify-self-start ml-(--tracking-tight) text-accent" aria-hidden="true">mith</span>
       </h1>
       <p class="mt-3 short:mt-1 text-fluid-base font-medium text-ink-muted">{TEXT.tagline}</p>
     </div>
@@ -201,7 +209,11 @@
       {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}
-      <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
+      <div class="short:hidden flex flex-col gap-2 text-center text-fluid-sm leading-relaxed text-ink-muted">
+        <p>{TEXT.pitch}</p>
+        <!-- The deal, in the paywall's words: the trial, then a DOGS membership on Buy Me a Coffee -->
+        <p>{TEXT.trialPitch} <a href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" class="spring font-semibold text-accent underline-offset-4 hover:underline">{TEXT.trialLink}</a>{TEXT.trialPitchEnd}</p>
+      </div>
     {/if}
 
     <!-- A fresh error beats the one the redirect brought; an accepted beta password answers the redirect's -->
