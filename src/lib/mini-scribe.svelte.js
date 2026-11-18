@@ -5,7 +5,7 @@
 // it was dragged to, on this device.
 // Linux on Wayland lets no app place or pin its own window: there the strip shrinks but stays where the compositor puts
 // it, and may not stay on top.
-import { LogicalSize, PhysicalPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalSize, PhysicalPosition, PhysicalSize, getCurrentWindow } from '@tauri-apps/api/window';
 import { IS_NATIVE } from './api.js';
 import { visitorPlatform } from './github-public.js';
 
@@ -35,17 +35,30 @@ function savedPosition() {
   }
 }
 
+/** Remember where the strip is, for next time. @param {Point} point */
+function rememberPosition({ x, y }) {
+  try {
+    localStorage.setItem(POSITION_KEY, JSON.stringify({ x, y }));
+  } catch (error) {
+    console.error('Mini Scribe could not remember where the strip was', error);
+  }
+}
+
 /**
- * The spot nearest (x, y), in physical pixels, that keeps the whole strip inside a screen's work area.
+ * The strip on a screen, in physical pixels: no bigger than the screen's work area, and at the spot nearest (x, y)
+ * that keeps all of it inside, so its unfold button can always be reached.
  * @param {import('@tauri-apps/api/window').Monitor} monitor @param {number} x @param {number} y
  */
-function insideWorkArea(monitor, x, y) {
+function stripOn(monitor, x, y) {
   const { position, size } = monitor.workArea;
-  const width = Math.round(MINI_WIDTH * monitor.scaleFactor);
-  const height = Math.round(MINI_HEIGHT * monitor.scaleFactor);
-  return new PhysicalPosition(
-    Math.round(Math.max(position.x, Math.min(x, position.x + size.width - width))),
-    Math.round(Math.max(position.y, Math.min(y, position.y + size.height - height))));
+  const width = Math.min(Math.round(MINI_WIDTH * monitor.scaleFactor), size.width);
+  const height = Math.min(Math.round(MINI_HEIGHT * monitor.scaleFactor), size.height);
+  return {
+    size: new PhysicalSize(width, height),
+    position: new PhysicalPosition(
+      Math.round(Math.max(position.x, Math.min(x, position.x + size.width - width))),
+      Math.round(Math.max(position.y, Math.min(y, position.y + size.height - height)))),
+  };
 }
 
 class MiniScribe {
@@ -63,6 +76,10 @@ class MiniScribe {
    * @type {{ size: import('@tauri-apps/api/window').LogicalSize | null, position: PhysicalPosition | null, maximized: boolean, fullscreen: boolean } | null}
    */
   #full = null;
+  /** What had keyboard focus before folding; it gets it back after. @type {HTMLElement | null} */
+  #returnFocus = null;
+  /** Stops remembering the strip's spot as it is dragged. @type {(() => void) | null} */
+  #stopRemembering = null;
 
   /** Fold the window into the strip, pinned on top. */
   async enter() {
@@ -81,14 +98,20 @@ class MiniScribe {
       // The size is kept in logical pixels: the strip may be dragged to a screen with another scale before it unfolds.
       const [size, position, scale] = await Promise.all([win.innerSize(), win.outerPosition(), win.scaleFactor()]);
       Object.assign(this.#full, { size: size.toLogical(scale), position });
+      const strip = await this.#strip(win);
+      // Read before the app behind the strip turns inert and drops it.
+      this.#returnFocus = /** @type {HTMLElement | null} */ (document.activeElement);
       // The strip shows first, so the full app is never squeezed into the small window on the way down.
       this.on = true;
       await win.setMinSize(null);
       await win.setDecorations(false);
-      // Resized before it is locked: Linux ignores a new size on a window that can't be resized.
-      await win.setSize(new LogicalSize(MINI_WIDTH, MINI_HEIGHT));
-      await win.setPosition(await this.#miniPosition(win));
+      // Onto its screen first, then sized at that screen's scale. Sized before it is locked: Linux ignores a new size
+      // on a window that can't be resized.
+      await win.setPosition(strip.position);
+      await win.setSize(strip.size);
       this.#placed = true;
+      // Remembered as it is dragged too, so closing the app while folded still keeps the spot.
+      this.#stopRemembering = await win.onMoved(({ payload }) => rememberPosition(payload));
       await win.setResizable(false);
       await win.setAlwaysOnTop(true);
     } catch (error) {
@@ -111,14 +134,9 @@ class MiniScribe {
     this.#busy = true;
     this.#leaveAfter = false;
     const win = getCurrentWindow();
-    if (this.#placed) {
-      try {
-        const { x, y } = await win.outerPosition();
-        localStorage.setItem(POSITION_KEY, JSON.stringify({ x, y }));
-      } catch (error) {
-        console.error('Mini Scribe could not remember where the strip was', error);
-      }
-    }
+    this.#stopRemembering?.();
+    this.#stopRemembering = null;
+    if (this.#placed) await win.outerPosition().then(rememberPosition, (error) => console.error('Mini Scribe could not read where the strip was', error));
     // Each step on its own, so one that fails still leaves the rest to put the window back. Back on its own screen
     // first, then sized, so the size is read at that screen's scale.
     const steps = [
@@ -128,6 +146,10 @@ class MiniScribe {
       () => full?.position && win.setPosition(full.position),
       () => full?.size && win.setSize(full.size),
       () => win.setMinSize(new LogicalSize(FULL_MIN_WIDTH, FULL_MIN_HEIGHT)),
+      // The full app comes back at its own size before the window grows to fill the screen again.
+      () => {
+        this.on = false;
+      },
       () => full?.maximized && win.maximize(),
       () => full?.fullscreen && win.setFullscreen(true),
     ];
@@ -142,6 +164,10 @@ class MiniScribe {
     this.#placed = false;
     this.#full = null;
     this.#busy = false;
+    // Next frame: the app stops being inert in the same update that removes the strip.
+    const back = this.#returnFocus;
+    this.#returnFocus = null;
+    requestAnimationFrame(() => back?.focus());
   }
 
   /** Move the strip with the pointer: the strip has no title bar to hold. @param {PointerEvent} event */
@@ -151,22 +177,22 @@ class MiniScribe {
   }
 
   /**
-   * Where the strip goes, whole on a screen: its remembered spot while that screen is still there, else the top-right
-   * corner of the screen the window is on.
+   * Where the strip goes and how big it is, whole on a screen: its remembered spot while that screen is still there,
+   * else the top-right corner of the screen the window is on.
    * @param {ReturnType<typeof getCurrentWindow>} win
    */
-  async #miniPosition(win) {
+  async #strip(win) {
     const saved = savedPosition();
     if (saved) {
       const monitors = await win.availableMonitors();
       const home = monitors.find(({ workArea: { position, size } }) =>
         saved.x >= position.x && saved.y >= position.y && saved.x < position.x + size.width && saved.y < position.y + size.height);
-      if (home) return insideWorkArea(home, saved.x, saved.y);
+      if (home) return stripOn(home, saved.x, saved.y);
     }
     const monitor = await win.currentMonitor();
-    if (!monitor) return new PhysicalPosition(0, 0);
+    if (!monitor) return { size: new LogicalSize(MINI_WIDTH, MINI_HEIGHT), position: new PhysicalPosition(0, 0) };
     const { position, size } = monitor.workArea;
-    return insideWorkArea(monitor, position.x + size.width - (MINI_WIDTH + CORNER_GAP) * monitor.scaleFactor, position.y + CORNER_GAP * monitor.scaleFactor);
+    return stripOn(monitor, position.x + size.width - (MINI_WIDTH + CORNER_GAP) * monitor.scaleFactor, position.y + CORNER_GAP * monitor.scaleFactor);
   }
 }
 

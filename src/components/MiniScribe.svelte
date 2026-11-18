@@ -31,13 +31,8 @@
   /** @type {HTMLButtonElement | undefined} */
   let micButton = $state();
 
-  // Keyboard focus moves into the strip (the rest of the app is inert behind it) and goes back where it was after.
-  onMount(() => {
-    const before = /** @type {HTMLElement | null} */ (document.activeElement);
-    micButton?.focus();
-    // Next frame: the app stops being inert in the same update that removes the strip.
-    return () => requestAnimationFrame(() => before?.focus());
-  });
+  // Keyboard focus moves into the strip (the rest of the app is inert behind it); mini.exit() hands it back.
+  onMount(() => micButton?.focus());
 
   /** Escape unfolds the window. @param {KeyboardEvent} event */
   function onkeydown(event) {
@@ -64,7 +59,8 @@
       {#if scribe.listening || scribe.thinking}<span class="live-dot size-1.5 shrink-0 rounded-full {scribe.thinking ? 'bg-progress' : 'bg-accent'}" aria-hidden="true"></span>{/if}
       {#key status}<span class="truncate" in:fade={SWAP}>{status}</span>{/key}
       {#if scribe.made}
-        {#key scribe.made}<span class="ml-auto shrink-0 text-complete" title={TEXT.made.replace('{count}', String(scribe.made))} in:scale={POP}>{scribe.made}</span>{/key}
+        <!-- Hidden from screen readers: the announcement below already says each ticket once -->
+        {#key scribe.made}<span class="ml-auto shrink-0 text-complete" aria-hidden="true" title={TEXT.made.replace('{count}', String(scribe.made))} in:scale={POP}>{scribe.made}</span>{/key}
       {/if}
     </p>
     <p class="pointer-events-none line-clamp-2 text-xs leading-snug">
