@@ -25,9 +25,11 @@
   import LazyPage from './LazyPage.svelte';
   import DESIGN_TEXT from './design.json';
   import Scribe from './Scribe.svelte';
+  import MiniScribe from './MiniScribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { mini } from '../lib/mini-scribe.svelte.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
@@ -56,7 +58,11 @@
     const userId = auth.user?.id;
     untrack(() => scribe.claim(userId));
   });
-  onDestroy(() => scribe.reset());
+  // The mini strip unfolds too: the next screen (sign-in) needs the whole window.
+  onDestroy(() => {
+    scribe.reset();
+    mini.exit();
+  });
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -272,4 +278,7 @@
   {/if}
 
   {#if store.demo}<DemoGuard />{/if}
+
+  <!-- Desktop apps: the window folded into the always-on-top Scribe strip covers everything else -->
+  {#if mini.on}<MiniScribe />{/if}
 </div>

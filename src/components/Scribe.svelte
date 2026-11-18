@@ -14,7 +14,9 @@
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import Eraser from '@lucide/svelte/icons/eraser';
   import X from '@lucide/svelte/icons/x';
+  import PictureInPicture2 from '@lucide/svelte/icons/picture-in-picture-2';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { mini } from '../lib/mini-scribe.svelte.js';
   import ScribeSettings from './ScribeSettings.svelte';
   import { speech } from '../lib/speech.svelte.js';
   import { store } from '../lib/store.svelte.js';
@@ -110,6 +112,7 @@
         <input class="{FIELD} min-w-0 flex-1" bind:value={typed} placeholder={TEXT.typePlaceholder} aria-label={TEXT.typePlaceholder} />
         <button type="submit" class="{SMALL_BUTTON} min-h-9" disabled={!typed.trim()} aria-label={TEXT.send}><Send class="size-4" /></button>
         <button type="button" class="{SMALL_BUTTON} min-h-9 xl:hidden {showSettings ? 'border-accent text-ink' : ''}" aria-label={TEXT.settings} aria-pressed={showSettings} onclick={() => (showSettings = !showSettings)}><Settings2 class="size-4" /></button>
+        {#if mini.supported}<button type="button" class="{SMALL_BUTTON} min-h-9" aria-label={TEXT.miniOpen} title={TEXT.miniOpen} onclick={() => mini.enter()}><PictureInPicture2 class="size-4" /></button>{/if}
       </form>
     </div>
     <!-- Tickets the moment they are written: they float over the lists below the mic, so nothing shifts, and open on a tap -->
