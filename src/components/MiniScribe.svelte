@@ -3,6 +3,7 @@
   // src/lib/mini-scribe.svelte.js). The mic on the left; beside it what Scribe is doing, then your newest words, a
   // ticket it just wrote, or what went wrong; the arrow on the right unfolds the window again. Hold the words to move
   // the strip around the screen.
+  import { onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { backOut } from 'svelte/easing';
   import Mic from '@lucide/svelte/icons/mic';
@@ -24,6 +25,20 @@
   // Problems get one short line here; the full text waits on the Scribe page.
   const problem = $derived(scribe.problem ? TEXT.miniProblems[/** @type {'mic-denied' | 'mic' | 'speech' | 'model' | 'allowance'} */ (scribe.problem)] : '');
 
+  // Spoken once per ticket or problem; the caption itself changes with every word, so it is never announced.
+  const announcement = $derived(problem || (ticket ? `${TEXT[ticket.kind]}: ${ticket.title || TEXT.untitled}` : ''));
+
+  /** @type {HTMLButtonElement | undefined} */
+  let micButton = $state();
+
+  // Keyboard focus moves into the strip (the rest of the app is inert behind it) and goes back where it was after.
+  onMount(() => {
+    const before = /** @type {HTMLElement | null} */ (document.activeElement);
+    micButton?.focus();
+    // Next frame: the app stops being inert in the same update that removes the strip.
+    return () => requestAnimationFrame(() => before?.focus());
+  });
+
   /** Escape unfolds the window. @param {KeyboardEvent} event */
   function onkeydown(event) {
     if (event.key === 'Escape') mini.exit();
@@ -33,7 +48,7 @@
 <svelte:window {onkeydown} />
 
 <div class="fixed inset-0 z-[60] flex select-none items-stretch border border-line-strong bg-surface text-ink" role="region" aria-label={TEXT.mini} in:fade={SWAP}>
-  <button class="spring press relative m-3 flex aspect-square shrink-0 items-center justify-center border-2 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-app text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
+  <button bind:this={micButton} class="spring press relative m-3 flex aspect-square shrink-0 items-center justify-center border-2 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-app text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
     aria-label={scribe.listening ? TEXT.stop : TEXT.start} aria-pressed={scribe.listening} disabled={!scribe.engine} onclick={() => scribe.toggle()}>
     {#if scribe.listening}
       <span class="live-dot pointer-events-none absolute inset-0 border border-accent" aria-hidden="true"></span>
@@ -52,7 +67,7 @@
         {#key scribe.made}<span class="ml-auto shrink-0 text-complete" title={TEXT.made.replace('{count}', String(scribe.made))} in:scale={POP}>{scribe.made}</span>{/key}
       {/if}
     </p>
-    <p class="pointer-events-none line-clamp-2 text-xs leading-snug" aria-live="polite">
+    <p class="pointer-events-none line-clamp-2 text-xs leading-snug">
       {#if problem}
         <span class="text-accent" in:fade={SWAP}>{problem}</span>
       {:else if ticket}
@@ -64,6 +79,8 @@
       {/if}
     </p>
   </div>
+
+  <p class="sr-only" aria-live="polite">{announcement}</p>
 
   <button class="spring press flex w-10 shrink-0 items-center justify-center border-l border-line text-ink-muted hover:bg-app hover:text-ink" aria-label={TEXT.miniClose} title={TEXT.miniClose} onclick={() => mini.exit()}>
     <Maximize2 class="size-4" />
