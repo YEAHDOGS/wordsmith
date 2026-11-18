@@ -25,9 +25,11 @@
   import LazyPage from './LazyPage.svelte';
   import DESIGN_TEXT from './design.json';
   import Scribe from './Scribe.svelte';
+  import MiniScribe from './MiniScribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { mini } from '../lib/mini-scribe.svelte.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
@@ -56,7 +58,11 @@
     const userId = auth.user?.id;
     untrack(() => scribe.claim(userId));
   });
-  onDestroy(() => scribe.reset());
+  // The mini strip unfolds too: the next screen (sign-in) needs the whole window.
+  onDestroy(() => {
+    scribe.reset();
+    mini.exit();
+  });
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -116,6 +122,7 @@
 
   /** Escape closes the phone drawer; Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
   function onkeydown(event) {
+    if (mini.on) return;
     if (event.key === 'Escape' && ui.drawerOpen) {
       ui.drawerOpen = false;
       return;
@@ -162,7 +169,8 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex h-dvh w-full overflow-hidden bg-app text-ink">
+<!-- Inert behind the Mini Scribe strip, so keyboard focus can't wander into the hidden app -->
+<div class="flex h-dvh w-full overflow-hidden bg-app text-ink" inert={mini.on}>
   <aside class="hidden w-16 shrink-0 border-r border-line md:block lg:w-64 ultrawide:w-72 tv:w-80">
     <div class="h-full lg:hidden"><Sidebar compact /></div>
     <div class="hidden h-full lg:block"><Sidebar /></div>
@@ -273,3 +281,6 @@
 
   {#if store.demo}<DemoGuard />{/if}
 </div>
+
+<!-- Desktop apps: the window folded into the always-on-top Scribe strip covers everything else -->
+{#if mini.on}<MiniScribe />{/if}

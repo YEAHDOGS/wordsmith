@@ -78,5 +78,18 @@
   },
   "made": "{count} tickets written this session",
   "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
-  "cloudOffline": "Could not reach wordsmith cloud to check your allowance."
+  "cloudOffline": "Could not reach wordsmith cloud to check your allowance.",
+  "mini": "Mini Scribe",
+  "miniOpen": "Shrink to a mini Scribe that stays on top of your other apps",
+  "miniClose": "Back to the full window",
+  "miniIdle": "Ready",
+  "miniHint": "Press the mic and talk. Hold here to move this strip.",
+  "miniProblems": {
+    "mic-denied": "The microphone is blocked. Allow it in your system settings.",
+    "mic": "Speech stopped. Press the mic to start again.",
+    "speech": "Speech stopped. Press the mic to start again.",
+    "model": "Could not reach your model. Your words are kept for Retry in the full window.",
+    "allowance": "Today's wordsmith cloud allowance is used up.",
+    "model-setup": "No model is set up yet. Open the full window to pick one."
+  }
 }
