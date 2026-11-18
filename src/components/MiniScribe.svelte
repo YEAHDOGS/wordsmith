@@ -56,7 +56,7 @@
 <svelte:window {onkeydowncapture} />
 
 <div class="fixed inset-0 z-[60] flex select-none items-stretch border border-line-strong bg-surface text-ink" role="region" aria-label={TEXT.mini} in:fade={SWAP}>
-  <button bind:this={micButton} class="spring press relative m-3 flex aspect-square shrink-0 items-center justify-center border-2 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-app text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
+  <button bind:this={micButton} class="spring press relative mx-3 flex size-16 shrink-0 self-center items-center justify-center border-2 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-app text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
     aria-label={scribe.listening ? TEXT.stop : TEXT.start} aria-pressed={scribe.listening} disabled={!scribe.engine} onclick={() => scribe.toggle()}>
     {#if scribe.listening}
       <span class="live-dot pointer-events-none absolute inset-0 border border-accent" aria-hidden="true"></span>

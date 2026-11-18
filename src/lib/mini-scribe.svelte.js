@@ -1,7 +1,8 @@
 // Mini Scribe (desktop apps only): the wordsmith window folds into a small strip that stays on top of every other app,
 // so you can keep talking tickets into the board while you work in your editor. It is the same window and the same
 // Scribe session (src/lib/scribe.svelte.js), only smaller: nothing restarts and no words are lost on the way in or out.
-// It follows you across desktops and macOS Spaces, so a fullscreen editor doesn't hide it. Leaving puts the window
+// It follows you across virtual desktops and macOS Spaces (though not over another app's fullscreen Space on macOS,
+// which takes a window behavior Tauri doesn't set from here). Leaving puts the window
 // back where it was, at the size it was, maximized again if it was. The strip remembers where it was dragged to, on
 // this device.
 // Linux on Wayland lets no app place or pin its own window: there the strip shrinks but stays where the compositor puts
