@@ -1,8 +1,9 @@
 // Mini Scribe (desktop apps only): the wordsmith window folds into a small strip that stays on top of every other app,
 // so you can keep talking tickets into the board while you work in your editor. It is the same window and the same
 // Scribe session (src/lib/scribe.svelte.js), only smaller: nothing restarts and no words are lost on the way in or out.
-// Leaving puts the window back where it was, at the size it was, maximized again if it was. The strip remembers where
-// it was dragged to, on this device.
+// It follows you across desktops and macOS Spaces, so a fullscreen editor doesn't hide it. Leaving puts the window
+// back where it was, at the size it was, maximized again if it was. The strip remembers where it was dragged to, on
+// this device.
 // Linux on Wayland lets no app place or pin its own window: there the strip shrinks but stays where the compositor puts
 // it, and may not stay on top.
 import { LogicalSize, PhysicalPosition, PhysicalSize, getCurrentWindow } from '@tauri-apps/api/window';
@@ -114,6 +115,7 @@ class MiniScribe {
       this.#stopRemembering = await win.onMoved(({ payload }) => rememberPosition(payload));
       await win.setResizable(false);
       await win.setAlwaysOnTop(true);
+      await win.setVisibleOnAllWorkspaces(true);
     } catch (error) {
       console.error('Mini Scribe could not shrink the window', error);
       this.#leaveAfter = true;
@@ -140,6 +142,7 @@ class MiniScribe {
     // Each step on its own, so one that fails still leaves the rest to put the window back. Back on its own screen
     // first, then sized, so the size is read at that screen's scale.
     const steps = [
+      () => win.setVisibleOnAllWorkspaces(false),
       () => win.setAlwaysOnTop(false),
       () => win.setResizable(true),
       () => win.setDecorations(true),
@@ -177,17 +180,20 @@ class MiniScribe {
   }
 
   /**
-   * Where the strip goes and how big it is, whole on a screen: its remembered spot while that screen is still there,
-   * else the top-right corner of the screen the window is on.
+   * Where the strip goes and how big it is, whole on a screen: its remembered spot, moved onto the nearest screen if it
+   * hangs off one (or that screen is gone), else the top-right corner of the screen the window is on.
    * @param {ReturnType<typeof getCurrentWindow>} win
    */
   async #strip(win) {
     const saved = savedPosition();
-    if (saved) {
-      const monitors = await win.availableMonitors();
-      const home = monitors.find(({ workArea: { position, size } }) =>
-        saved.x >= position.x && saved.y >= position.y && saved.x < position.x + size.width && saved.y < position.y + size.height);
-      if (home) return stripOn(home, saved.x, saved.y);
+    const monitors = saved ? await win.availableMonitors() : [];
+    if (saved && monitors.length) {
+      /** How far the remembered spot is from a screen's work area, in physical pixels: 0 when on it. @param {import('@tauri-apps/api/window').Monitor} monitor */
+      const distance = ({ workArea: { position, size } }) => Math.hypot(
+        Math.max(position.x - saved.x, 0, saved.x - (position.x + size.width)),
+        Math.max(position.y - saved.y, 0, saved.y - (position.y + size.height)));
+      const nearest = monitors.reduce((best, monitor) => (distance(monitor) < distance(best) ? monitor : best));
+      return stripOn(nearest, saved.x, saved.y);
     }
     const monitor = await win.currentMonitor();
     if (!monitor) return { size: new LogicalSize(MINI_WIDTH, MINI_HEIGHT), position: new PhysicalPosition(0, 0) };

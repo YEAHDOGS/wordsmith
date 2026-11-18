@@ -23,24 +23,37 @@
   const ticket = $derived(scribe.recent[0]);
   const caption = $derived(scribe.caption.length > CAPTION_CHARS ? `…${scribe.caption.slice(-CAPTION_CHARS)}` : scribe.caption);
   // Problems get one short line here; the full text waits on the Scribe page.
-  const problem = $derived(scribe.problem ? TEXT.miniProblems[/** @type {'mic-denied' | 'mic' | 'speech' | 'model' | 'allowance'} */ (scribe.problem)] : '');
+  const problem = $derived.by(() => {
+    if (!scribe.problem) return '';
+    if (scribe.problem === 'model' && !scribe.ready) return TEXT.miniProblems['model-setup'];
+    return TEXT.miniProblems[/** @type {'mic-denied' | 'mic' | 'speech' | 'model' | 'allowance'} */ (scribe.problem)];
+  });
 
   // Spoken once per ticket or problem; the caption itself changes with every word, so it is never announced.
   const announcement = $derived(problem || (ticket ? `${TEXT[ticket.kind]}: ${ticket.title || TEXT.untitled}` : ''));
 
   /** @type {HTMLButtonElement | undefined} */
   let micButton = $state();
+  /** @type {HTMLButtonElement | undefined} */
+  let unfoldButton = $state();
 
-  // Keyboard focus moves into the strip (the rest of the app is inert behind it); mini.exit() hands it back.
-  onMount(() => micButton?.focus());
+  // Keyboard focus moves into the strip (the rest of the app is inert behind it); mini.exit() hands it back. A mic
+  // with no speech engine is disabled and can't hold focus, so the unfold button takes it then.
+  onMount(() => (scribe.engine ? micButton : unfoldButton)?.focus());
 
-  /** Escape unfolds the window. @param {KeyboardEvent} event */
-  function onkeydown(event) {
-    if (event.key === 'Escape') mini.exit();
+  /**
+   * Escape unfolds the window. Caught on the way down and stopped there, so the hidden app's own Escape handlers
+   * (clearing a selection, closing a drawer) never see it.
+   * @param {KeyboardEvent} event
+   */
+  function onkeydowncapture(event) {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    mini.exit();
   }
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydowncapture} />
 
 <div class="fixed inset-0 z-[60] flex select-none items-stretch border border-line-strong bg-surface text-ink" role="region" aria-label={TEXT.mini} in:fade={SWAP}>
   <button bind:this={micButton} class="spring press relative m-3 flex aspect-square shrink-0 items-center justify-center border-2 {scribe.listening ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-app text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
@@ -78,7 +91,7 @@
 
   <p class="sr-only" aria-live="polite">{announcement}</p>
 
-  <button class="spring press flex w-10 shrink-0 items-center justify-center border-l border-line text-ink-muted hover:bg-app hover:text-ink" aria-label={TEXT.miniClose} title={TEXT.miniClose} onclick={() => mini.exit()}>
+  <button bind:this={unfoldButton} class="spring press flex w-10 shrink-0 items-center justify-center border-l border-line text-ink-muted hover:bg-app hover:text-ink" aria-label={TEXT.miniClose} title={TEXT.miniClose} onclick={() => mini.exit()}>
     <Maximize2 class="size-4" />
   </button>
 </div>
