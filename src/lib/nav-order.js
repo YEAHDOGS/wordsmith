@@ -1,8 +1,8 @@
 // The sidebar's order of pages, shared by the Sidebar (which draws it) and the Shell's page carousel (which slides
-// between them in that order): Needs you, All notes, Features, Design, Scribe, Tapes, projects A-Z, labels A-Z, then the Archive and Trash in the footer.
+// between them in that order): Needs you, All notes, Features, Calendar, Design, Scribe (and Tapes, its other side), projects A-Z, labels A-Z, then the Archive and Trash in the footer.
 import { NEEDS_YOU_ENABLED } from './models.js';
 
-const TOP_VIEWS = [...(NEEDS_YOU_ENABLED ? ['attention'] : []), 'notes', 'features', 'design', 'scribe', 'tapes'];
+const TOP_VIEWS = [...(NEEDS_YOU_ENABLED ? ['attention'] : []), 'notes', 'features', 'calendar', 'design', 'scribe'];
 const BOTTOM_VIEWS = ['archive', 'trash'];
 
 /** Live rows sorted by name, the way the sidebar lists them. @param {any[]} rows */

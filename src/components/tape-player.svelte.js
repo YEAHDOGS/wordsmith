@@ -4,20 +4,10 @@
 import { mediaUrl } from '../lib/api.js';
 
 const SKIP_SECONDS = 10;
-const SECONDS_PER_HOUR = 3600;
-const SECONDS_PER_MINUTE = 60;
-const CLOCK_DIGITS = 2;
 // Pressing previous this far into a tape starts it over instead of going back.
 const RESTART_AFTER_S = 3;
 const MEDIA_ACTIONS = /** @type {const} */ (['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward']);
 
-/** h:mm:ss or m:ss. @param {number} seconds */
-export function clock(seconds) {
-  const whole = Math.max(0, Math.floor(seconds || 0));
-  const [hours, minutes, rest] = [Math.floor(whole / SECONDS_PER_HOUR), Math.floor((whole % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE), whole % SECONDS_PER_MINUTE];
-  const pad = (/** @type {number} */ value) => String(value).padStart(CLOCK_DIGITS, '0');
-  return hours ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
-}
 
 class TapePlayer {
   /** The tape playing or paused, or null when the player is closed. @type {any} */

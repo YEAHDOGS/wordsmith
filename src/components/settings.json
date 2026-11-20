@@ -7,6 +7,8 @@
   "linkHint": "Link another provider to sign in with it too. Accounts with the same verified email link automatically.",
   "signOut": "Sign out of this device",
   "signOutHint": "Your notes stay in the cloud; this device forgets its local copy.",
+  "tour": "View tutorial",
+  "tourHint": "A short walk through every part of wordsmith: notes, projects, Scribe, MCP and more.",
   "tokens": "Agent API tokens",
   "tokensHint": "One token per agent (claude, codex, muse…). Its name shows on every timeline event the agent causes.",
   "tokenName": "Token name, e.g. claude",

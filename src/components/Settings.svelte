@@ -13,6 +13,8 @@
   import LogOut from '@lucide/svelte/icons/log-out';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import Compass from '@lucide/svelte/icons/compass';
+  import { tour } from '../lib/tour.svelte.js';
   import { fade, slide } from 'svelte/transition';
   import ProviderIcon from './ProviderIcon.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
@@ -75,8 +77,8 @@
   }
   $effect(() => {
     loadTokens();
-    // Linked accounts come with the session, which start-up may have skipped.
-    if (!auth.sessionFetched) auth.load();
+    // Linked accounts come with the session, which start-up may have skipped. Not in the demo: a full load ends it.
+    if (!auth.sessionFetched && !auth.demo) auth.load();
   });
 
   $effect(() => {
@@ -181,6 +183,9 @@
       <p class={HINT}>{TEXT.linkHint}</p>
       <button class="{BUTTON} hover:text-accent" onclick={signOut}><LogOut class="size-4" />{TEXT.signOut}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.signOutHint}</p>
+      <!-- The guided tour again, from the start; it comes back here when it closes -->
+      <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
+      <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
     </section>
 
     <!-- Flex column so the token list can fill whatever height the Account card sets for this row -->

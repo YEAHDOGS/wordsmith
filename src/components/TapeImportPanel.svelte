@@ -1,7 +1,8 @@
 <script>
   // How an import is going, above the Tapes list: one progress bar for the whole batch, what's being worked on now,
   // and anything that failed with a Retry. Finished files are counted, not listed, so a thousand-file import stays
-  // one short panel. The queue itself is src/lib/tapes.svelte.js.
+  // one short panel. A recording made in the app that keeps failing can be discarded (it asks first: there is no other
+  // copy). The queue itself is src/lib/tapes.svelte.js.
   import { fade, fly } from 'svelte/transition';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import X from '@lucide/svelte/icons/x';
@@ -15,6 +16,9 @@
 
   /** @type {{ onclose: () => void }} */
   let { onclose } = $props();
+
+  /** The failed recording whose Discard is waiting for a yes. */
+  let confirming = $state('');
 
   const finished = $derived(tapeImport.done + tapeImport.skipped + tapeImport.failed);
   const fraction = $derived(tapeImport.total ? finished / tapeImport.total : 0);
@@ -51,7 +55,20 @@
       {#each [...working, ...failures] as item (item.id)}
         <li class="flex min-w-0 items-center gap-2" in:fade={FADE}>
           <span class="w-20 shrink-0 {item.status === 'failed' ? 'text-accent' : 'text-ink-faint'}">{TEXT.status[/** @type {keyof typeof TEXT.status} */ (item.status)]}{item.status === 'uploading' ? ` ${Math.round(item.progress * PERCENT)}%` : ''}</span>
-          <span class="min-w-0 truncate text-ink-muted" title={item.error || item.name}>{item.name}{item.error ? ` · ${item.error}` : ''}</span>
+          <span class="min-w-0 flex-1 truncate text-ink-muted" title={item.error || item.name}>{item.name}{item.error ? ` · ${item.error}` : ''}</span>
+          {#if item.recording && item.status === 'failed'}
+            <!-- One grid cell: Discard and its confirmation swap in place -->
+            <span class="grid shrink-0 justify-items-end">
+              {#if confirming === item.id}
+                <span class="col-start-1 row-start-1 flex items-center gap-1" in:fade={FADE}>
+                  <button class="spring press bg-accent px-2 py-0.5 text-accent-ink hover:bg-accent-hover" onclick={() => tapeImport.discard(item.id)}>{TEXT.discardYes}</button>
+                  <button class="spring press px-2 py-0.5 text-ink-muted hover:text-ink" {@attach (node) => node.focus()} onclick={() => (confirming = '')}>{TEXT.deleteNo}</button>
+                </span>
+              {:else}
+                <button class="spring press col-start-1 row-start-1 px-2 py-0.5 text-ink-muted hover:text-accent" title={TEXT.discardHint} in:fade={FADE} onclick={() => (confirming = item.id)}>{TEXT.discard}</button>
+              {/if}
+            </span>
+          {/if}
         </li>
       {/each}
     </ul>

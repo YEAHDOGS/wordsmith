@@ -8,6 +8,9 @@
 
 /* Short screens (phones on their side, small phones, squat displays): compact layout variant, e.g. short:hidden */
 @custom-variant short (@media (max-height: 640px));
+/* Short and not narrow-and-tall (phones on their side, squat windows down to 320x320, not small portrait phones): side-by-side
+   panels where stacking would leave no room, e.g. squat:flex-row (Calendar). Declared after short so it wins where both apply. */
+@custom-variant squat (@media (max-height: 640px) and (min-aspect-ratio: 3/4));
 /* Ultra-wide displays (21:9 and wider): spread content sideways instead of leaving empty bleed, e.g. ultrawide:grid-cols-6 */
 @custom-variant ultrawide (@media (min-aspect-ratio: 21/9) and (min-width: 1536px));
 /* TVs and 10-foot screens: big type and spacing, e.g. tv:text-2xl */
