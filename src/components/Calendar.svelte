@@ -38,11 +38,14 @@
   };
   /** @type {Record<string, number>} */
   const KEY_STEPS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+  /** @type {Record<string, number>} */
+  const PAGE_STEPS = { PageUp: -1, PageDown: 1 };
   const CLOCK_MS = 60_000;
   // A pointer that travels this far sideways (and more sideways than down) turns the month.
   const SWIPE_PX = 48;
-  // Wheel travel that turns one month, and the quiet time after a turn before the wheel can turn another.
-  const WHEEL_STEP = 60;
+  // Wheel travel that turns one month (one notch anywhere: Chrome sends 100px, Firefox 3 lines = 48px), and the quiet
+  // time after a turn before the wheel can turn another.
+  const WHEEL_STEP = 40;
   const WHEEL_REST_MS = 400;
   // Wheel deltas in lines (deltaMode 1, Firefox: a notch is 3 lines) and pages (deltaMode 2), as pixels.
   const LINE_PX = 16;
@@ -138,14 +141,15 @@
 
   /** Anywhere on the page, Page Up/Down jump a month to the same date (or the month's last day). @param {KeyboardEvent} event */
   function onpagekey(event) {
-    if (event.key !== 'PageUp' && event.key !== 'PageDown') return;
+    const by = PAGE_STEPS[event.key];
+    if (!by) return;
     event.preventDefault();
-    const by = event.key === 'PageDown' ? 1 : -1;
     const date = selectedDate;
     const lastDay = new Date(date.getFullYear(), date.getMonth() + by + 1, 0).getDate();
-    // Focus follows only when it was already on a day; from Today, a filter or the list it stays put.
-    const onDay = /** @type {HTMLElement} */ (event.target).closest?.('[data-day]');
-    select(dayKey(new Date(date.getFullYear(), date.getMonth() + by, Math.min(date.getDate(), lastDay))), Boolean(onDay));
+    // Focus on a day or in the day's list would vanish with the old month and list, so it moves to the new day;
+    // on Today or a filter it stays put.
+    const replaced = /** @type {HTMLElement} */ (event.target).closest?.('[data-day], [data-moments]');
+    select(dayKey(new Date(date.getFullYear(), date.getMonth() + by, Math.min(date.getDate(), lastDay))), Boolean(replaced));
   }
 
   /** Page Up/Down for the whole calendar, the day list included. @param {HTMLElement} node */
@@ -193,7 +197,7 @@
       wheelRestUntil = event.timeStamp + WHEEL_REST_MS;
       return;
     }
-    const scale = event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? PAGE_PX : 1;
+    const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? LINE_PX : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? PAGE_PX : 1;
     const delta = (Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY) * scale;
     // A new gesture, or a turn the other way, starts a fresh count.
     if (event.timeStamp - lastWheel > WHEEL_REST_MS || Math.sign(delta) !== Math.sign(wheelTravel)) wheelTravel = 0;
@@ -211,12 +215,15 @@
     node.addEventListener('pointerdown', onpointerdown);
     node.addEventListener('pointerup', onpointerup);
     node.addEventListener('pointercancel', cancel);
+    // A press that leaves the grid is no longer a swipe, so a later release can't reuse its start.
+    node.addEventListener('pointerleave', cancel);
     node.addEventListener('wheel', onwheel, { passive: true });
     node.addEventListener('click', onclickcapture, true);
     return () => {
       node.removeEventListener('pointerdown', onpointerdown);
       node.removeEventListener('pointerup', onpointerup);
       node.removeEventListener('pointercancel', cancel);
+      node.removeEventListener('pointerleave', cancel);
       node.removeEventListener('wheel', onwheel);
       node.removeEventListener('click', onclickcapture, true);
     };
@@ -230,7 +237,7 @@
 </script>
 
 <div class="{CONTENT} flex min-h-0 flex-1 flex-col landscape:flex-row squat:flex-row" {@attach pageKeys}>
-  <section class="flex h-[min(58dvh,38rem)] shrink-0 flex-col landscape:h-auto landscape:min-w-0 landscape:flex-1 short:h-[48dvh] squat:h-auto squat:min-w-0 squat:flex-1" aria-labelledby="calendar-month">
+  <section class="flex h-[min(58dvh,38rem,calc(100dvh_-_20rem))] shrink-0 flex-col landscape:h-auto landscape:min-w-0 landscape:flex-1 short:h-[48dvh] squat:h-auto squat:min-w-0 squat:flex-1" aria-labelledby="calendar-month">
     <div class="@container/controls flex shrink-0 items-center gap-1 border-b border-line px-1 py-1 sm:px-3 tv:py-3">
       <button class={NAV_BUTTON} aria-label={TEXT.previous} title={TEXT.previous} onclick={() => turn(-1)}><ChevronLeft class="size-4 tv:size-6" /></button>
       <!-- One grid cell: the leaving month's name slides out under the arriving one -->
@@ -264,7 +271,7 @@
             {@const events = shown(cell.key)}
             {@const isToday = cell.key === today}
             {@const isSelected = cell.key === selected}
-            <button data-day={cell.key} tabindex={isSelected ? 0 : -1} onclick={() => select(cell.key)} {onkeydown}
+            <button data-day={cell.key} tabindex={isSelected ? 0 : -1} onclick={() => select(cell.key, !cell.inMonth)} {onkeydown}
               class="spring relative flex min-h-0 min-w-0 flex-col gap-0.5 overflow-hidden p-1 text-left focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:p-1.5 tv:gap-1 tv:p-3
                 {isSelected ? 'bg-accent-soft' : cell.inMonth ? 'bg-surface hover:bg-surface-raised' : 'bg-app hover:bg-surface-raised'} {cell.inMonth ? 'text-ink' : 'text-ink-faint'}"
               aria-label="{DAY_FORMAT.format(cell.date)}, {events.length === 1 ? TEXT.dayEvent : fill(TEXT.dayEvents, { n: events.length })}{isSelected ? `, ${TEXT.selected}` : ''}"
@@ -316,7 +323,7 @@
       </div>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-moments>
       {#key selected}
         {#if !notes.length}
           <p class="px-4 py-10 text-center text-sm text-ink-faint tv:text-xl" in:fade={{ duration: motion(ROW_IN_MS) }}>{ui.query ? TEXT.noMatches : TEXT.noTickets}</p>
