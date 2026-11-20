@@ -31,6 +31,7 @@
   import { scribe } from '../lib/scribe.svelte.js';
   import { recorder } from '../lib/recorder.svelte.js';
   import { tapeImport } from '../lib/tapes.svelte.js';
+  import { tour } from '../lib/tour.svelte.js';
   import { clock } from '../lib/time.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
@@ -46,8 +47,9 @@
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
   const loadDesign = () => import('./Design.svelte');
-  // So does the ticket calendar.
+  // So does the ticket calendar, and the guided tour.
   const loadCalendar = () => import('./Calendar.svelte');
+  const loadTour = () => import('./Tour.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
@@ -65,6 +67,8 @@
     untrack(() => {
       scribe.claim(userId);
       tapeImport.claim(userId);
+      // The first time an account uses the app on this device, the guided tour opens.
+      tour.offer(userId);
     });
   });
   // A recording in progress is stopped and kept on the device for its account (it uploads when they sign back in),
@@ -299,6 +303,8 @@
   {#if route.note}
     {#key route.note}<NoteEditor id={route.note} />{/key}
   {/if}
+
+  {#if tour.open}<LazyPage load={loadTour} />{/if}
 
   {#if store.demo}<DemoGuard />{/if}
 </div>
