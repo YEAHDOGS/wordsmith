@@ -16,6 +16,9 @@
   "retry": "Retry failed",
   "cancel": "Stop after these",
   "dismiss": "Clear",
+  "discard": "Discard",
+  "discardYes": "Delete recording",
+  "discardHint": "Delete this recording for good. It was never uploaded, so there is no other copy.",
   "status": {
     "waiting": "Waiting",
     "reading": "Reading",

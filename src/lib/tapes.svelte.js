@@ -11,9 +11,20 @@ import { forgetRecording, keepRecording, waitingRecordings } from './pending-rec
 import { store } from './store.svelte.js';
 import { TAPE_EXISTS, TAPE_LIMIT, TAPE_STORAGE, audioType } from './models.js';
 
-// The encoders load on first use, keeping them out of the start-up bundle (the queue itself loads with the app, to
-// bring back unsent recordings).
-const encoding = () => import('./tape-encode.js');
+// The encoders are their own file, fetched once the app has started (and again on use if that failed), so they stay
+// out of the start-up bundle yet are in memory before a tab goes offline. The recorder shares this loader.
+const WARM_UP_MS = 2_000;
+/** @type {Promise<typeof import('./tape-encode.js')> | null} */
+let encoders = null;
+/** The encoder module, loaded once; a failed load (offline, or a deploy replaced the file) is tried again next time. */
+export function loadEncoders() {
+  encoders ??= import('./tape-encode.js').catch((error) => {
+    encoders = null;
+    throw error;
+  });
+  return encoders;
+}
+setTimeout(() => loadEncoders().catch(() => {}), WARM_UP_MS);
 // The desktop encoder runs on its own threads, so two files encode while others upload; a phone does one at a time.
 const NATIVE_WORKERS = 2;
 const WEB_WORKERS = 1;
@@ -22,6 +33,8 @@ const STORAGE_FULL = 507;
 // Errors that stop the whole queue: nothing after them would get in either.
 const STOPPERS = [RATE_LIMITED, STORAGE_FULL, 401];
 const OFFLINE = "You're offline. Import again when you're back; finished tapes are kept.";
+// What a recording waits on when offline: it goes up by itself once the connection is back.
+const OFFLINE_RECORDING = "You're offline. It uploads by itself when you're back.";
 // Recorder apps name files after the moment they started: 2024-05-12 14-33-01, 20240512_143301, 2024.05.12-14.33...
 const DATE_IN_NAME = /(20\d{2})[-_. ]?([01]\d)[-_. ]?([0-3]\d)[-_. T]*([0-2]\d)[-_.: h]?([0-5]\d)(?:[-_.: m]?([0-5]\d))?/;
 // Month, day and hour limits a date in a file name must keep to (a name like 20201345... is a number, not a date).
@@ -85,6 +98,11 @@ class TapeImport {
     return this.#userId;
   }
 
+  constructor() {
+    // Back online: what failed only for being offline goes again (recordings made offline upload by themselves).
+    addEventListener('online', () => this.#retryOffline());
+  }
+
   /** Something is being worked on, or waits and will be: a queue stopped early is idle, so Retry shows. */
   get active() {
     return this.items.some((item) => WORKING.includes(item.status) || (item.status === 'waiting' && !this.stopped));
@@ -113,16 +131,39 @@ class TapeImport {
    * Queues a recording made in the app and keeps it on the device until it uploads. An encoded one (Opus in Ogg)
    * uploads as it is; a MediaRecorder one is shrunk like an import. One made by an account that is no longer signed in
    * (stopped at sign-out) is only kept, and goes up when that account signs back in.
-   * @param {File} file @param {RecordingInfo & { userId: string }} info @returns {string} its queue id, to follow it as it saves
+   * @param {File} file @param {RecordingInfo & { userId: string }} info
+   * @returns {{ id: string, kept: Promise<string> }} its queue id, to follow it as it saves, and '' once it is safely
+   *   on the device, or why it couldn't be kept (then it lives only in memory until it uploads)
    */
   addRecording(file, { durationMs, encoded, userId }) {
     const id = crypto.randomUUID();
     this.persisting++;
-    keepRecording({ id, userId, name: file.name, type: file.type, lastModified: file.lastModified, durationMs, encoded, blob: file })
-      .catch(() => {})
+    const kept = keepRecording({ id, userId, name: file.name, type: file.type, lastModified: file.lastModified, durationMs, encoded, blob: file })
+      .then(() => '', (error) => /** @type {Error} */ (error)?.message || String(error))
       .finally(() => this.persisting--);
     if (userId === this.#userId) this.#queueRecording(id, file, { durationMs, encoded });
-    return id;
+    return { id, kept };
+  }
+
+  /** Throws away a recording that keeps failing: off the queue and off the device. It has no other copy. @param {string} id */
+  discard(id) {
+    const item = this.items.find((entry) => entry.id === id);
+    if (!item?.recording || item.status !== 'failed') return;
+    this.items = this.items.filter((entry) => entry.id !== id);
+    this.#files.delete(id);
+    this.#recordings.delete(id);
+    this.failed = Math.max(0, this.failed - 1);
+    forgetRecording(id).catch(() => {});
+  }
+
+  /** Puts back what failed only because the device was offline. */
+  #retryOffline() {
+    const offline = this.items.filter((item) => item.status === 'failed' && (item.error === OFFLINE || item.error === OFFLINE_RECORDING));
+    if (!offline.length) return;
+    for (const item of offline) Object.assign(item, { status: 'waiting', error: '', progress: 0 });
+    this.failed = Math.max(0, this.failed - offline.length);
+    if (this.stopped && !this.items.some((item) => item.status === 'failed')) this.stopped = '';
+    this.#spawn();
   }
 
   /**
@@ -183,9 +224,15 @@ class TapeImport {
 
   /** Starts workers up to what this device runs at once. */
   async #spawn() {
-    const { NATIVE_ENCODER } = await encoding();
+    let native = false;
+    try {
+      native = (await loadEncoders()).NATIVE_ENCODER;
+    } catch {
+      // The encoders couldn't load (offline): one worker still runs, and each item fails with the offline message
+      // (recordings are already encoded and still go up); coming back online retries them.
+    }
     // #work counts itself in before its first await, so this stops at the limit.
-    while (this.#workers < (NATIVE_ENCODER ? NATIVE_WORKERS : WEB_WORKERS)) this.#work();
+    while (this.#workers < (native ? NATIVE_WORKERS : WEB_WORKERS)) this.#work();
   }
 
   async #work() {
@@ -208,8 +255,10 @@ class TapeImport {
     // Only the account that queued it uploads it (claim() clears the rest; this guards a worker mid-loop).
     if (!file || item.userId !== this.#userId) return;
     try {
-      const { encodeTape, tooLarge } = await encoding();
-      const refusal = tooLarge(file);
+      const recording = this.#recordings.get(item.id);
+      // An encoded recording needs no encoder, so it still uploads when the encoder file can't be fetched.
+      const encoder = recording?.encoded ? null : await loadEncoders();
+      const refusal = encoder?.tooLarge(file);
       if (refusal) throw new Error(refusal);
       item.status = 'reading';
       const bytes = await file.arrayBuffer();
@@ -221,15 +270,19 @@ class TapeImport {
         return;
       }
       if (!navigator.onLine) throw new Error(OFFLINE);
-      const recording = this.#recordings.get(item.id);
       item.status = 'encoding';
-      const tape = recording?.encoded ? { file, durationMs: recording.durationMs, encoded: true } : await encodeTape(file, bytes);
+      const tape = encoder ? await encoder.encodeTape(file, bytes) : { file, durationMs: recording?.durationMs ?? 0, encoded: true };
       // A MediaRecorder file often can't say how long it plays; the recorder timed it.
       if (!tape.durationMs && recording) tape.durationMs = recording.durationMs;
+      // The account may have changed while this encoded; the upload goes with whichever session is current, so recheck.
+      if (item.userId !== this.#userId) return;
       item.status = 'uploading';
       const meta = { id: crypto.randomUUID(), name: file.name, hash, size: file.size, recorded_at: recordedAt(file), duration_ms: tape.durationMs };
       const answer = await uploadFile('/api/tapes', tape.file, (fraction) => (item.progress = fraction), { 'X-Tape': encodeURIComponent(JSON.stringify(meta)) });
       if (!answer?.tape?.id) throw new Error('The server sent no tape back. Retry this file.');
+      // Signed out or switched while it uploaded: the tape is on the right account (its session sent it), but this
+      // device's store now belongs to someone else, and the queue has moved on.
+      if (item.userId !== this.#userId) return;
       store.adopt('tapes', [answer.tape]);
       this.originals.set(answer.tape.id, file);
       if (answer.code === TAPE_EXISTS) {
@@ -242,7 +295,8 @@ class TapeImport {
     } catch (error) {
       const failure = /** @type {ApiError | Error} */ (error);
       item.status = 'failed';
-      item.error = failure instanceof TypeError ? OFFLINE : failure.message;
+      const offline = failure instanceof TypeError || failure.message === OFFLINE;
+      item.error = offline ? (item.recording ? OFFLINE_RECORDING : OFFLINE) : failure.message;
       this.failed++;
       const status = failure instanceof ApiError ? failure.status : 0;
       if (STOPPERS.includes(status) || (failure instanceof ApiError && [TAPE_LIMIT, TAPE_STORAGE].includes(failure.code ?? ''))) this.stopped = failure.message;

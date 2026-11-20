@@ -103,7 +103,8 @@
     "problems": {
       "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press record again.",
       "mic": "The microphone couldn't start ({detail}). Press record to try again.",
-      "save": "The recording couldn't be saved ({detail})."
+      "save": "The recording couldn't be saved ({detail}).",
+      "keep": "This recording couldn't be saved on the device ({detail}), so keep this tab open until it uploads."
     }
   }
 }

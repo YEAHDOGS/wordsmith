@@ -6,12 +6,10 @@
 // A browser without the Opus encoder (older Safari) records with MediaRecorder instead, and the queue shrinks that
 // file like an import. Recording keeps going while you move around the app, like Scribe.
 import { openMic } from './mic.js';
-import { tapeImport } from './tapes.svelte.js';
+import { loadEncoders, tapeImport } from './tapes.svelte.js';
 import { MAX_TAPE_BYTES, TAPE_BITRATE, TAPE_EXTENSION } from './models.js';
 
 const RECORD_ONLY_KEY = 'ws_record_only';
-// The encoder loads on the first recording, keeping it out of the start-up bundle.
-const encoding = () => import('./tape-encode.js');
 // The signal as it is: echo cancelling, noise suppression and gain control pump a beat and smear a room.
 const RECORDING_INPUT = { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
 // 0.1 s at the encoder's 24 kHz per piece from the microphone.
@@ -32,7 +30,7 @@ const MAX_FALLBACK_BYTES = Math.floor(FULL_FRACTION * MAX_TAPE_BYTES);
 const NO_RECORDER = "This browser can't record audio";
 const NAME_DIGITS = 2;
 
-/** @typedef {'mic-denied' | 'mic' | 'save' | ''} RecorderProblem */
+/** @typedef {'mic-denied' | 'mic' | 'save' | 'keep' | ''} RecorderProblem */
 /** @typedef {{ file: File, durationMs: number, encoded: boolean }} Recording */
 
 /** "Recording 2026-11-20 14-33-01": the importer reads the start time back from the name (tapes.svelte.js recordedAt). @param {number} start */
@@ -48,6 +46,8 @@ class Recorder {
   recording = $state(false);
   /** The microphone is opening: a second press waits for it instead of opening another. */
   starting = $state(false);
+  /** Stopped, and the take is being wrapped and handed to the queue: it is only in memory until then. */
+  saving = $state(false);
   /** Time recorded so far, ms. */
   elapsed = $state(0);
   /** The import queue id of the last recording, to show it saving. */
@@ -70,7 +70,7 @@ class Recorder {
     // Closing the tab mid-recording, or before a finished one is written to the device, would lose it: ask first.
     // returnValue too: Chromium before 119 only asks when it is set.
     addEventListener('beforeunload', (event) => {
-      if (!this.recording && !this.starting && !tapeImport.persisting) return;
+      if (!this.recording && !this.starting && !this.saving && !tapeImport.persisting) return;
       event.preventDefault();
       event.returnValue = '';
     });
@@ -78,7 +78,7 @@ class Recorder {
 
   /** @param {boolean} on */
   setRecordOnly(on) {
-    if (this.recording || this.starting) return;
+    if (this.recording || this.starting || this.saving) return;
     this.recordOnly = on;
     if (on) localStorage.setItem(RECORD_ONLY_KEY, '1');
     else localStorage.removeItem(RECORD_ONLY_KEY);
@@ -86,19 +86,19 @@ class Recorder {
 
   /** The mic button. A press while the microphone opens (a double click) is ignored, so it starts one recording. */
   toggle() {
-    if (this.starting) return;
+    if (this.starting || this.saving) return;
     return this.recording ? this.stop() : this.start();
   }
 
   async start() {
-    if (this.recording || this.starting) return;
+    if (this.recording || this.starting || this.saving) return;
     this.starting = true;
     this.#stopAsked = false;
     this.#userId = tapeImport.userId;
     this.problem = '';
     this.detail = '';
     try {
-      const encoder = await encoding();
+      const encoder = await loadEncoders();
       this.#finish = (await encoder.webEncoderReady()) ? await this.#encoding(encoder) : await this.#mediaRecorder();
     } catch (error) {
       const failure = /** @type {Error} */ (error);
@@ -128,15 +128,25 @@ class Recorder {
     const finish = this.#finish;
     if (!this.recording || !finish) return;
     clearInterval(this.#timer);
+    // saving goes on before recording goes off, so closing the tab asks at every moment the take is only in memory.
+    this.saving = true;
     this.recording = false;
     this.#finish = null;
     try {
       const recording = await finish();
       if (!recording) return;
-      this.lastItem = tapeImport.addRecording(recording.file, { durationMs: recording.durationMs, encoded: recording.encoded, userId: this.#userId });
+      const { id, kept } = tapeImport.addRecording(recording.file, { durationMs: recording.durationMs, encoded: recording.encoded, userId: this.#userId });
+      this.lastItem = id;
+      const reason = await kept;
+      if (reason) {
+        this.problem = 'keep';
+        this.detail = reason;
+      }
     } catch (error) {
       this.problem = 'save';
       this.detail = /** @type {Error} */ (error).message;
+    } finally {
+      this.saving = false;
     }
   }
 
