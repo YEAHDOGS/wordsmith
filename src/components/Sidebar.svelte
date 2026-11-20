@@ -52,7 +52,7 @@
     { view: 'calendar', label: 'Calendar', icon: CalendarDays },
     { view: 'design', label: 'Design', icon: Network },
     // Scribe and Tapes are one page with a switch in its corner; either side lights this row.
-    { view: 'scribe', label: 'Scribe & Tapes', icon: Mic, also: 'tapes' },
+    { view: 'scribe', label: 'Scribe', icon: Mic, also: 'tapes' },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';

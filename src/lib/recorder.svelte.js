@@ -142,7 +142,15 @@ class Recorder {
   async #mediaRecorder() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: RECORDING_INPUT });
     const mimeType = FALLBACK_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
-    const media = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: TAPE_BITRATE });
+    /** @type {MediaRecorder} */
+    let media;
+    try {
+      // None of ours supported: leave the choice to the browser, then read what it picked from media.mimeType.
+      media = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: TAPE_BITRATE } : { audioBitsPerSecond: TAPE_BITRATE });
+    } catch (error) {
+      for (const track of stream.getTracks()) track.stop();
+      throw error;
+    }
     /** @type {Blob[]} */
     const parts = [];
     media.ondataavailable = (event) => event.data.size && parts.push(event.data);

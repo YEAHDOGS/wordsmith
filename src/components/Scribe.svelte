@@ -1,7 +1,8 @@
 <script>
   // Scribe (beta): the page for the live speech-to-tickets session in src/lib/scribe.svelte.js. One mic button on the
   // spine starts and stops it. A switch under it turns ticket writing off ("Just record"): the same button then records
-  // straight to a tape (src/lib/recorder.svelte.js), and the row under the status follows that tape as it saves. Under it, what you said (words still being heard are dimmed) beside what Scribe did
+  // straight to a tape (src/lib/recorder.svelte.js): the status line runs the time, and the line under the switch
+  // follows the last tape as it saves. Under it, what you said (words still being heard are dimmed) beside what Scribe did
   // with it, each ticket openable and undoable. Model settings sit in a third column on wide screens and in a panel
   // that floats over the page below that, so opening it never moves the columns. Only the two lists scroll.
   import { tick } from 'svelte';
@@ -30,7 +31,7 @@
 
   const FIELD = 'w-full border border-line bg-app px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none tv:text-lg';
   const LABEL = 'flex flex-col gap-1 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint tv:text-sm';
-  const HEADING = 'shrink-0 border-b border-line px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint sm:px-4 tv:text-sm';
+  const HEADING = 'shrink-0 border-b border-line px-3 py-2 short:py-1 font-mono text-[0.6875rem] uppercase tracking-widest text-ink-faint sm:px-4 tv:text-sm';
   const SMALL_BUTTON = 'spring press inline-flex min-h-8 items-center justify-center gap-1.5 border border-line bg-surface px-2 text-xs text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-40 tv:min-h-12 tv:text-lg';
   const ROW_IN = { y: 8, duration: 220, easing: quintOut };
   const PANEL_IN = { y: 16, duration: 200, easing: quintOut };
@@ -48,7 +49,7 @@
   const busy = $derived(scribe.listening || recorder.recording);
   const active = $derived(recorder.recordOnly ? recorder.recording : scribe.listening);
   const scribeStatus = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? (speech.phase === 'loading' ? TEXT.loadingSpeech : TEXT.listening) : scribe.engine ? TEXT.idle : TEXT.idleNoMic);
-  const status = $derived(recorder.recordOnly ? (recorder.recording ? R.recording : R.idle) : scribeStatus);
+  const status = $derived(recorder.recordOnly ? (recorder.recording ? fill(R.recording, { time: clock(recorder.elapsed / MS_PER_SECOND) }) : R.idle) : scribeStatus);
   /** The last recording on its way to Tapes, while the import queue still lists it. */
   const lastSave = $derived(recorder.lastItem ? tapeImport.items.find((item) => item.id === recorder.lastItem) ?? null : null);
   const saveLine = $derived.by(() => {
@@ -102,11 +103,9 @@
   {#if detected}<p class="text-xs leading-relaxed text-ink-muted" role="status" in:fade>{detected}</p>{/if}
 {/snippet}
 
-<!-- A very short window (down to 320x320) can't fit the mic, both switches and the lists: there the page scrolls as a
-     last resort and the lists keep a usable height, so nothing is out of reach -->
-<div class="relative flex min-h-0 flex-1 flex-col short:overflow-y-auto">
+<div class="relative flex min-h-0 flex-1 flex-col">
   <!-- The mic sits on the spine: one line the page hangs from -->
-  <section class="relative flex shrink-0 flex-col items-center gap-2 border-b border-line px-3 py-4 short:flex-row short:justify-center short:gap-4 short:py-2 sm:py-6">
+  <section class="relative flex shrink-0 flex-col items-center gap-2 border-b border-line px-3 py-4 short:flex-row short:justify-center short:gap-3 short:py-1.5 sm:py-6">
     <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line short:hidden" aria-hidden="true"></div>
     <button class="spring press relative flex size-20 shrink-0 items-center justify-center border-2 short:size-12 tv:size-28 {active ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-surface text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
       aria-label={recorder.recordOnly ? (active ? R.stop : R.start) : active ? TEXT.stop : TEXT.start} aria-pressed={active}
@@ -126,11 +125,13 @@
         {/key}
       {/if}
     </button>
-    <div class="relative flex min-w-0 flex-col items-center gap-2 bg-app px-2 short:items-start">
-      <p class="flex items-center gap-2 text-center text-fluid-sm text-ink-muted" role="status">
+    <!-- Short screens keep this column tight (one-line status, no badge) so the lists below keep their room -->
+    <div class="relative flex min-w-0 flex-col items-center gap-2 bg-app px-2 short:items-start short:gap-1">
+      <p class="flex max-w-full min-w-0 items-center gap-2 text-center text-fluid-sm text-ink-muted short:text-xs" role="status">
         {#if scribe.thinking}<span class="live-dot size-2 shrink-0 rounded-full bg-progress" aria-hidden="true"></span>{/if}
-        {#key status}<span in:fade={{ duration: 150 }}>{status}</span>{/key}
-        {#if !recorder.recordOnly}<span class="border border-line px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-widest text-accent">{TEXT.beta}</span>{/if}
+        <!-- The running time ticks inside one line instead of fading it every second -->
+        {#key recorder.recordOnly && recorder.recording ? 'recording' : status}<span class="min-w-0 tabular-nums short:truncate" title={status} in:fade={{ duration: 150 }}>{status}</span>{/key}
+        {#if !recorder.recordOnly}<span class="shrink-0 border border-line px-1.5 short:hidden py-0.5 font-mono text-[0.625rem] uppercase tracking-widest text-accent">{TEXT.beta}</span>{/if}
       </p>
       <!-- What the mic does: locked while it's on, so a session can't change kind halfway -->
       <div class="w-full max-w-md sm:w-96" title={busy ? R.locked : ''}>
@@ -138,17 +139,15 @@
           onselect={(mode) => recorder.setRecordOnly(mode === 'record')} />
       </div>
       <!-- Your words, live, right under the stop button. Two lines are always kept for them, so nothing moves as they come and go. -->
+      {#if !recorder.recordOnly}
       <p class="h-[2.75em] w-full max-w-md overflow-hidden text-center text-fluid-sm leading-snug text-ink short:hidden sm:w-96" aria-hidden="true">
-        {#if recorder.recordOnly}
-          <!-- Just recording: the same two lines hold the running time instead of words -->
-          <span class="font-mono text-fluid-xl tabular-nums {recorder.recording ? 'text-ink' : 'text-ink-faint'}">{clock(recorder.elapsed / MS_PER_SECOND)}</span>
-        {:else if scribe.listening || scribe.interim}{scribe.interim ? scribe.caption.slice(0, scribe.caption.length - scribe.interim.length) : scribe.caption}<span class="text-ink-faint">{scribe.interim ? scribe.caption.slice(-scribe.interim.length) : ''}</span>{/if}
+        {#if scribe.listening || scribe.interim}{scribe.interim ? scribe.caption.slice(0, scribe.caption.length - scribe.interim.length) : scribe.caption}<span class="text-ink-faint">{scribe.interim ? scribe.caption.slice(-scribe.interim.length) : ''}</span>{/if}
       </p>
+      {/if}
       {#if recorder.recordOnly}
-        <!-- Same height as the typing row it replaces: where the last recording is on its way to Tapes -->
-        <div class="flex min-h-9 w-full max-w-md items-center gap-2 sm:w-96" role="status" aria-live="polite">
-          {#key saveLine}<p class="min-w-0 flex-1 truncate text-xs {lastSave?.status === 'failed' ? 'text-accent' : 'text-ink-muted'} tv:text-base" title={saveLine} in:fade={{ duration: 150 }}>{saveLine}</p>{/key}
-          <button type="button" class="{SMALL_BUTTON} min-h-9 shrink-0" onclick={() => router.replace('tapes')}><CassetteTape class="size-4" />{R.open}</button>
+        <!-- One line: what a recording becomes, then where the last one is on its way to Tapes -->
+        <div class="grid w-full max-w-md text-center sm:w-96" role="status" aria-live="polite">
+          {#key saveLine}<p class="col-start-1 row-start-1 truncate text-xs {lastSave?.status === 'failed' ? 'text-accent' : 'text-ink-muted'} tv:text-base" title={saveLine} in:fade={{ duration: 150 }}>{saveLine}</p>{/key}
         </div>
       {:else}
       <form class="flex w-full max-w-md gap-px sm:w-96" onsubmit={send}>
@@ -179,7 +178,7 @@
   {/if}
 
   <!-- Stacked on phones held upright; side by side from tablets up and on any short screen (a phone on its side) -->
-  <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-px bg-line short:min-h-32 short:grid-cols-2 short:grid-rows-1 md:grid-cols-2 md:grid-rows-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_20rem] tv:xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_28rem]">
+  <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-px bg-line short:grid-cols-2 short:grid-rows-1 md:grid-cols-2 md:grid-rows-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_20rem] tv:xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_28rem]">
     <section class="flex min-h-0 flex-col bg-app" aria-label={TEXT.transcript}>
       <h2 class={HEADING}>{TEXT.transcript}</h2>
       <div bind:this={transcriptBox} class="selectable min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">

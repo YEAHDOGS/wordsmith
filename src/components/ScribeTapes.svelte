@@ -2,7 +2,7 @@
   // Scribe and Tapes share one tab. The switch in the top-left corner flips between them (#/scribe and #/tapes, so a
   // link to either still lands on its side) without leaving the page: the sides slide past each other, Scribe on the
   // left. Scribe's mic can also record straight to a tape ("Just record", src/lib/recorder.svelte.js); while it
-  // records, a live timer sits beside the switch on both sides. Tapes loads on first visit, as before.
+  // records, a live timer beside the switch on the Tapes side leads back. Tapes loads on first visit, as before.
   import { fade, fly } from 'svelte/transition';
   import { cubicIn, quintOut } from 'svelte/easing';
   import Segmented from './Segmented.svelte';
@@ -33,11 +33,12 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-  <div class="flex shrink-0 items-center gap-3 border-b border-line px-2 py-1.5 sm:px-4 tv:py-3">
+  <div class="flex shrink-0 items-center gap-3 border-b border-line px-2 py-1.5 short:py-1 sm:px-4 tv:py-3">
     <div class="w-44 shrink-0 tv:w-72">
       <Segmented options={MODES} value={mode} labels={LABELS} label={SCRIBE_TEXT.sides} onselect={(side) => router.replace(side)} />
     </div>
-    {#if recorder.recording}
+    <!-- Scribe's own status line runs the time; on the Tapes side it sits here, leading back -->
+    {#if recorder.recording && mode === 'tapes'}
       <button class="spring press flex min-w-0 items-center gap-2 text-xs text-ink-muted hover:text-ink tv:text-lg" title={SCRIBE_TEXT.recorder.back}
         onclick={() => router.replace('scribe')} transition:fade={{ duration: motion(SIDE_OUT_MS) }}>
         <span class="live-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true"></span>

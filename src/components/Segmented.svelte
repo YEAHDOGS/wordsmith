@@ -1,6 +1,7 @@
 <script>
   // Equal-width segmented radio group whose highlight slides between options (transform only, so nothing reflows).
   // Arrow keys move the choice, for keyboards and TV remotes; only the chosen option is in the tab order.
+  // Short screens (phones on their side, tiny windows) get slimmer options, so a page with two of them still fits.
 
   /** Arrow key -> how far the choice moves. */
   const KEY_STEPS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
@@ -28,7 +29,7 @@
     style:width="calc((100% - 0.25rem) / {options.length})" style:transform="translateX({index * FULL_WIDTH_PERCENT}%)"></span>
   {#each options as option (option)}
     <button type="button" role="radio" aria-checked={value === option} tabindex={value === option ? 0 : -1} {disabled}
-      class="spring press relative truncate px-2 py-2 text-sm {value === option ? 'font-semibold text-ink' : 'text-ink-muted hover:text-ink'}"
+      class="spring press relative truncate px-2 py-2 text-sm short:py-1 short:text-xs {value === option ? 'font-semibold text-ink' : 'text-ink-muted hover:text-ink'}"
       onclick={() => onselect(option)}>{labels[option]}</button>
   {/each}
 </div>
