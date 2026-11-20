@@ -46,7 +46,7 @@
   const SAVED = ['done', 'skipped'];
 
   const R = TEXT.recorder;
-  const busy = $derived(scribe.listening || recorder.recording);
+  const busy = $derived(scribe.listening || recorder.recording || recorder.starting);
   const active = $derived(recorder.recordOnly ? recorder.recording : scribe.listening);
   const scribeStatus = $derived(scribe.thinking ? TEXT.thinking : scribe.listening ? (speech.phase === 'loading' ? TEXT.loadingSpeech : TEXT.listening) : scribe.engine ? TEXT.idle : TEXT.idleNoMic);
   const status = $derived(recorder.recordOnly ? (recorder.recording ? fill(R.recording, { time: clock(recorder.elapsed / MS_PER_SECOND) }) : R.idle) : scribeStatus);
@@ -61,7 +61,8 @@
   });
   const recordProblem = $derived(recorder.problem ? fill(R.problems[recorder.problem], { detail: recorder.detail }) : '');
   const problem = $derived.by(() => {
-    if (recorder.recordOnly && recordProblem) return recordProblem;
+    // Ticket-writing errors don't apply while just recording.
+    if (recorder.recordOnly) return recordProblem;
     if (!scribe.problem) return '';
     if (scribe.problem === 'model' && !scribe.ready) return TEXT.problems['model-setup'];
     if (scribe.problem === 'model' && scribe.detail === 'timeout') return TEXT.problems.timeout;
@@ -109,7 +110,7 @@
     <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line short:hidden" aria-hidden="true"></div>
     <button class="spring press relative flex size-20 shrink-0 items-center justify-center border-2 short:size-12 tv:size-28 {active ? 'border-accent bg-accent text-accent-ink' : 'border-line-strong bg-surface text-ink hover:border-accent hover:text-accent'} disabled:opacity-40"
       aria-label={recorder.recordOnly ? (active ? R.stop : R.start) : active ? TEXT.stop : TEXT.start} aria-pressed={active}
-      disabled={!recorder.recordOnly && !scribe.engine} onclick={() => (recorder.recordOnly ? recorder.toggle() : scribe.toggle())}>
+      disabled={recorder.recordOnly ? recorder.starting : !scribe.engine} onclick={() => (recorder.recordOnly ? recorder.toggle() : scribe.toggle())}>
       {#if active}
         <span class="live-dot pointer-events-none absolute inset-0 border border-accent" aria-hidden="true"></span>
         <span in:scale={POP}><Square class="size-7 short:size-5 tv:size-10" /></span>
@@ -173,7 +174,7 @@
   {#if problem}
     <div class="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-accent bg-accent-soft px-3 py-2 text-center text-fluid-sm text-ink" role="alert" transition:fade={{ duration: 150 }}>
       <span>{problem}{blocked ? ` ${TEXT.problems.cors}` : ''}</span>
-      {#if !(recorder.recordOnly && recordProblem) && scribe.problem === 'model' && scribe.ready}<button class={SMALL_BUTTON} onclick={() => scribe.retry()}><RotateCcw class="size-3.5" />{TEXT.retry}</button>{/if}
+      {#if !recorder.recordOnly && scribe.problem === 'model' && scribe.ready}<button class={SMALL_BUTTON} onclick={() => scribe.retry()}><RotateCcw class="size-3.5" />{TEXT.retry}</button>{/if}
     </div>
   {/if}
 

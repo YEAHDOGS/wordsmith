@@ -30,6 +30,7 @@
   import CALENDAR_TEXT from './calendar.json';
   import { scribe } from '../lib/scribe.svelte.js';
   import { recorder } from '../lib/recorder.svelte.js';
+  import { tapeImport } from '../lib/tapes.svelte.js';
   import { clock } from '../lib/time.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
@@ -58,14 +59,20 @@
   // Signing out unmounts the shell: the microphone goes off with it.
   // The Scribe session and all it heard belong to one account. They go when the Shell does (sign-out, session ended),
   // and also when the account changes under a Shell that stays (another tab signed in as someone else).
+  // The tape queue follows the account too: another account's uploads go, and this one's unsent recordings come back.
   $effect.pre(() => {
     const userId = auth.user?.id;
-    untrack(() => scribe.claim(userId));
+    untrack(() => {
+      scribe.claim(userId);
+      tapeImport.claim(userId);
+    });
   });
-  // A recording in progress is saved rather than left with the microphone on.
+  // A recording in progress is stopped and kept on the device for its account (it uploads when they sign back in),
+  // rather than left with the microphone on; the queue lets go of the account that left.
   onDestroy(() => {
     scribe.reset();
     recorder.stop();
+    tapeImport.claim('');
   });
 
   let projectTab = $state('board');

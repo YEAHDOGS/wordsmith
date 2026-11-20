@@ -3,14 +3,20 @@
 // upload it (POST /api/tapes), which creates the tape. The server knows every file by its hash too, so importing the
 // same folder again, after a crash or on another device, only adds what's new: that's how an import resumes.
 // The queue lives here, outside the page, so leaving the Tapes page doesn't stop it. Recordings made in the app
-// (src/lib/recorder.svelte.js) join the same queue already encoded, so they upload as they are.
+// (src/lib/recorder.svelte.js) join the same queue, usually already encoded so they upload as they are, and are kept
+// on the device (pending-recordings.js) until they do. Every item belongs to the account that queued it: claim()
+// drops another account's items when the user changes, and brings back this account's recordings still waiting.
 import { ApiError, uploadFile } from './api.js';
-import { NATIVE_ENCODER, encodeTape, tooLarge } from './tape-encode.js';
+import { forgetRecording, keepRecording, waitingRecordings } from './pending-recordings.js';
 import { store } from './store.svelte.js';
 import { TAPE_EXISTS, TAPE_LIMIT, TAPE_STORAGE, audioType } from './models.js';
 
+// The encoders load on first use, keeping them out of the start-up bundle (the queue itself loads with the app, to
+// bring back unsent recordings).
+const encoding = () => import('./tape-encode.js');
 // The desktop encoder runs on its own threads, so two files encode while others upload; a phone does one at a time.
-const WORKERS = NATIVE_ENCODER ? 2 : 1;
+const NATIVE_WORKERS = 2;
+const WEB_WORKERS = 1;
 const RATE_LIMITED = 429;
 const STORAGE_FULL = 507;
 // Errors that stop the whole queue: nothing after them would get in either.
@@ -29,7 +35,8 @@ const HEX_PAIR = 2;
 const KEEP_DONE = 20;
 
 /** @typedef {'waiting' | 'reading' | 'encoding' | 'uploading' | 'done' | 'skipped' | 'failed'} ItemStatus */
-/** @typedef {{ id: string, name: string, status: ItemStatus, progress: number, error: string }} QueueItem */
+/** @typedef {{ id: string, name: string, status: ItemStatus, progress: number, error: string, userId: string, recording: boolean }} QueueItem */
+/** @typedef {{ durationMs: number, encoded: boolean }} RecordingInfo how long a recording plays, and whether it is already a tape */
 
 /** SHA-256 of a file's bytes, hex. @param {ArrayBuffer} bytes */
 async function sha256(bytes) {
@@ -66,8 +73,17 @@ class TapeImport {
   /** The originals by tape id, for this session: transcription reads them rather than the smaller copy. */
   originals = new Map();
   /** @type {Map<string, File>} */ #files = new Map();
-  /** Queue ids of recordings already encoded as tapes, with how long each plays. @type {Map<string, number>} */ #encoded = new Map();
+  /** Recordings made in the app, by queue id (the same id they wait under on the device). @type {Map<string, RecordingInfo>} */ #recordings = new Map();
   #workers = 0;
+  /** The signed-in account the queue works for. */
+  #userId = '';
+  /** Recordings still being written to the device: closing the tab now could lose them. */
+  persisting = $state(0);
+
+  /** Who the queue works for, so a recording can be tagged with the account that made it. */
+  get userId() {
+    return this.#userId;
+  }
 
   /** Something is being worked on, or waits and will be: a queue stopped early is idle, so Retry shows. */
   get active() {
@@ -88,23 +104,59 @@ class TapeImport {
       known.add(key);
       const id = crypto.randomUUID();
       this.#files.set(id, file);
-      this.items.push({ id, name: file.name, status: 'waiting', progress: 0, error: '' });
+      this.items.push({ id, name: file.name, status: 'waiting', progress: 0, error: '', userId: this.#userId, recording: false });
     }
-    while (this.#workers < WORKERS) this.#work();
+    this.#spawn();
   }
 
   /**
-   * Queues a recording made in the app that is already a tape (Opus in Ogg): it uploads without being encoded again.
-   * @param {File} file @param {number} durationMs @returns {string} its queue id, to follow it as it saves
+   * Queues a recording made in the app and keeps it on the device until it uploads. An encoded one (Opus in Ogg)
+   * uploads as it is; a MediaRecorder one is shrunk like an import. One made by an account that is no longer signed in
+   * (stopped at sign-out) is only kept, and goes up when that account signs back in.
+   * @param {File} file @param {RecordingInfo & { userId: string }} info @returns {string} its queue id, to follow it as it saves
    */
-  addRecording(file, durationMs) {
-    this.#newBatch();
+  addRecording(file, { durationMs, encoded, userId }) {
     const id = crypto.randomUUID();
-    this.#files.set(id, file);
-    this.#encoded.set(id, durationMs);
-    this.items.push({ id, name: file.name, status: 'waiting', progress: 0, error: '' });
-    while (this.#workers < WORKERS) this.#work();
+    this.persisting++;
+    keepRecording({ id, userId, name: file.name, type: file.type, lastModified: file.lastModified, durationMs, encoded, blob: file })
+      .catch(() => {})
+      .finally(() => this.persisting--);
+    if (userId === this.#userId) this.#queueRecording(id, file, { durationMs, encoded });
     return id;
+  }
+
+  /**
+   * Works for another account (or none): its queue goes, and this account's recordings still waiting on the device come
+   * back and upload. Imports from another account are dropped; their originals are still on disk.
+   * @param {string | undefined} userId
+   */
+  async claim(userId = '') {
+    if (userId === this.#userId) return;
+    this.#userId = userId;
+    for (const item of this.items) {
+      this.#files.delete(item.id);
+      this.#recordings.delete(item.id);
+    }
+    this.items = [];
+    Object.assign(this, { done: 0, skipped: 0, failed: 0, sourceBytes: 0, storedBytes: 0, stopped: '' });
+    if (!userId) return;
+    const waiting = await waitingRecordings(userId).catch(() => []);
+    // Signed in as someone else again while reading: their claim wins.
+    if (this.#userId !== userId) return;
+    for (const recording of waiting) {
+      if (this.#files.has(recording.id)) continue;
+      const file = new File([recording.blob], recording.name, { type: recording.type, lastModified: recording.lastModified });
+      this.#queueRecording(recording.id, file, recording);
+    }
+  }
+
+  /** @param {string} id @param {File} file @param {RecordingInfo} info */
+  #queueRecording(id, file, { durationMs, encoded }) {
+    this.#newBatch();
+    this.#files.set(id, file);
+    this.#recordings.set(id, { durationMs, encoded });
+    this.items.push({ id, name: file.name, status: 'waiting', progress: 0, error: '', userId: this.#userId, recording: true });
+    this.#spawn();
   }
 
   /** Puts failed files back in the queue. */
@@ -112,16 +164,14 @@ class TapeImport {
     for (const item of this.items) if (item.status === 'failed') Object.assign(item, { status: 'waiting', error: '', progress: 0 });
     this.failed = 0;
     this.stopped = '';
-    while (this.#workers < WORKERS) this.#work();
+    this.#spawn();
   }
 
   /** Drops what hasn't started yet. */
   cancel() {
-    for (const item of this.items.filter((entry) => entry.status === 'waiting')) {
-      this.#files.delete(item.id);
-      this.#encoded.delete(item.id);
-    }
-    this.items = this.items.filter((item) => item.status !== 'waiting');
+    // Recordings stay: they are kept on the device and have no other copy, so only imports are dropped.
+    for (const item of this.items.filter((entry) => entry.status === 'waiting' && !entry.recording)) this.#files.delete(item.id);
+    this.items = this.items.filter((item) => item.status !== 'waiting' || item.recording);
   }
 
   /** A new batch starts its counts over, but files that failed stay listed and counted, so Retry still reaches them. */
@@ -129,6 +179,13 @@ class TapeImport {
     if (this.active) return;
     const failed = this.items.filter((item) => item.status === 'failed').length;
     Object.assign(this, { done: 0, skipped: 0, failed, sourceBytes: 0, storedBytes: 0, stopped: '' });
+  }
+
+  /** Starts workers up to what this device runs at once. */
+  async #spawn() {
+    const { NATIVE_ENCODER } = await encoding();
+    // #work counts itself in before its first await, so this stops at the limit.
+    while (this.#workers < (NATIVE_ENCODER ? NATIVE_WORKERS : WEB_WORKERS)) this.#work();
   }
 
   async #work() {
@@ -148,8 +205,10 @@ class TapeImport {
   /** @param {QueueItem} item */
   async #importOne(item) {
     const file = this.#files.get(item.id);
-    if (!file) return;
+    // Only the account that queued it uploads it (claim() clears the rest; this guards a worker mid-loop).
+    if (!file || item.userId !== this.#userId) return;
     try {
+      const { encodeTape, tooLarge } = await encoding();
       const refusal = tooLarge(file);
       if (refusal) throw new Error(refusal);
       item.status = 'reading';
@@ -162,9 +221,11 @@ class TapeImport {
         return;
       }
       if (!navigator.onLine) throw new Error(OFFLINE);
-      const recorded = this.#encoded.get(item.id);
+      const recording = this.#recordings.get(item.id);
       item.status = 'encoding';
-      const tape = recorded === undefined ? await encodeTape(file, bytes) : { file, durationMs: recorded, encoded: true };
+      const tape = recording?.encoded ? { file, durationMs: recording.durationMs, encoded: true } : await encodeTape(file, bytes);
+      // A MediaRecorder file often can't say how long it plays; the recorder timed it.
+      if (!tape.durationMs && recording) tape.durationMs = recording.durationMs;
       item.status = 'uploading';
       const meta = { id: crypto.randomUUID(), name: file.name, hash, size: file.size, recorded_at: recordedAt(file), duration_ms: tape.durationMs };
       const answer = await uploadFile('/api/tapes', tape.file, (fraction) => (item.progress = fraction), { 'X-Tape': encodeURIComponent(JSON.stringify(meta)) });
@@ -194,7 +255,8 @@ class TapeImport {
     item.progress = 1;
     this[status]++;
     this.#files.delete(item.id);
-    this.#encoded.delete(item.id);
+    // A recording is on the server now: the device copy can go.
+    if (this.#recordings.delete(item.id)) forgetRecording(item.id).catch(() => {});
     // Keep the list short: finished items past the last few are only counted.
     const finished = this.items.filter((entry) => entry.status === 'done' || entry.status === 'skipped');
     if (finished.length > KEEP_DONE) {

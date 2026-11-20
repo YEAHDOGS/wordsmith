@@ -97,7 +97,7 @@
     "saving": "Saving to Tapes…",
     "uploading": "Uploading to Tapes, {percent}%",
     "saved": "Saved to Tapes",
-    "failed": "Couldn't save: {error}",
+    "failed": "Not uploaded yet, kept on this device: {error}",
     "transcriptEmpty": "Just recording: no transcript, no tickets.",
     "pill": "Recording to Tapes. Open Scribe",
     "problems": {
