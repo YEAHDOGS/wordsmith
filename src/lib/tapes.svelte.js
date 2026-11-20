@@ -2,7 +2,8 @@
 // through a queue: read the file, hash it, skip it if that file is already a tape, shrink it (tape-encode.js), and
 // upload it (POST /api/tapes), which creates the tape. The server knows every file by its hash too, so importing the
 // same folder again, after a crash or on another device, only adds what's new: that's how an import resumes.
-// The queue lives here, outside the page, so leaving the Tapes page doesn't stop it.
+// The queue lives here, outside the page, so leaving the Tapes page doesn't stop it. Recordings made in the app
+// (src/lib/recorder.svelte.js) join the same queue already encoded, so they upload as they are.
 import { ApiError, uploadFile } from './api.js';
 import { NATIVE_ENCODER, encodeTape, tooLarge } from './tape-encode.js';
 import { store } from './store.svelte.js';
@@ -65,6 +66,7 @@ class TapeImport {
   /** The originals by tape id, for this session: transcription reads them rather than the smaller copy. */
   originals = new Map();
   /** @type {Map<string, File>} */ #files = new Map();
+  /** Queue ids of recordings already encoded as tapes, with how long each plays. @type {Map<string, number>} */ #encoded = new Map();
   #workers = 0;
 
   /** Something is being worked on, or waits and will be: a queue stopped early is idle, so Retry shows. */
@@ -78,11 +80,7 @@ class TapeImport {
 
   /** Queues recordings (anything that isn't audio is left out) and starts working. @param {File[]} files */
   add(files) {
-    // A new batch starts its counts over, but files that failed stay listed and counted, so Retry still reaches them.
-    if (!this.active) {
-      const failed = this.items.filter((item) => item.status === 'failed').length;
-      Object.assign(this, { done: 0, skipped: 0, failed, sourceBytes: 0, storedBytes: 0, stopped: '' });
-    }
+    this.#newBatch();
     const known = new Set([...this.#files.values()].map((file) => `${file.name}:${file.size}:${file.lastModified}`));
     for (const file of files.filter(isRecording)) {
       const key = `${file.name}:${file.size}:${file.lastModified}`;
@@ -95,6 +93,20 @@ class TapeImport {
     while (this.#workers < WORKERS) this.#work();
   }
 
+  /**
+   * Queues a recording made in the app that is already a tape (Opus in Ogg): it uploads without being encoded again.
+   * @param {File} file @param {number} durationMs @returns {string} its queue id, to follow it as it saves
+   */
+  addRecording(file, durationMs) {
+    this.#newBatch();
+    const id = crypto.randomUUID();
+    this.#files.set(id, file);
+    this.#encoded.set(id, durationMs);
+    this.items.push({ id, name: file.name, status: 'waiting', progress: 0, error: '' });
+    while (this.#workers < WORKERS) this.#work();
+    return id;
+  }
+
   /** Puts failed files back in the queue. */
   retry() {
     for (const item of this.items) if (item.status === 'failed') Object.assign(item, { status: 'waiting', error: '', progress: 0 });
@@ -105,8 +117,18 @@ class TapeImport {
 
   /** Drops what hasn't started yet. */
   cancel() {
-    for (const item of this.items.filter((entry) => entry.status === 'waiting')) this.#files.delete(item.id);
+    for (const item of this.items.filter((entry) => entry.status === 'waiting')) {
+      this.#files.delete(item.id);
+      this.#encoded.delete(item.id);
+    }
     this.items = this.items.filter((item) => item.status !== 'waiting');
+  }
+
+  /** A new batch starts its counts over, but files that failed stay listed and counted, so Retry still reaches them. */
+  #newBatch() {
+    if (this.active) return;
+    const failed = this.items.filter((item) => item.status === 'failed').length;
+    Object.assign(this, { done: 0, skipped: 0, failed, sourceBytes: 0, storedBytes: 0, stopped: '' });
   }
 
   async #work() {
@@ -140,8 +162,9 @@ class TapeImport {
         return;
       }
       if (!navigator.onLine) throw new Error(OFFLINE);
+      const recorded = this.#encoded.get(item.id);
       item.status = 'encoding';
-      const tape = await encodeTape(file, bytes);
+      const tape = recorded === undefined ? await encodeTape(file, bytes) : { file, durationMs: recorded, encoded: true };
       item.status = 'uploading';
       const meta = { id: crypto.randomUUID(), name: file.name, hash, size: file.size, recorded_at: recordedAt(file), duration_ms: tape.durationMs };
       const answer = await uploadFile('/api/tapes', tape.file, (fraction) => (item.progress = fraction), { 'X-Tape': encodeURIComponent(JSON.stringify(meta)) });
@@ -171,6 +194,7 @@ class TapeImport {
     item.progress = 1;
     this[status]++;
     this.#files.delete(item.id);
+    this.#encoded.delete(item.id);
     // Keep the list short: finished items past the last few are only counted.
     const finished = this.items.filter((entry) => entry.status === 'done' || entry.status === 'skipped');
     if (finished.length > KEEP_DONE) {

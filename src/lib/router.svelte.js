@@ -1,4 +1,4 @@
-// Hash router. Routes: #/attention (Needs you), #/notes, #/features, #/calendar, #/design and #/design/<design id>, #/scribe, #/tapes, #/project/<id>, #/label/<id>, #/archive, #/trash, #/settings, and the board
+// Hash router. Routes: #/attention (Needs you), #/notes, #/features, #/calendar, #/design and #/design/<design id>, #/scribe and #/tapes (two sides of one page), #/project/<id>, #/label/<id>, #/archive, #/trash, #/settings, and the board
 // settings pages #/features-settings and #/project-settings/<id>.
 // An open note adds ?note=<id>, so the back button and mobile back-swipe close it.
 import { NEEDS_YOU_ENABLED } from './models.js';

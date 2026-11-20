@@ -24,11 +24,13 @@
   import Attention from './Attention.svelte';
   import LazyPage from './LazyPage.svelte';
   import DESIGN_TEXT from './design.json';
-  import Scribe from './Scribe.svelte';
+  import ScribeTapes from './ScribeTapes.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
   import CALENDAR_TEXT from './calendar.json';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { recorder } from '../lib/recorder.svelte.js';
+  import { clock } from '../lib/time.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
@@ -43,14 +45,15 @@
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
   const loadDesign = () => import('./Design.svelte');
-  // Tapes (player, importer, encoders) load on first visit too.
-  const loadTapes = () => import('./Tapes.svelte');
   // So does the ticket calendar.
   const loadCalendar = () => import('./Calendar.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
   const PILL = { start: 0.6, duration: 200, easing: backOut };
+  const MS_PER_SECOND = 1_000;
+  // Scribe and Tapes are one page with a switch (ScribeTapes.svelte): flipping it keeps the page instead of replacing it.
+  const ONE_PAGE = { tapes: 'scribe' };
 
   // Signing out unmounts the shell: the microphone goes off with it.
   // The Scribe session and all it heard belong to one account. They go when the Shell does (sign-out, session ended),
@@ -59,11 +62,15 @@
     const userId = auth.user?.id;
     untrack(() => scribe.claim(userId));
   });
-  onDestroy(() => scribe.reset());
+  // A recording in progress is saved rather than left with the microphone on.
+  onDestroy(() => {
+    scribe.reset();
+    recorder.stop();
+  });
 
   let projectTab = $state('board');
   const route = $derived(router.route);
-  const pageKey = $derived(route.id ? `${route.view}/${route.id}` : route.view);
+  const pageKey = $derived(route.id ? `${route.view}/${route.id}` : ONE_PAGE[/** @type {keyof typeof ONE_PAGE} */ (route.view)] ?? route.view);
   const live = $derived(store.notes.filter((note) => !note.deleted_at));
   const project = $derived(route.view === 'project' || route.view === 'project-settings' ? store.find('projects', route.id) : null);
   const label = $derived(route.view === 'label' ? store.find('labels', route.id) : null);
@@ -193,10 +200,8 @@
           {:else if route.view === 'design'}
             <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
             <LazyPage load={loadDesign} id={route.id} />
-          {:else if route.view === 'scribe'}
-            <Scribe />
-          {:else if route.view === 'tapes'}
-            <LazyPage load={loadTapes} />
+          {:else if route.view === 'scribe' || route.view === 'tapes'}
+            <ScribeTapes mode={route.view} />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}
@@ -271,6 +276,16 @@
         {/if}
       </span>
       {#if scribe.made}<span class="shrink-0 font-mono text-complete">{scribe.made}</span>{/if}
+    </button>
+  {/if}
+
+  <!-- The recorder keeps going too: same corner, leading back to Scribe -->
+  {#if recorder.recording && route.view !== 'scribe' && route.view !== 'tapes'}
+    <button class="spring press fixed top-14 right-2 z-30 flex items-center gap-2 border border-accent bg-accent-soft px-2.5 py-1.5 text-xs text-ink sm:top-16 sm:right-4 tv:top-24 tv:text-lg"
+      aria-label={SCRIBE_TEXT.recorder.pill} title={SCRIBE_TEXT.recorder.pill} onclick={() => router.go('scribe')} transition:scale={PILL}>
+      <span class="live-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true"></span>
+      <span>{SCRIBE_TEXT.recorder.recordingShort}</span>
+      <span class="font-mono tabular-nums">{clock(recorder.elapsed / MS_PER_SECOND)}</span>
     </button>
   {/if}
 

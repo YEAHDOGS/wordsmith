@@ -78,5 +78,33 @@
   },
   "made": "{count} tickets written this session",
   "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
-  "cloudOffline": "Could not reach wordsmith cloud to check your allowance."
+  "cloudOffline": "Could not reach wordsmith cloud to check your allowance.",
+  "sides": "Scribe or Tapes",
+  "recorder": {
+    "modeLabel": "What the mic does",
+    "modes": {
+      "tickets": "Write tickets",
+      "record": "Just record"
+    },
+    "locked": "Stop the mic to switch",
+    "start": "Start recording",
+    "stop": "Stop recording",
+    "idle": "Press to record. It goes straight to Tapes, with nothing transcribed and no tickets written.",
+    "recording": "Recording to Tapes",
+    "recordingShort": "Recording",
+    "back": "Recording. Open Scribe",
+    "hint": "Saved to Tapes when you stop, about 11 MB an hour.",
+    "saving": "Saving to Tapes…",
+    "uploading": "Uploading to Tapes, {percent}%",
+    "saved": "Saved to Tapes",
+    "failed": "Couldn't save: {error} It waits in Tapes to retry.",
+    "open": "Tapes",
+    "transcriptEmpty": "Just recording: nothing is transcribed and no tickets are written. Switch to Write tickets to talk tickets into being.",
+    "pill": "Recording to Tapes. Open Scribe",
+    "problems": {
+      "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press record again.",
+      "mic": "The microphone couldn't start ({detail}). Press record to try again.",
+      "save": "The recording couldn't be saved ({detail})."
+    }
+  }
 }
