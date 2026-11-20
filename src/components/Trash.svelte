@@ -20,6 +20,7 @@
   import { fullTime } from '../lib/time.js';
   import { idsByTable, restoreBlocker, trashItems } from './trash.js';
   import TEXT from './trash.json';
+  import { fill } from '../lib/fill.js';
 
   const CONTENT = 'mx-auto w-full max-w-7xl ultrawide:max-w-none';
   const ICONS = { notes: FileText, projects: Folder, labels: Tag };
@@ -52,8 +53,6 @@
     return () => clearInterval(timer);
   });
 
-  /** @param {string} text @param {Record<string, string | number>} values */
-  const fill = (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
 
   /** @param {import('./trash.js').TrashItem} item */
   function restore(item) {

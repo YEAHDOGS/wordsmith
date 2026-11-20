@@ -21,6 +21,7 @@
   import { DOT_TEXT, TINT_BG } from '../lib/colors.js';
   import { SNOOZES, answer, needsYou } from './attention.js';
   import TEXT from './attention.json';
+  import { fill } from '../lib/fill.js';
 
   const CONTENT = 'mx-auto flex min-h-full w-full max-w-3xl flex-col gap-3 px-2 py-3 sm:px-4 sm:py-6 tv:max-w-5xl';
   const ACTION_BASE = 'spring press inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 border px-3 text-sm font-medium disabled:opacity-40 sm:flex-none tv:min-h-16 tv:text-xl';
@@ -57,8 +58,6 @@
     return () => clearInterval(timer);
   });
 
-  /** @param {string} text @param {Record<string, string | number>} values */
-  const fill = (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
 
   /** Steps to another card. @param {number} step */
   function go(step) {

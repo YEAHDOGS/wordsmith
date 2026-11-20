@@ -26,7 +26,7 @@ export function firstWeekday() {
     const info = locale.getWeekInfo?.() ?? locale.weekInfo;
     return (info?.firstDay ?? SUNDAY) % DAYS_PER_WEEK;
   } catch {
-    return 0;
+    return SUNDAY % DAYS_PER_WEEK;
   }
 }
 

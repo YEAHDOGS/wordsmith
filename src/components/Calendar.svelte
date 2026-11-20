@@ -2,7 +2,8 @@
   // The ticket calendar: a month of days, each holding the tickets that moved on it (created, started, completed,
   // a PR merged; calendar.js). Pick a day to list its moments; a moment opens its ticket. Months change with the
   // arrows, Page Up/Down, a sideways swipe or drag, or the scroll wheel, and slide in from the side they come from.
-  // Portrait screens stack the month above the day's list; landscape and short screens put the list beside it.
+  // Portrait screens stack the month above the day's list (short ones with a shorter month); landscape and squat
+  // windows (src/styles/theme.css) put the list beside it.
   // The grid is always six weeks and never scrolls; only the day's list does.
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
@@ -19,6 +20,7 @@
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG, STATE_STYLE } from '../lib/colors.js';
   import { clockTime } from '../lib/time.js';
+  import { fill } from '../lib/fill.js';
   import { EVENT_KINDS, dayKey, firstWeekday, monthDays, shiftDay, ticketDays, weekdayNames } from './calendar.js';
   import TEXT from './calendar.json';
 
@@ -42,11 +44,15 @@
   // Wheel travel that turns one month, and the quiet time after a turn before the wheel can turn another.
   const WHEEL_STEP = 60;
   const WHEEL_REST_MS = 400;
+  // Wheel deltas in lines (deltaMode 1, Firefox: a notch is 3 lines) and pages (deltaMode 2), as pixels.
+  const LINE_PX = 16;
+  const PAGE_PX = 400;
   const SLIDE_PERCENT = 30;
   const MONTH_IN_MS = 260;
   const MONTH_OUT_MS = 160;
   const LABEL_SHIFT_PX = 8;
   const ROW_IN_MS = 200;
+  const ROW_RISE_PX = 6;
   const ROW_STAGGER_MS = 30;
   const MAX_STAGGER_MS = 300;
   const MAX_CHIPS = 2;
@@ -83,8 +89,6 @@
   const selectedEvents = $derived(shown(selected));
   const monthCount = $derived(cells.reduce((sum, cell) => sum + (cell.inMonth ? shown(cell.key).length : 0), 0));
 
-  /** @param {string} text @param {Record<string, string | number>} values */
-  const fill = (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
   /** A ticket's name: its title, or the first line of its body. @param {any} note */
   const titleOf = (note) => (note.title || note.body || '').trim().split('\n')[0];
   /** @param {number} ms */
@@ -124,20 +128,30 @@
     select(dayKey(hasToday ? todayDate : target));
   }
 
-  /** Arrows walk the days, Page Up/Down jump a month to the same date (or the month's last day). @param {KeyboardEvent} event */
+  /** On a day, the arrows walk the days. @param {KeyboardEvent} event */
   function onkeydown(event) {
     const step = KEY_STEPS[event.key];
-    if (step) {
-      event.preventDefault();
-      select(shiftDay(selected, step), true);
-      return;
-    }
+    if (!step) return;
+    event.preventDefault();
+    select(shiftDay(selected, step), true);
+  }
+
+  /** Anywhere on the page, Page Up/Down jump a month to the same date (or the month's last day). @param {KeyboardEvent} event */
+  function onpagekey(event) {
     if (event.key !== 'PageUp' && event.key !== 'PageDown') return;
     event.preventDefault();
     const by = event.key === 'PageDown' ? 1 : -1;
     const date = selectedDate;
     const lastDay = new Date(date.getFullYear(), date.getMonth() + by + 1, 0).getDate();
-    select(dayKey(new Date(date.getFullYear(), date.getMonth() + by, Math.min(date.getDate(), lastDay))), true);
+    // Focus follows only when it was already on a day; from Today, a filter or the list it stays put.
+    const onDay = /** @type {HTMLElement} */ (event.target).closest?.('[data-day]');
+    select(dayKey(new Date(date.getFullYear(), date.getMonth() + by, Math.min(date.getDate(), lastDay))), Boolean(onDay));
+  }
+
+  /** Page Up/Down for the whole calendar, the day list included. @param {HTMLElement} node */
+  function pageKeys(node) {
+    node.addEventListener('keydown', onpagekey);
+    return () => node.removeEventListener('keydown', onpagekey);
   }
 
   /** @type {{ x: number, y: number } | null} */
@@ -171,6 +185,7 @@
 
   let wheelTravel = 0;
   let wheelRestUntil = 0;
+  let lastWheel = 0;
   /** One month per wheel gesture, either axis: a fling's tail keeps the rest going instead of turning again. @param {WheelEvent} event */
   function onwheel(event) {
     if (event.ctrlKey) return;
@@ -178,7 +193,12 @@
       wheelRestUntil = event.timeStamp + WHEEL_REST_MS;
       return;
     }
-    wheelTravel += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    const scale = event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? PAGE_PX : 1;
+    const delta = (Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY) * scale;
+    // A new gesture, or a turn the other way, starts a fresh count.
+    if (event.timeStamp - lastWheel > WHEEL_REST_MS || Math.sign(delta) !== Math.sign(wheelTravel)) wheelTravel = 0;
+    lastWheel = event.timeStamp;
+    wheelTravel += delta;
     if (Math.abs(wheelTravel) < WHEEL_STEP) return;
     turn(Math.sign(wheelTravel));
     wheelTravel = 0;
@@ -209,8 +229,8 @@
   });
 </script>
 
-<div class="{CONTENT} flex min-h-0 flex-1 flex-col landscape:flex-row short:flex-row">
-  <section class="flex h-[min(58dvh,38rem)] shrink-0 flex-col landscape:h-auto landscape:min-w-0 landscape:flex-1 short:h-auto short:min-w-0 short:flex-1" aria-labelledby="calendar-month">
+<div class="{CONTENT} flex min-h-0 flex-1 flex-col landscape:flex-row squat:flex-row" {@attach pageKeys}>
+  <section class="flex h-[min(58dvh,38rem)] shrink-0 flex-col landscape:h-auto landscape:min-w-0 landscape:flex-1 short:h-[48dvh] squat:h-auto squat:min-w-0 squat:flex-1" aria-labelledby="calendar-month">
     <div class="@container/controls flex shrink-0 items-center gap-1 border-b border-line px-1 py-1 sm:px-3 tv:py-3">
       <button class={NAV_BUTTON} aria-label={TEXT.previous} title={TEXT.previous} onclick={() => turn(-1)}><ChevronLeft class="size-4 tv:size-6" /></button>
       <!-- One grid cell: the leaving month's name slides out under the arriving one -->
@@ -247,8 +267,8 @@
             <button data-day={cell.key} tabindex={isSelected ? 0 : -1} onclick={() => select(cell.key)} {onkeydown}
               class="spring relative flex min-h-0 min-w-0 flex-col gap-0.5 overflow-hidden p-1 text-left focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:p-1.5 tv:gap-1 tv:p-3
                 {isSelected ? 'bg-accent-soft' : cell.inMonth ? 'bg-surface hover:bg-surface-raised' : 'bg-app hover:bg-surface-raised'} {cell.inMonth ? 'text-ink' : 'text-ink-faint'}"
-              aria-label="{DAY_FORMAT.format(cell.date)}, {events.length === 1 ? TEXT.dayEvent : fill(TEXT.dayEvents, { n: events.length })}"
-              aria-pressed={isSelected} aria-current={isToday ? 'date' : undefined}>
+              aria-label="{DAY_FORMAT.format(cell.date)}, {events.length === 1 ? TEXT.dayEvent : fill(TEXT.dayEvents, { n: events.length })}{isSelected ? `, ${TEXT.selected}` : ''}"
+              aria-current={isToday ? 'date' : undefined}>
               <span class="flex items-center justify-between gap-1">
                 <span class="spring flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-xs tabular-nums sm:size-6 tv:size-10 tv:text-lg
                   {isToday ? 'bg-accent text-accent-ink' : ''} {isSelected && !isToday ? 'scale-110 text-accent' : ''}">{cell.day}</span>
@@ -272,7 +292,7 @@
     </div>
   </section>
 
-  <aside class="flex min-h-0 flex-1 flex-col border-t border-line landscape:w-2/5 landscape:max-w-80 landscape:flex-none landscape:border-t-0 landscape:border-l short:w-2/5 short:max-w-80 short:flex-none short:border-t-0 short:border-l tv:max-w-[32rem] ultrawide:max-w-[40rem]"
+  <aside class="flex min-h-0 flex-1 flex-col border-t border-line landscape:w-2/5 landscape:max-w-80 landscape:flex-none landscape:border-t-0 landscape:border-l squat:w-2/5 squat:max-w-80 squat:flex-none squat:border-t-0 squat:border-l tv:max-w-[32rem] ultrawide:max-w-[40rem]"
     aria-label={fill(TEXT.dayList, { day: DAY_FORMAT.format(selectedDate) })}>
     <div class="shrink-0 border-b border-line px-3 py-2 sm:px-4 tv:py-4">
       <div class="grid overflow-hidden">
@@ -287,7 +307,7 @@
           {@const entry = kindOf(kind)}
           {@const on = !hidden.has(kind)}
           <button class="{KIND_BUTTON} {on ? `${entry.style.border} ${entry.style.soft} ${entry.style.text}` : 'border-line text-ink-faint hover:text-ink'}"
-            aria-pressed={on} title={fill(TEXT.show, { kind: TEXT.kinds[/** @type {keyof typeof TEXT.kinds} */ (kind)] })}
+            aria-pressed={on} title={fill(on ? TEXT.hide : TEXT.show, { kind: TEXT.kinds[/** @type {keyof typeof TEXT.kinds} */ (kind)] })}
             onclick={() => (on ? hidden.add(kind) : hidden.delete(kind))}>
             <entry.icon class="size-3 shrink-0 tv:size-4" />
             <span class="short:sr-only">{TEXT.kinds[/** @type {keyof typeof TEXT.kinds} */ (kind)]}</span>
@@ -301,14 +321,14 @@
         {#if !notes.length}
           <p class="px-4 py-10 text-center text-sm text-ink-faint tv:text-xl" in:fade={{ duration: motion(ROW_IN_MS) }}>{ui.query ? TEXT.noMatches : TEXT.noTickets}</p>
         {:else if !selectedEvents.length}
-          <p class="px-4 py-10 text-center text-sm text-ink-faint tv:text-xl" in:fade={{ duration: motion(ROW_IN_MS) }}>{TEXT.nothing}</p>
+          <p class="px-4 py-10 text-center text-sm text-ink-faint tv:text-xl" in:fade={{ duration: motion(ROW_IN_MS) }}>{days.get(selected)?.length ? TEXT.allHidden : TEXT.nothing}</p>
         {:else}
           <ul>
             {#each selectedEvents as event, index (index)}
               {@const entry = kindOf(event.kind)}
               {@const project = event.note.project_id ? store.find('projects', event.note.project_id) : null}
               {@const title = titleOf(event.note)}
-              <li in:fly={{ y: 6, duration: motion(ROW_IN_MS), delay: motion(Math.min(index * ROW_STAGGER_MS, MAX_STAGGER_MS)), easing: quintOut }}>
+              <li in:fly={{ y: ROW_RISE_PX, duration: motion(ROW_IN_MS), delay: motion(Math.min(index * ROW_STAGGER_MS, MAX_STAGGER_MS)), easing: quintOut }}>
                 <button class="spring flex w-full min-w-0 items-start gap-2.5 border-b border-line px-3 py-2.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:px-4 tv:gap-4 tv:py-4"
                   onclick={() => router.openNote(event.note.id)}>
                   <entry.icon class="mt-0.5 size-4 shrink-0 {entry.style.text} tv:size-6" />
