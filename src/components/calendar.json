@@ -1,0 +1,20 @@
+{
+  "title": "Calendar",
+  "subtitle": "Every ticket, on the days it moved",
+  "previous": "Previous month",
+  "next": "Next month",
+  "today": "Today",
+  "kinds": { "created": "Created", "started": "Started", "completed": "Completed", "merged": "PR merged" },
+  "show": "Show {kind}",
+  "filters": "Which moments to show",
+  "nothing": "Nothing moved on this day.",
+  "noTickets": "No tickets yet. Capture one and it shows up here on the day you made it.",
+  "noMatches": "No tickets match your search.",
+  "more": "+{n} more",
+  "dayEvents": "{n} moments",
+  "dayEvent": "1 moment",
+  "monthTotals": "{n} this month",
+  "untitled": "Untitled",
+  "gridLabel": "{month}. Arrow keys move between days, Page Up and Page Down change months.",
+  "dayList": "What happened on {day}"
+}

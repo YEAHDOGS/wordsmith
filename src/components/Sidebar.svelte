@@ -6,6 +6,7 @@
   // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
+  import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import Archive from '@lucide/svelte/icons/archive';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Settings from '@lucide/svelte/icons/settings';
@@ -49,6 +50,7 @@
     ...(NEEDS_YOU_ENABLED ? [{ view: 'attention', label: 'Needs you', icon: BellDot }] : []),
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
+    { view: 'calendar', label: 'Calendar', icon: CalendarDays },
     { view: 'design', label: 'Design', icon: Network },
     { view: 'scribe', label: 'Scribe (beta)', icon: Mic },
     { view: 'tapes', label: 'Tapes', icon: CassetteTape },

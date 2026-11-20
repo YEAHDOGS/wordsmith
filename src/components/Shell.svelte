@@ -27,6 +27,7 @@
   import Scribe from './Scribe.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
+  import CALENDAR_TEXT from './calendar.json';
   import { scribe } from '../lib/scribe.svelte.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
@@ -44,6 +45,8 @@
   const loadDesign = () => import('./Design.svelte');
   // Tapes (player, importer, encoders) load on first visit too.
   const loadTapes = () => import('./Tapes.svelte');
+  // So does the ticket calendar.
+  const loadCalendar = () => import('./Calendar.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
@@ -87,6 +90,7 @@
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
+      case 'calendar': return { title: CALENDAR_TEXT.title, subtitle: CALENDAR_TEXT.subtitle };
       case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
       case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'tapes': return { title: TAPES_TEXT.title, subtitle: TAPES_TEXT.subtitle.replace('{count}', String(store.tapes.filter((tape) => !tape.deleted_at).length)) };
@@ -183,6 +187,9 @@
             <Trash />
           {:else if route.view === 'attention'}
             <Attention />
+          {:else if route.view === 'calendar'}
+            <!-- Every live ticket, archived ones too, filtered by the search like every other page -->
+            <LazyPage load={loadCalendar} notes={matches} />
           {:else if route.view === 'design'}
             <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
             <LazyPage load={loadDesign} id={route.id} />
