@@ -5,6 +5,9 @@ import { ApiError, IS_NATIVE, api, apiUrl, demoMode, sessionToken, whenTrialEnds
 const USER_CACHE_KEY = 'ws_user';
 const DEVICE_POLL_MS = 2_000;
 const DEVICE_GONE = 410;
+// Previews only: this device asked to see the paywall (Settings, where the server says paywall_optional).
+const SHOW_PAYWALL_KEY = 'ws_show_paywall';
+const ON = '1';
 // Demo mode's stand-in user. Never cached or sent anywhere.
 const DEMO_USER = { id: 'demo', email: null, name: 'Demo', avatar_url: null };
 
@@ -31,6 +34,10 @@ class Auth {
   devLogin = $state(false);
   /** Worker Previews: sign in with the Preview password (PREVIEW_PASSWORD, see api/lib/login.js). */
   previewLogin = $state(false);
+  /** Worker Previews and staging: the server locks nobody out (paywallOptional in api/lib/auth.js), and Settings shows a switch to look at the paywall. */
+  paywallOptional = $state(false);
+  /** That switch: this device shows the paywall whatever the account holds. Kept across reloads; the paywall has the way back. */
+  showPaywall = $state(localStorage.getItem(SHOW_PAYWALL_KEY) === ON);
   /** Private beta: new accounts need the beta password (SIGNUP_PASSWORD, see signupLocked in api/lib/login.js). */
   signupLocked = $state(false);
   /** True once providers and linked accounts came from the server; screens that show them load the session if not. */
@@ -57,7 +64,7 @@ class Auth {
    */
   get locked() {
     if (!this.user || this.demo) return false;
-    return this.trialEnded || this.user.has_access === false;
+    return this.showPaywall || this.trialEnded || this.user.has_access === false;
   }
 
   /** When the free trial ends (ms), for the countdown in the top bar, or null when not on one. */
@@ -99,6 +106,7 @@ class Auth {
       this.devLogin = session.dev_login;
       this.previewLogin = Boolean(session.preview_login);
       this.signupLocked = Boolean(session.signup_locked);
+      this.paywallOptional = Boolean(session.paywall_optional);
       this.linked = session.linked || [];
       this.sessionFetched = true;
       this.#setUser(session.user);
@@ -131,6 +139,13 @@ class Auth {
       // Offline or a server error: the cached user stays, and the server still refuses anything a locked account asks for.
       return false;
     }
+  }
+
+  /** Previews only: show the paywall on this device, or go back to the app. @param {boolean} on */
+  setShowPaywall(on) {
+    this.showPaywall = on;
+    if (on) localStorage.setItem(SHOW_PAYWALL_KEY, ON);
+    else localStorage.removeItem(SHOW_PAYWALL_KEY);
   }
 
   /** @param {any} user */

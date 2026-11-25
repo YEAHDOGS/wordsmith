@@ -1,5 +1,9 @@
 {
   "label": "Free trial ended",
+  "previewOn": "Show the paywall",
+  "previewHint": "Previews only. Nobody is locked out here, so this shows what an account sees once its free trial is over. The paywall has a button to come back.",
+  "previewNote": "Preview only: this account is not locked.",
+  "previewOff": "Back to the app",
   "dismiss": "Close",
   "stages": [
     {

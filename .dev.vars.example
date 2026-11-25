@@ -4,6 +4,10 @@
 # Local only: shows a "Local dev" sign-in button on localhost so you can work before OAuth apps exist.
 DEV_LOGIN=true
 
+# Local only: PAYWALL=optional lets every account in whatever its trial says, and shows the "Show the paywall" switch
+# in Settings, the same as Worker Previews and staging (wrangler.jsonc). Leave it out to test the real lock.
+# PAYWALL=optional
+
 # Private beta: while set, creating a new account needs this password (existing users sign in as usual).
 # Production: npx wrangler secret put SIGNUP_PASSWORD. Delete the secret to open sign-up.
 # SIGNUP_PASSWORD=

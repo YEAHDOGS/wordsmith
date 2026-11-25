@@ -43,6 +43,9 @@ const PAID_PLANS = PLAN_RANK.filter((plan) => PLANS[plan].level !== null);
 const PRICE_CURRENCY = 'USD';
 // The plan scripts/access.js gives when approving by hand without naming one.
 export const GRANTED_PLAN = 'rockstar';
+// The highest plan anyone can pay for: what the owner's own account runs on, and what Previews and staging give
+// everyone while their paywall is off (api/lib/auth.js paywallOptional).
+export const TOP_PLAN = PAID_PLANS[PAID_PLANS.length - 1];
 /** When an account's trial ends (ms). @param {{ created_at: number }} user */
 export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
 

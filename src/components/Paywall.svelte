@@ -6,11 +6,14 @@
   // "check again", asks the server whether that has happened. The plans (PLANS) are listed with what each unlocks.
   // The X in the corner doesn't let anyone in: one press gets an honest reply instead, and then the X is gone. The card
   // shakes and its words slide across; its height holds, so nothing jumps.
+  // On Worker Previews and staging nobody is locked out; Settings there can show this screen anyway (auth.showPaywall),
+  // and then a bar on top leads back to the app.
   // Layout: one centered card on the spine at every size; bigger type and spacing on TVs; compact on short screens.
   import { onMount, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import X from '@lucide/svelte/icons/x';
+  import Undo2 from '@lucide/svelte/icons/undo-2';
   import Coffee from '@lucide/svelte/icons/coffee';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import { auth, openExternal } from '../lib/auth.svelte.js';
@@ -95,7 +98,18 @@
   }
 </script>
 
-<div class="relative flex h-dvh w-full justify-center overflow-y-auto bg-app px-3 py-6 short:py-2" role="dialog" aria-modal="true" aria-label={TEXT.label}>
+<!-- Two rows: the Previews bar (when on), then the page, which scrolls by itself, so the bar never covers the card -->
+<div class="flex h-dvh w-full flex-col bg-app" role="dialog" aria-modal="true" aria-label={TEXT.label}>
+  {#if auth.showPaywall}
+    <!-- Previews only: the way back, always in view -->
+    <div class="flex shrink-0 items-center justify-center gap-3 border-b border-accent bg-accent-soft px-3 py-1.5 text-xs text-ink tv:py-4 tv:text-xl">
+      <span class="min-w-0 truncate max-sm:hidden">{TEXT.previewNote}</span>
+      <button class="spring press flex shrink-0 items-center gap-1.5 border border-accent px-2.5 py-1 font-bold hover:bg-accent hover:text-accent-ink tv:px-5 tv:py-2" onclick={() => auth.setShowPaywall(false)}>
+        <Undo2 class="size-3.5 tv:size-6" />{TEXT.previewOff}
+      </button>
+    </div>
+  {/if}
+  <div class="relative flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-3 py-6 short:py-2">
   <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
 
   <section bind:this={card} tabindex="-1" class="relative my-auto focus:outline-none flex h-fit w-full max-w-md flex-col gap-5 border border-line-strong bg-surface p-6 shadow-2xl short:gap-3 short:p-4 short:sm:max-w-3xl short:sm:flex-row short:sm:items-center short:sm:gap-4 short:sm:pr-12 tv:max-w-3xl tv:gap-10 tv:p-14 {shaking ? 'paywall-shake' : ''}" in:fly={CARD_IN}>
@@ -157,4 +171,5 @@
     <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={signOut}>{TEXT.signOut}</button>
     </div>
   </section>
+  </div>
 </div>
