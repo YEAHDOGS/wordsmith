@@ -22,6 +22,7 @@
   import { store } from '../lib/store.svelte.js';
   import { deleteLocalDb } from '../lib/idb.js';
   import CoffeeButton from './CoffeeButton.svelte';
+  import ExportButton from './ExportButton.svelte';
   import TEXT from './paywall.json';
 
   const STAGES = TEXT.stages;
@@ -167,6 +168,8 @@
       </button>
       <!-- A one-time coffee, beside the plans: a thank you that unlocks nothing -->
       <CoffeeButton class="{BUTTON} border border-line text-ink-muted hover:border-accent hover:text-ink" iconClass="size-4 tv:size-7" />
+      <!-- Or leave with everything: the one thing a locked account can still fetch -->
+      <ExportButton class="{BUTTON} border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60" iconClass="size-4 tv:size-7" noteClass="text-xs short:text-[0.6875rem] tv:text-lg" />
     </div>
 
     <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked || unreachable ? 'text-accent' : 'text-ink-faint'}" role="status">

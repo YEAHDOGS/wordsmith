@@ -4,11 +4,18 @@ import { requireAuth } from '../../../lib/auth.js';
 import { bucket, release, streamFile } from '../../../lib/attachments.js';
 import { HttpError, json } from '../../../lib/http.js';
 import { actorFor } from '../../../lib/notes.js';
-import { isId } from '../../../../src/lib/models.js';
+import { TRIAL_ENDED, isId } from '../../../../src/lib/models.js';
 
-/** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
-async function load(context) {
-  const auth = await requireAuth(context, { allowToken: true });
+const PAYMENT_REQUIRED = 402;
+
+/**
+ * The attachment and who asked. Reading is open to a locked account's own session (the data export, src/lib/data-export.js);
+ * deleting is not, and neither is an agent token of a locked account.
+ * @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context @param {boolean} [allowLocked]
+ */
+async function load(context, allowLocked = false) {
+  const auth = await requireAuth(context, { allowToken: true, allowLocked });
+  if (!auth.user.plan && auth.via === 'token') throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
   if (!isId(context.params.id)) throw new HttpError(400, 'Bad id');
   const row = await context.env.DB.prepare('SELECT * FROM attachments WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .bind(context.params.id, auth.user.id).first();
@@ -18,7 +25,7 @@ async function load(context) {
 
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
 export async function onRequestGet(context) {
-  const { row } = await load(context);
+  const { row } = await load(context, true);
   return streamFile(context, { key: String(row.r2_key), size: Number(row.size), type: String(row.type), name: String(row.name), etag: String(row.id) });
 }
 
