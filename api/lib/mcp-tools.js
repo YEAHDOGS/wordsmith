@@ -71,7 +71,7 @@ export const TOOLS = [
   { name: 'get_project_context', description: "One project's whole picture in one call: mission, open features with their triage, recent events, attachment links. Load this before working a project.",
     method: 'GET', module: v1ProjectContext, path: '/api/v1/projects/:project/context', properties: { project: PROJECT, format: FORMAT, events_since: { type: 'integer', description: 'Only events after this time (ms)' }, events_limit: { type: 'integer' } },
     required: ['project'], query: ['format', 'events_since', 'events_limit'] },
-  { name: 'list_features', description: 'Feature requests, most important and oldest first (the claim order).', method: 'GET', module: v1Features, path: '/api/v1/features',
+  { name: 'list_features', description: 'Feature requests in queue order (the claim order): newest first until the owner places them, then most important, then oldest.', method: 'GET', module: v1Features, path: '/api/v1/features',
     properties: { project: PROJECT, state: { type: 'string', description: `Comma-separated: ${FEATURE_STATES.join(', ')}` }, analyzed: { type: 'boolean', description: 'false: not triaged yet' }, max_difficulty: DIFFICULTY, batch: STRING, q: STRING, limit: { type: 'integer' }, format: FORMAT },
     query: ['project', 'state', 'analyzed', 'max_difficulty', 'batch', 'q', 'limit', 'format'] },
   { name: 'list_notes', description: 'Notes and features together, with search.', method: 'GET', module: v1Notes, path: '/api/v1/notes',

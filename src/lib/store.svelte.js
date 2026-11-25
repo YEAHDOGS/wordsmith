@@ -10,6 +10,7 @@ import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
 import { diagramBase, mergeDiagram } from './diagram.js';
 import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, SYNCED_TABLES as SYNCED, newRow, projectKey } from './models.js';
+import { topPosition } from './order.js';
 
 const SYNC_DEBOUNCE_MS = 2_500;
 // Poll every minute while you're using the app, every five once you've been idle for five.
@@ -56,6 +57,8 @@ class Store {
   demo = $state(false);
   /** When a write was last refused in demo mode; DemoGuard shows a notice for each. */
   refusedAt = $state(0);
+  /** Id of the note last made on this device; the board and the notes list scroll it into view. */
+  createdNote = $state('');
   /** Called when the server says the session is gone. */
   onUnauthorized = () => {};
   /** Called when the server's signed-in user isn't the one this store opened for (start-up trusted a stale cache). */
@@ -208,9 +211,17 @@ class Store {
     this.#db?.put(table, fresh);
   }
 
-  /** @param {Table} table @param {Record<string, any>} [values] */
+  /**
+   * Makes a row. A new note goes on top of the queue (src/lib/order.js), wherever it is made: the composer, the "+"
+   * button, Scribe, a shared link. That is decided here, so no caller can forget it.
+   * @param {Table} table @param {Record<string, any>} [values]
+   */
   create(table, values = {}) {
-    return this.#save(table, newRow(table, values));
+    const row = newRow(table, values);
+    if (table === 'notes' && values.position === undefined) row.position = topPosition(this.notes.map((note) => (note.deleted_at ? null : note.position)));
+    const saved = this.#save(table, row);
+    if (table === 'notes') this.createdNote = saved.id;
+    return saved;
   }
 
   /** @param {Table} table @param {string} id @param {Record<string, any>} patch */
