@@ -46,6 +46,7 @@ For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api`
 
 - Workers and D1 on the free plan stop at their limits instead of billing.
 - R2 (attachments) **can** bill past its free tier, so the app enforces hard caps in D1 (`storage_usage`, `api/lib/attachments.js`): 8 GB stored, 500k uploads and 5M reads a month. Past them, uploads and downloads return 507 instead of costing money. The bucket is private, and every byte goes through an authenticated Worker. Files are cached as immutable, so repeat views cost nothing.
+- Plans (`PLANS` in `src/lib/models.js`) set what one account may use: Scribe's daily cloud allowance, how much its tapes hold, and the largest video, audio file and document it may attach (10 MB videos on the free trial, 95 MB on the top plan; a Worker request tops out at 100 MB). The caps above still bound everyone together. A DOGS membership is $1 a month or $5 a year; the paywall and Settings also have a one-time **Buy DOGS a coffee** button (`COFFEE_URL`, `COFFEE_PRICE_USD`), which unlocks nothing. `npm run access -- approve <email> megaman` gives an account the top plan by hand, and `npm run access -- trial <email>` takes it back.
 - Login, token creation, uploads, PR refreshes and agent writes are rate limited. Queries and sync batches are bounded. The app polls once a minute, and only while visible.
 - If the `ATTACHMENTS` binding is missing, attachments switch off (503) and nothing else changes.
 

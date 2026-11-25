@@ -21,20 +21,27 @@ export const DAY_MS = 86_400_000;
 export const TRIAL_DAYS = 5;
 export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
 export const TRIAL_ENDED = 'trial_ended';
-// DOGS's memberships on Buy Me a Coffee: $1 a month, or $5 a year for life.
+// DOGS's memberships on Buy Me a Coffee: $1 a month or $5 a year. No price is promised beyond the period paid for.
 export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs/membership';
+// Buy DOGS a coffee (CoffeeButton.svelte): a one-time thank you, a large pumpkin spice latte, plus tax. It unlocks
+// nothing. Point COFFEE_URL at the Buy Me a Coffee item priced COFFEE_PRICE_USD once that exists; until then it is
+// DOGS's page, where a supporter picks the amount.
+export const COFFEE_URL = 'https://buymeacoffee.com/dogsdogsdogs';
+export const COFFEE_PRICE_USD = 6.96;
 const MB = 1024 * 1024;
 // What each plan unlocks, lowest first. `level` is the Buy Me a Coffee membership_level_id, and `monthly` and `yearly`
 // its prices in USD, which place a level added later (one with no id here) at the highest plan it pays for.
-// forLife: the yearly price is promised for life to anyone who takes it (the base plan), and the paywall says so.
 // scribeNeurons: Scribe's daily wordsmith cloud allowance (Workers AI neurons, api/functions/api/scribe.js; everyone's
 // total is still capped by SCRIBE_DAILY_NEURONS in wrangler.jsonc). tapeBytes: the audio all of an account's tapes may
 // hold in R2 (api/functions/api/tapes/index.js; R2_MAX_GB caps everyone's total).
+// uploads: the largest video, audio file and document an account may attach to a note (uploadLimits below; images are
+// always shrunk to MAX_IMAGE_BYTES on the device). A Worker request tops out at 100 MB on the free plan, so nothing
+// goes past 95 MB, and the R2 caps in api/lib/attachments.js still bound what everyone stores together.
 export const PLANS = {
-  trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB },
-  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 5, forLife: true, scribeNeurons: 2_500, tapeBytes: 250 * MB },
-  animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB },
-  megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB },
+  trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB, uploads: { video: 10 * MB, audio: 10 * MB, document: 5 * MB } },
+  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 5, scribeNeurons: 2_500, tapeBytes: 250 * MB, uploads: { video: 25 * MB, audio: 25 * MB, document: 10 * MB } },
+  animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB, uploads: { video: 50 * MB, audio: 50 * MB, document: 25 * MB } },
+  megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB, uploads: { video: 95 * MB, audio: 95 * MB, document: 50 * MB } },
 };
 /** @typedef {keyof typeof PLANS} Plan */
 const PLAN_RANK = /** @type {Plan[]} */ (Object.keys(PLANS));
@@ -105,10 +112,21 @@ export const AUDIO_TYPES = {
 // Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
 // and the server rejects anything larger.
 export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
-// Videos can't be re-encoded in the browser without a large library, so they're only capped: about a minute of 720p screen recording.
-export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
-// Audio stays capped at 10 MB to keep recordings useful without making storage costly.
-export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+// Videos, audio and documents can't be shrunk in the browser without a large library, so they're only capped, by plan
+// (PLANS[plan].uploads). These are the free trial's caps, the lowest: about a minute of 720p screen recording.
+export const MAX_VIDEO_BYTES = PLANS.trial.uploads.video;
+export const MAX_AUDIO_BYTES = PLANS.trial.uploads.audio;
+
+/**
+ * The largest file of each kind an account on a plan may attach to a note, in bytes. No plan, or one this build
+ * doesn't know, gets the free trial's. The app checks before uploading and the server checks again (checkUpload).
+ * @param {string | null | undefined} plan
+ * @returns {{ image: number, video: number, audio: number, document: number }}
+ */
+export function uploadLimits(plan) {
+  const known = /** @type {Plan} */ (Object.hasOwn(PLANS, plan ?? '') ? plan : 'trial');
+  return { image: MAX_IMAGE_BYTES, ...PLANS[known].uploads };
+}
 // Images up to this size are accepted for shrinking on the device before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Documents: each type and the file extensions it may carry. The server requires both to match, and never serves
@@ -120,8 +138,8 @@ export const DOCUMENT_TYPES = {
   'text/markdown': ['.md', '.markdown'],
   'text/plain': ['.txt'],
 };
-// Documents aren't shrunk on the device, so they're only capped; 5 MB covers long specs and exported PDFs.
-export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+// Documents aren't shrunk on the device, so they're only capped; the trial's 5 MB covers long specs and exported PDFs.
+export const MAX_DOCUMENT_BYTES = PLANS.trial.uploads.document;
 // The file pickers' accept list: every type, plus document extensions for systems that don't know the types.
 export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(AUDIO_TYPES), ...Object.values(AUDIO_TYPES).flat(), ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
 

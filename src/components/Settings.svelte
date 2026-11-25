@@ -22,6 +22,8 @@
   import SpeechSettings from './SpeechSettings.svelte';
   import InstallApp from './InstallApp.svelte';
   import StandingContext from './StandingContext.svelte';
+  import CoffeeButton from './CoffeeButton.svelte';
+  import TrialMeter from './TrialMeter.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { IS_NATIVE, api, apiUrl } from '../lib/api.js';
@@ -166,6 +168,8 @@
           <p class="selectable truncate font-mono text-xs text-ink-muted">{auth.user?.email || ''}</p>
         </div>
       </div>
+      <!-- The free trial as a meter, while the account is on it -->
+      <TrialMeter />
       <p class="mb-2 text-xs text-ink-faint">{TEXT.linked}</p>
       <div class="mb-3 flex flex-wrap gap-2">
         {#each PROVIDERS.filter((provider) => auth.providers.includes(provider) || linkedProviders.includes(provider)) as provider (provider)}
@@ -188,6 +192,8 @@
       <!-- The guided tour again, from the start; it comes back here when it closes -->
       <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
+      <CoffeeButton class="{BUTTON} mt-4" />
+      <p class="mt-2 text-xs text-ink-faint">{PAYWALL.coffeeHint}</p>
       {#if auth.paywallOptional}
         <!-- Worker Previews and staging only: nobody is locked out there, so this is the way to look at the paywall -->
         <button class="{BUTTON} mt-4" onclick={() => auth.setShowPaywall(true)}><Lock class="size-4" />{PAYWALL.previewOn}</button>

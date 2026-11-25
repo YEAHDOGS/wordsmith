@@ -13,7 +13,7 @@
       "title": "Welcome to wordsmith",
       "body": "A notes app built around AI agents and tickets. Write down what you want built, your agents pick it up and open pull requests, and you review one a day.",
       "points": [
-        "Free for 5 days. After that, wordsmith needs an active DOGS membership: $1 a month.",
+        "wordsmith is free for 5 days. After that it needs a DOGS membership: $1 a month or $5 a year. Settings shows how much of the trial is left.",
         "Works on the web, Windows, macOS, Linux, Android and iOS, and offline: notes live on your device and sync when you're back.",
         "This tour moves the app behind it to each part it explains. Use the arrow keys or the buttons below."
       ]
@@ -114,7 +114,7 @@
       "title": "That's wordsmith",
       "body": "Settings also has themes, colors and corner styles, the desktop and phone apps, and on-device speech models.",
       "points": [
-        "Free for 5 days, then $1 a month with a DOGS membership.",
+        "Free for 5 days, then $1 a month or $5 a year with a DOGS membership. The meter under Account counts the trial down.",
         "Open this tour again any time from Settings, under Account."
       ]
     }
