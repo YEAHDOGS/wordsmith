@@ -32,7 +32,7 @@
     {
       "view": "features",
       "title": "Every note is a ticket",
-      "body": "Features shows every ticket on one board, in claim order: Requested, In progress, Complete. Drag cards between columns, or up and down to set the order agents take them in.",
+      "body": "Features shows every ticket on one board: Requested, In progress, Complete. A new ticket always lands on top. Drag cards between columns, or up and down to set the order agents take them in.",
       "points": [
         "Give a ticket a priority and a difficulty, and a status line agents keep up to date.",
         "Paste a pull request link and the ticket follows it: when the PR merges, the ticket completes itself.",

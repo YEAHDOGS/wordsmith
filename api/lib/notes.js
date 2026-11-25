@@ -1,6 +1,7 @@
 // Every note write (app sync, agent API, PR poll, GitHub webhook) goes through saveNotes, which applies the
 // feature lifecycle, stamps started_at / completed_at and appends note_events in the same D1 batch.
 import { LEGACY_PRIORITY, cleanRow, newRow } from '../../src/lib/models.js';
+import { POSITION_STEP, TOP_LIMIT, topPosition } from '../../src/lib/order.js';
 import { HttpError } from './http.js';
 import { upsertStatement } from './rows.js';
 import { settleTrash } from './trash.js';
@@ -86,6 +87,13 @@ export async function saveNotes(env, userId, actor, changes) {
   const now = Date.now();
   const statements = [];
   const saved = [];
+  // A new note that comes without a position (the agent API, an old app build) goes on top of the queue, like one
+  // made in the app (src/lib/order.js). One small read, and only when this save creates such a note.
+  let top = null;
+  if (changes.some(({ before, patch }) => !before && typeof patch.position !== 'number')) {
+    const row = await env.DB.prepare('SELECT MIN(position) AS top FROM notes WHERE user_id = ? AND deleted_at IS NULL AND position <= ?').bind(userId, TOP_LIMIT).first();
+    top = topPosition([row?.top]);
+  }
   for (const { before, patch, extraEvents = [] } of changes) {
     // A bad field from an agent (difficulty 9, unknown state) is the caller's mistake: 400 with the reason, not a 500.
     let cleaned;
@@ -108,6 +116,10 @@ export async function saveNotes(env, userId, actor, changes) {
       after.priority_level = Math.max(0, LEGACY_PRIORITY.indexOf(cleaned.priority));
     }
     after.priority = LEGACY_PRIORITY[after.priority_level] ?? 0;
+    if (!before && top !== null && typeof after.position !== 'number') {
+      after.position = top;
+      top -= POSITION_STEP;
+    }
     // Authorship is the server's to stamp, once: who created it, and an agent token's color on everything it makes.
     if (!before) {
       after.created_by = actor.name;

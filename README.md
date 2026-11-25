@@ -13,6 +13,8 @@ Google Keep style notes, labels and projects, plus feature requests that AI agen
 3. The agent reports `status` as it goes, attaches screenshots or videos, and links its PR with `pr_url`.
 4. **You** merge the PR on GitHub. The webhook (or a poll every couple of minutes while the app is open) marks the PR merged, and the feature completes itself with `completed_at` stamped.
 
+**Order.** One rule decides the order everywhere (`src/lib/order.js`): a new ticket always lands on top of its list, whoever makes it (the composer, Scribe, a shared link, an agent's `POST /api/v1/features`), above every priority and below any note groups and pins. It stays there until it is dragged somewhere else. Under those come the rest by priority, then by hand-placed order. The board's Requested columns, the notes list and the agent claim queue (`POST /api/v1/features/next`) all read that one order.
+
 Every step is written to an append-only, server-stamped `note_events` timeline showing who did it (you, the agent's token name, or GitHub) and when. Open any note to see it on the timeline spine.
 
 Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Settings**. Its **Connect an agent** card walks through hooking up T3 Code (or any agent) and has two copy-paste prompts: the standing instructions for CLAUDE.md / AGENTS.md, and the triage prompt for scheduled runs. `GET /api/v1` describes the whole agent API.
