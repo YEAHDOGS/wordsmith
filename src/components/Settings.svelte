@@ -14,6 +14,7 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import Compass from '@lucide/svelte/icons/compass';
+  import Lock from '@lucide/svelte/icons/lock';
   import { tour } from '../lib/tour.svelte.js';
   import { fade, slide } from 'svelte/transition';
   import ProviderIcon from './ProviderIcon.svelte';
@@ -32,6 +33,7 @@
   import { agentInstructions, mcpSetup, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';
+  import PAYWALL from './paywall.json';
 
   const COPIED_MS = 1400;
   const SWAP = { duration: 150 };
@@ -186,6 +188,11 @@
       <!-- The guided tour again, from the start; it comes back here when it closes -->
       <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
+      {#if auth.paywallOptional}
+        <!-- Worker Previews and staging only: nobody is locked out there, so this is the way to look at the paywall -->
+        <button class="{BUTTON} mt-4" onclick={() => auth.setShowPaywall(true)}><Lock class="size-4" />{PAYWALL.previewOn}</button>
+        <p class="mt-2 text-xs text-ink-faint">{PAYWALL.previewHint}</p>
+      {/if}
     </section>
 
     <!-- Flex column so the token list can fill whatever height the Account card sets for this row -->
