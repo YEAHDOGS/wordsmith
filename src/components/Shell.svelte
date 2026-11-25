@@ -28,6 +28,7 @@
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
   import CALENDAR_TEXT from './calendar.json';
+  import PROJECTS_TEXT from './projects-board.json';
   import { scribe } from '../lib/scribe.svelte.js';
   import { recorder } from '../lib/recorder.svelte.js';
   import { tapeImport } from '../lib/tapes.svelte.js';
@@ -49,6 +50,7 @@
   // So does the ticket calendar, and the guided tour.
   const loadCalendar = () => import('./Calendar.svelte');
   const loadTour = () => import('./Tour.svelte');
+  const loadProjects = () => import('./ProjectsBoard.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
@@ -108,6 +110,10 @@
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
       case 'calendar': return { title: CALENDAR_TEXT.title, subtitle: CALENDAR_TEXT.subtitle };
+      case 'projects': {
+        const count = store.projects.filter((entry) => !entry.deleted_at).length;
+        return { title: PROJECTS_TEXT.title, subtitle: count === 1 ? PROJECTS_TEXT.subtitleOne : PROJECTS_TEXT.subtitle.replace('{count}', String(count)) };
+      }
       case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
       case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'tapes': return { title: TAPES_TEXT.title, subtitle: TAPES_TEXT.subtitle.replace('{count}', String(store.tapes.filter((tape) => !tape.deleted_at).length)) };
@@ -209,6 +215,9 @@
           {:else if route.view === 'design'}
             <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
             <LazyPage load={loadDesign} id={route.id} />
+          {:else if route.view === 'projects'}
+            <!-- Every project as a thumbnail card; the search box filters them -->
+            <LazyPage load={loadProjects} />
           {:else if route.view === 'scribe' || route.view === 'tapes'}
             <ScribeTapes mode={route.view} />
           {:else if route.view === 'features-settings'}
