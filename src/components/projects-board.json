@@ -1,0 +1,50 @@
+{
+  "title": "Projects",
+  "subtitle": "{count} projects",
+  "subtitleOne": "1 project",
+  "sortLabel": "Sort projects by",
+  "sorts": {
+    "touched": "Last touch",
+    "updated": "Last update",
+    "created": "Date created",
+    "month": "Month created",
+    "name": "Alphabetical",
+    "description": "Description",
+    "theme": "Theme",
+    "tag": "Tag"
+  },
+  "sortHints": {
+    "touched": "The last change to the project or anything in it",
+    "updated": "The last change to the project's own name, mission, color or repo",
+    "created": "The day the project was made",
+    "month": "Grouped by the month the project was made",
+    "name": "By project name",
+    "description": "By the project's mission statement",
+    "theme": "Grouped by the project's color",
+    "tag": "Grouped by the label its notes use most"
+  },
+  "ascending": "Ascending. Switch to descending",
+  "descending": "Descending. Switch to ascending",
+  "size": "Thumbnail size",
+  "smaller": "Smaller thumbnails",
+  "larger": "Larger thumbnails",
+  "sizeValue": "Size {step} of {steps}",
+  "open": "Open {project}",
+  "touched": "Last touch {time}",
+  "noDescription": "No mission statement yet",
+  "noTag": "No tag",
+  "emptyTitle": "No projects yet",
+  "emptyBody": "A project keeps a board, notes, media and designs together. Make one with the + beside Projects in the sidebar.",
+  "noMatches": "No projects match your search.",
+  "colors": {
+    "default": "No color",
+    "red": "Red",
+    "orange": "Orange",
+    "yellow": "Yellow",
+    "green": "Green",
+    "teal": "Teal",
+    "blue": "Blue",
+    "purple": "Purple",
+    "pink": "Pink"
+  }
+}
