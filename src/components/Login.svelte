@@ -2,6 +2,7 @@
   // Sign-in screen, plus the two browser-side steps of a native-app login (confirm code, done).
   // Layout: a centered "wormhole" hero on a vertical spine, with the four steps of the agent loop strung along it.
   // The wordmark is three grid cells ("word" | "s" | "mith") so the "s" sits on the spine whatever the font or width.
+  // The tagline gets the same treatment: two cells that meet on the spine, set in the equal-width font.
   import { fade, fly } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
@@ -9,7 +10,7 @@
   import ProviderIcon from './ProviderIcon.svelte';
   import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
-  import { MAX_PASSWORD_LENGTH, PROVIDERS, SUBSCRIBE_URL } from '../lib/models.js';
+  import { MAX_PASSWORD_LENGTH, PROVIDERS } from '../lib/models.js';
   import { PRIVACY_PATH, privacy } from './privacy-route.svelte.js';
   import TEXT from './login.json';
 
@@ -26,6 +27,11 @@
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
   const INPUT_CLASS =
     'bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised';
+
+  // The tagline splits in its middle: with an even count of characters the halves meet on the spine ("Speak yo" |
+  // "ur truth"), with an odd count the middle character sits on it.
+  const TAGLINE_MIDDLE = TEXT.tagline.length / 2;
+  const TAGLINE = [TEXT.tagline.slice(0, Math.floor(TAGLINE_MIDDLE)), TEXT.tagline.slice(Math.floor(TAGLINE_MIDDLE), Math.ceil(TAGLINE_MIDDLE)), TEXT.tagline.slice(Math.ceil(TAGLINE_MIDDLE))];
 
   let busy = $state('');
   let password = $state('');
@@ -109,14 +115,6 @@
       <img src={logo} alt="DOGS logo" class="size-8 short:size-6 object-contain spring group-hover:rotate-12" />
       <span class="spring text-fluid-base font-bold tracking-[0.2em] group-hover:text-accent">DOGS</span>
     </a>
-    <!-- The free trial, centered on the spine and out of the flow, so the branding on either side never moves; it links
-         to the DOGS memberships, like the top bar's countdown and the paywall. Hidden where it would touch the branding:
-         a screen under 20rem, which is a narrow phone with a larger system font. -->
-    <a href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer"
-      class="spring absolute left-1/2 -translate-x-1/2 max-[20rem]:hidden border border-accent bg-app px-2 py-0.5 text-[0.6875rem] font-bold whitespace-nowrap text-accent hover:bg-accent hover:text-accent-ink tv:px-3 tv:py-1 tv:text-base"
-      in:fly={{ y: -6, delay: 300, duration: 300 }}>
-      {TEXT.trial}<span class="font-medium text-ink-muted max-sm:hidden">&nbsp;· {TEXT.trialMore}</span>
-    </a>
     <a href={REPO_URL} target="_blank" rel="noopener noreferrer" class="spring flex items-center gap-1.5 text-ink-faint hover:text-ink" aria-label="wordsmith on GitHub">
       <ProviderIcon provider="github" class="size-3.5 spring group-hover:rotate-0" />
       <span class="font-mono text-xs">wordsmith</span>
@@ -135,7 +133,14 @@
         <span class="sr-only">wordsmith</span>
         <span class="justify-self-end" aria-hidden="true">word</span><span class="tracking-normal text-accent" aria-hidden="true">s</span><span class="justify-self-start ml-(--tracking-tight) text-accent" aria-hidden="true">mith</span>
       </h1>
-      <p class="mt-3 short:mt-1 text-fluid-base font-medium text-ink-muted">{TEXT.tagline}</p>
+      <!-- The tagline, like the wordmark: cells that meet on the spine, so it is centered on the s whatever the font.
+           It is set in the equal-width font, so every letter takes the same room and the gaps between them match (the
+           o and u of "your" sit either side of the spine, the same distance from it). Same size and line height as
+           before, so nothing above or below it moves. -->
+      <p class="mt-3 short:mt-1 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] font-mono text-fluid-base whitespace-pre text-ink-muted">
+        <span class="sr-only">{TEXT.tagline}</span>
+        <span class="justify-self-end" aria-hidden="true">{TAGLINE[0]}</span><span aria-hidden="true">{TAGLINE[1]}</span><span class="justify-self-start" aria-hidden="true">{TAGLINE[2]}</span>
+      </p>
     </div>
 
     {#if notice?.kind === 'device_confirm'}
@@ -209,11 +214,8 @@
       {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}
-      <div class="short:hidden flex flex-col gap-2 text-center text-fluid-sm leading-relaxed text-ink-muted">
-        <p>{TEXT.pitch}</p>
-        <!-- The deal, in the paywall's words: the trial, then a DOGS membership on Buy Me a Coffee -->
-        <p>{TEXT.trialPitch} <a href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" class="spring font-semibold text-accent underline-offset-4 hover:underline">{TEXT.trialLink}</a>{TEXT.trialPitchEnd}</p>
-      </div>
+      <!-- The free trial is explained in the guided tour and metered in Settings, not here -->
+      <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
     {/if}
 
     <!-- A fresh error beats the one the redirect brought; an accepted beta password answers the redirect's -->

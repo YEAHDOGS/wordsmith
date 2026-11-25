@@ -12,7 +12,8 @@
   import { fade, scale, slide } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { store } from '../lib/store.svelte.js';
-  import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_AUDIO_BYTES, MAX_BODY, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, MAX_VIDEO_BYTES, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadType } from '../lib/models.js';
+  import { ACCEPT_ATTACHMENTS, DIFFICULTY_LABELS, IMAGE_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_BODY, MAX_IMAGE_BYTES, MAX_SOURCE_IMAGE_BYTES, MAX_STATUS, MAX_TITLE, PRIORITY_LABELS, VIDEO_TYPES, attachmentKind, parsePullRequestUrl, uploadLimits, uploadType } from '../lib/models.js';
+  import { auth } from '../lib/auth.svelte.js';
   import { markdownKeys } from '../lib/markdown-input.js';
   import MarkdownToolbar from './MarkdownToolbar.svelte';
   import DocumentTile from './DocumentTile.svelte';
@@ -35,12 +36,14 @@
   const ERROR_TYPE = 'Choose a supported image, video, audio file, or document.';
   const BYTES_PER_MB = 1024 * 1024;
   const GIF = 'image/gif';
-  const ERROR_SIZE = `Some files were too large to attach: videos up to ${MAX_VIDEO_BYTES / BYTES_PER_MB} MB, audio up to ${MAX_AUDIO_BYTES / BYTES_PER_MB} MB, documents up to ${MAX_DOCUMENT_BYTES / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`;
+  // What the account's plan lets it attach (models.js uploadLimits).
+  const limits = $derived(uploadLimits(auth.user?.plan));
+  const errorSize = $derived(`Some files were too large to attach: videos up to ${limits.video / BYTES_PER_MB} MB, audio up to ${limits.audio / BYTES_PER_MB} MB, documents up to ${limits.document / BYTES_PER_MB} MB, GIFs up to ${MAX_IMAGE_BYTES / BYTES_PER_MB} MB.`);
   // What the composer accepts before upload: still images can be large (they're shrunk on the device); GIFs, video,
   // audio and documents can't be shrunk, so their real limit applies.
   /** @param {File} file */
   const sizeLimit = (file) => (file.type === GIF ? MAX_IMAGE_BYTES : IMAGE_TYPES.includes(file.type) ? MAX_SOURCE_IMAGE_BYTES
-    : VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_BYTES : attachmentKind(uploadType(file)) === 'audio' ? MAX_AUDIO_BYTES : MAX_DOCUMENT_BYTES);
+    : VIDEO_TYPES.includes(file.type) ? limits.video : attachmentKind(uploadType(file)) === 'audio' ? limits.audio : limits.document);
   const ERROR_COUNT = `A note holds up to ${MAX_ATTACHMENTS_PER_NOTE} files.`;
   const ERROR_PR = 'That pull request link should look like https://github.com/owner/repo/pull/123';
   const FIELD = 'h-9 min-w-0 border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint hover:border-line-strong focus:border-accent focus:outline-none tv:h-12 tv:text-lg';
@@ -86,7 +89,7 @@
     const media = list.filter((file) => uploadType(file));
     if (media.length < list.length) fileError = ERROR_TYPE;
     const fitting = media.filter((file) => file.size <= sizeLimit(file));
-    if (fitting.length < media.length) fileError = ERROR_SIZE;
+    if (fitting.length < media.length) fileError = errorSize;
     const room = MAX_ATTACHMENTS_PER_NOTE - queued.length;
     if (fitting.length > room) fileError = ERROR_COUNT;
     const accepted = fitting.slice(0, Math.max(room, 0));

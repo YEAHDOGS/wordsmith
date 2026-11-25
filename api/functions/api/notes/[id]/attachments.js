@@ -24,7 +24,7 @@ export async function onRequestPost(context) {
 
   const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
   const size = Number(request.headers.get('Content-Length'));
-  const name = checkUpload(type, size, decodeURIComponent(request.headers.get('X-File-Name') || ''));
+  const name = checkUpload(type, size, decodeURIComponent(request.headers.get('X-File-Name') || ''), auth.user.plan);
   if (!request.body) throw new HttpError(400, 'Empty upload');
 
   await reserve(env, { bytes: size, writes: 1 });

@@ -21,6 +21,7 @@
   import { PLANS, SUBSCRIBE_URL } from '../lib/models.js';
   import { store } from '../lib/store.svelte.js';
   import { deleteLocalDb } from '../lib/idb.js';
+  import CoffeeButton from './CoffeeButton.svelte';
   import TEXT from './paywall.json';
 
   const STAGES = TEXT.stages;
@@ -153,9 +154,10 @@
             <a class="spring flex h-full flex-col gap-0.5 p-2 text-[0.6875rem] leading-snug text-ink-faint hover:bg-surface-raised hover:text-ink-muted short:p-1.5 tv:gap-1 tv:p-4 tv:text-lg" href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" onclick={subscribe}>
               <span class="truncate text-xs font-bold text-ink tv:text-xl">{plan.name}</span>
               <span class="font-mono text-accent">{TEXT.price.replace('{price}', String(plan.monthly))}</span>
-              {#if plan.forLife}<span class="font-mono text-accent">{TEXT.priceYear.replace('{price}', String(plan.yearly))}</span>{/if}
+              <span class="font-mono text-accent">{TEXT.priceYear.replace('{price}', String(plan.yearly))}</span>
               <span class="short:hidden">{TEXT.scribe.replace('{neurons}', plan.scribeNeurons.toLocaleString())}</span>
               <span class="short:hidden">{TEXT.tapes.replace('{size}', size(plan.tapeBytes))}</span>
+              <span class="short:hidden">{TEXT.uploads.replace('{size}', size(plan.uploads.video))}</span>
             </a>
           </li>
         {/each}
@@ -163,6 +165,8 @@
       <button class="{BUTTON} border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60" disabled={checking} onclick={check}>
         <RefreshCw class="size-4 tv:size-7 {checking ? 'animate-spin' : ''}" />{checking ? TEXT.checking : TEXT.check}
       </button>
+      <!-- A one-time coffee, beside the plans: a thank you that unlocks nothing -->
+      <CoffeeButton class="{BUTTON} border border-line text-ink-muted hover:border-accent hover:text-ink" iconClass="size-4 tv:size-7" />
     </div>
 
     <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked || unreachable ? 'text-accent' : 'text-ink-faint'}" role="status">
