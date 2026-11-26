@@ -6,15 +6,15 @@
 // Keyboard: Alt+Arrow on a focused card moves it one step (or one board column sideways).
 // Order is stored in notes.position (REAL, lower first) with fractional indexing: a moved note takes the midpoint of
 // its new neighbours, so a drop writes one row. Notes never placed by hand sort by a key implied by their age.
+// What the order means (the top stack of new tickets, then priority, then position) is in src/lib/order.js.
 import { tick } from 'svelte';
-import { MAX_PRIORITY } from './models.js';
+import { POSITION_STEP, TOP_LIMIT, TOP_RUN, onTop, orderKey } from './order.js';
 import { buzz } from './press.js';
 import { store } from './store.svelte.js';
 import { ui } from './ui.svelte.js';
 
 const ZONE_ATTR = 'data-drop-zone';
 const CARD_SELECTOR = '[data-flip-id]';
-const POSITION_STEP = 1024;
 // Smallest gap a respace leaves between two notes whose keys were equal (keys are millisecond-sized, so 1 is tiny).
 const MIN_GAP = 1;
 // Auto-scroll: within EDGE_PX of a list's edge it scrolls, faster the closer the pointer, up to MAX_SCROLL_PX a frame.
@@ -22,8 +22,12 @@ const EDGE_PX = 64;
 const MAX_SCROLL_PX = 18;
 // Phone board lanes snap, so near a side edge the board jumps one lane, then waits before the next jump.
 const LANE_JUMP_MS = 700;
-// Pointer travel needed before the preview slot is worked out again; stops the slot flickering between two cards.
+// Pointer travel since the last slot change needed before the slot is worked out again. Cards sliding under a still
+// pointer never move the slot, so the preview can't flick between two slots on its own.
 const RETARGET_PX = 4;
+// The pointer rests on a new slot this long before the preview moves there, so cards don't flick back and forth
+// while it passes over them (letting go commits the slot under the pointer at once).
+const SETTLE_MS = 160;
 // Horizontal distance weighs this much more than vertical when picking the card under the pointer (stay in the column).
 const COLUMN_WEIGHT = 1000;
 const LAND_MS = 160;
@@ -42,81 +46,99 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @property {(note: any) => number} [naturalIndex] where a note lands when the slot isn't chosen by hand
  * @property {string} [group] zones sharing a group are side by side (board columns): Alt+Left/Right hops between them
  * @property {string} [label] spoken after a keyboard move into this zone
+ * @property {() => boolean | undefined} [unchanged] whether the drop shown would leave the zone as it is (undefined: judge by index)
  */
 
+// Level fields a zone can sort by. `true` for byLevel means priority (the feature board).
+const DEFAULT_LEVEL = 'priority_level';
+
 /**
- * Sort key for manual order: the stored position, else one implied by age in the same number space. Features run
- * oldest first (claim order; matches COALESCE(position, created_at) in api/lib/agent.js), notes newest first.
- * @param {any} note
+ * A position between two neighbours' keys (either may be missing), or null when there is no room left between them.
+ * A slot between the top stack's last ticket and the first one under it takes its place just above that one, so it
+ * never lands in the stack by accident; after the stack's last ticket with nothing under it, it stays in the stack.
+ * @param {number | null} low @param {number | null} high @param {number} fallback used when it has no neighbours
  */
-export function orderKey(note) {
-  return note.position ?? (note.kind === 'feature' ? note.created_at : -note.created_at);
+function between(low, high, fallback) {
+  if (low !== null && high !== null && low <= TOP_LIMIT && high > TOP_LIMIT) return high - POSITION_STEP > TOP_LIMIT ? high - POSITION_STEP : null;
+  if (low !== null && high !== null) {
+    const middle = low + (high - low) / 2;
+    return middle > low && middle < high ? middle : null;
+  }
+  if (low !== null) return low > TOP_LIMIT || low + POSITION_STEP <= TOP_LIMIT ? low + POSITION_STEP : null;
+  if (high !== null) return high - POSITION_STEP;
+  return fallback;
 }
 
 /**
- * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byPriority the list runs
- * highest priority first: the note keeps its priority when that fits between its neighbours, else takes the nearest
- * one that does, then gets a position among the notes of that priority. When the doubles between two neighbours have
- * run out (or they share a key), the whole zone is respaced in its new order (rare; see respace).
+ * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byLevel (a level field, or
+ * true for priority) the list runs in queue order (src/lib/order.js): the top stack, then highest level first. The
+ * note joins the run it lands in: dropped among stacked tickets it is stacked, keeping its level; dropped under them
+ * it keeps its level when that fits between its neighbours, else takes the nearest one that does. Then it gets a
+ * position among the notes of that run. When the doubles between two neighbours have run out (or they share a key),
+ * the whole zone is respaced in its new order (rare; see respace).
  * @param {any[]} list
  * @param {any} note
  * @param {number} index
- * @param {boolean} [byPriority]
+ * @param {boolean | 'priority_level' | 'difficulty'} [byLevel]
  * @returns {{ id: string, patch: Record<string, any> }[]}
  */
-export function placeNote(list, note, index, byPriority = false) {
+export function placeNote(list, note, index, byLevel = false) {
   const before = list[index - 1] ?? null;
   const after = list[index] ?? null;
-  const priority = byPriority ? Math.min(Math.max(note.priority_level, after?.priority_level ?? 0), before?.priority_level ?? MAX_PRIORITY) : note.priority_level;
-  // A neighbour bounds the position only when it sorts in the same run (same priority, when sorting by priority).
-  const bounds = (/** @type {any} */ neighbour) => neighbour && (!byPriority || neighbour.priority_level === priority);
+  const field = byLevel === true ? DEFAULT_LEVEL : byLevel || null;
+  const levelOf = (/** @type {any} */ entry) => (field ? entry[field] ?? 0 : 0);
+  // The run a note sorts in: the top stack, or its level.
+  const runOf = (/** @type {any} */ entry) => (onTop(entry) ? TOP_RUN : levelOf(entry));
+  // It lands in the stack when the ticket under the slot is stacked, or when it is stacked itself and nothing
+  // unstacked sits above the slot. Otherwise it takes the level nearest its own that fits between its neighbours.
+  const stacked = Boolean(field) && ((after && onTop(after)) || (onTop(note) && (!before || onTop(before))));
+  const run = !field ? 0 : stacked ? TOP_RUN : Math.min(Math.max(levelOf(note), after ? levelOf(after) : 0), before ? runOf(before) : TOP_RUN);
+  // A neighbour bounds the position only when it sorts in the same run.
+  const bounds = (/** @type {any} */ neighbour) => neighbour && (!field || runOf(neighbour) === run);
   const low = bounds(before) ? orderKey(before) : null;
   const high = bounds(after) ? orderKey(after) : null;
-  /** @type {number | null} */
-  let position = orderKey(note);
-  if (low !== null && high !== null) {
-    const middle = low + (high - low) / 2;
-    position = middle > low && middle < high ? middle : null;
-  } else if (low !== null) {
-    position = low + POSITION_STEP;
-  } else if (high !== null) {
-    position = high - POSITION_STEP;
-  }
-  const extra = byPriority && priority !== note.priority_level ? { priority_level: priority } : {};
+  // Alone in its run it keeps its own key, unless that key belongs to the stack it just left.
+  const own = field && run !== TOP_RUN && onTop(note) ? note.created_at : orderKey(note);
+  const position = between(low, high, own);
+  const extra = field && run !== TOP_RUN && run !== levelOf(note) ? { [field]: run } : {};
   if (position !== null) return [{ id: note.id, patch: { ...extra, position } }];
   const writes = respace([...list.slice(0, index), note, ...list.slice(index)]);
-  const own = writes.find((write) => write.id === note.id);
-  if (own) Object.assign(own.patch, extra);
+  const moved = writes.find((write) => write.id === note.id);
+  if (moved) Object.assign(moved.patch, extra);
   else writes.push({ id: note.id, patch: extra });
   return writes;
 }
 
 /**
  * The writes for dropping several notes as one block at `index` of `list` (the zone's order without any of them), in
- * the order given. Without priority sorting the block is spaced evenly between its two neighbours in one pass (halving
+ * the order given. Without level sorting the block is spaced evenly between its two neighbours in one pass (halving
  * the gap note by note would run out of room and respace the zone over and over), with one respace of the zone as the
- * fallback. With priority sorting (byPriority true, or true for a given note) each note is placed after the one before,
- * since each may take a different priority level.
+ * fallback. With level sorting (byLevel a field or true, or one for a given note) each note is placed after the one
+ * before, since each may take a different level.
+ * @typedef {boolean | 'priority_level' | 'difficulty'} LevelSort
  * @param {any[]} list
  * @param {any[]} notes
  * @param {number} index
- * @param {boolean | ((note: any) => boolean)} [byPriority]
+ * @param {LevelSort | ((note: any) => LevelSort)} [byLevel]
  * @returns {{ id: string, patch: Record<string, any> }[]}
  */
-export function placeNotes(list, notes, index, byPriority = false) {
-  const sortsByPriority = (/** @type {any} */ note) => (typeof byPriority === 'function' ? byPriority(note) : byPriority);
-  if (notes.length === 1) return placeNote(list, notes[0], index, sortsByPriority(notes[0]));
-  if (!notes.some(sortsByPriority)) {
+export function placeNotes(list, notes, index, byLevel = false) {
+  const levelSort = (/** @type {any} */ note) => (typeof byLevel === 'function' ? byLevel(note) : byLevel);
+  if (notes.length === 1) return placeNote(list, notes[0], index, levelSort(notes[0]));
+  if (!notes.some(levelSort)) {
     const before = list[index - 1] ?? null;
     const after = list[index] ?? null;
-    const low = before ? orderKey(before) : null;
     const high = after ? orderKey(after) : null;
+    // Between the top stack's last ticket and the first one under it, the block sits just above that one (see between).
+    const low = before && !(high !== null && high > TOP_LIMIT && onTop(before)) ? orderKey(before) : null;
     const count = notes.length;
     const positions = notes.map((_, slot) => (low !== null && high !== null ? low + ((high - low) * (slot + 1)) / (count + 1)
       : low !== null ? low + POSITION_STEP * (slot + 1)
         : high !== null ? high - POSITION_STEP * (count - slot) : null));
     const fits = positions.every((position, slot) => position !== null && (low === null || position > low) && (high === null || position < high)
-      && (slot === 0 || position > /** @type {number} */ (positions[slot - 1])));
+      && (slot === 0 || position > /** @type {number} */ (positions[slot - 1]))
+      // The spacing alone never pushes a block into the stack, or out of it.
+      && (position <= TOP_LIMIT) === ((low ?? high ?? 0) <= TOP_LIMIT));
     if (fits) return notes.map((note, slot) => ({ id: note.id, patch: { position: /** @type {number} */ (positions[slot]) } }));
     return respace([...list.slice(0, index), ...notes, ...list.slice(index)]);
   }
@@ -125,7 +147,7 @@ export function placeNotes(list, notes, index, byPriority = false) {
   const writes = new Map();
   notes.forEach((note, offset) => {
     const at = index + offset;
-    for (const { id, patch } of placeNote(placed, note, at, sortsByPriority(note))) writes.set(id, { ...writes.get(id), ...patch });
+    for (const { id, patch } of placeNote(placed, note, at, levelSort(note))) writes.set(id, { ...writes.get(id), ...patch });
     placed = placed.map((entry) => (writes.has(entry.id) ? { ...entry, ...writes.get(entry.id) } : entry));
     placed.splice(at, 0, { ...note, ...writes.get(note.id) });
   });
@@ -173,20 +195,26 @@ function scrollParent(start, axis) {
  * @param {string} id the dragged note
  * @param {number} x
  * @param {number} y
+ * @param {Map<string, any>} targets stable card bounds relative to the zone
+ * @returns {{ index: number, anchor: { id: string, below: boolean } | null }} the slot, and the card it sits above or below
  */
-function slotAt(zoneEl, ids, id, x, y) {
+function slotAt(zoneEl, ids, id, x, y, targets) {
   let best = { id: '', below: false, score: Infinity };
-  for (const node of zoneEl.querySelectorAll(CARD_SELECTOR)) {
-    const cardId = /** @type {HTMLElement} */ (node).dataset.flipId ?? '';
+  const origin = zoneEl.getBoundingClientRect();
+  for (const [cardId, target] of targets) {
     if (cardId === id || !ids.includes(cardId)) continue;
-    const rect = node.getBoundingClientRect();
+    const rect = {
+      left: origin.left + target.left, right: origin.left + target.right,
+      top: origin.top + target.top, bottom: origin.top + target.bottom, height: target.height,
+    };
     const dx = Math.max(rect.left - x, 0, x - rect.right);
     const dy = Math.max(rect.top - y, 0, y - rect.bottom);
     const score = dx * COLUMN_WEIGHT + dy;
     if (score < best.score) best = { id: cardId, below: y > rect.top + rect.height / 2, score };
   }
   const at = ids.indexOf(best.id);
-  return at === -1 ? ids.length : at + (best.below ? 1 : 0);
+  if (at === -1) return { index: ids.length, anchor: null };
+  return { index: at + (best.below ? 1 : 0), anchor: { id: best.id, below: best.below } };
 }
 
 /** @type {HTMLElement | null} */
@@ -219,6 +247,8 @@ class Drag {
   zone = $state('');
   /** Preview slot inside that zone, counted without the dragged note. */
   index = $state(0);
+  /** The card the preview slot sits above or below, so a masonry can open the gap in that card's column. @type {{ id: string, below: boolean } | null} */
+  anchor = $state(null);
   /** Ghost card position (viewport px, top-left) and width. */
   x = $state(0);
   y = $state(0);
@@ -228,6 +258,8 @@ class Drag {
 
   /** @type {Map<Element, Zone>} */
   #zones = new Map();
+  /** Geometry captured before preview layouts can move the hit targets. @type {Map<Element, Map<string, any>>} */
+  #targets = new Map();
   #grab = { x: 0, y: 0 };
   #pointer = { x: 0, y: 0 };
   #last = { x: -Infinity, y: -Infinity };
@@ -238,6 +270,12 @@ class Drag {
   #laneAt = 0;
   #frame = 0;
   #moved = false;
+  /** A slot the pointer is over but hasn't rested on long enough yet. @type {{ key: string, slot: string, at: number } | null} */
+  #pending = null;
+  // Where the finger first touched. Its touchmoves keep coming there even after the card is rebuilt in another column,
+  // when they no longer reach window; listening there keeps the page from scrolling (and cancelling the drag).
+  /** @type {EventTarget | null} */
+  #touchTarget = null;
 
   get id() {
     return this.note?.id ?? '';
@@ -290,6 +328,19 @@ class Drag {
     const zoneEl = card.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
     if (this.note || !zoneEl || !zone) return;
+    this.#targets.clear();
+    for (const element of this.#zones.keys()) {
+      const origin = element.getBoundingClientRect();
+      const targets = new Map();
+      for (const node of element.querySelectorAll(CARD_SELECTOR)) {
+        const bounds = node.getBoundingClientRect();
+        targets.set(/** @type {HTMLElement} */ (node).dataset.flipId ?? '', {
+          left: bounds.left - origin.left, right: bounds.right - origin.left,
+          top: bounds.top - origin.top, bottom: bounds.bottom - origin.top, height: bounds.height,
+        });
+      }
+      this.#targets.set(element, targets);
+    }
     const rect = card.getBoundingClientRect();
     this.#grab = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     this.width = rect.width;
@@ -306,6 +357,8 @@ class Drag {
     this.taking = this.group.length;
     this.zone = '';
     this.index = 0;
+    this.anchor = null;
+    this.#pending = null;
     this.landing = false;
     this.#last = { x: event.clientX, y: event.clientY };
     this.#follow(event);
@@ -315,7 +368,8 @@ class Drag {
     addEventListener('pointerup', this.#ondrop);
     addEventListener('pointercancel', this.#oncancel);
     addEventListener('keydown', this.#onkey, true);
-    addEventListener('touchmove', this.#holdScroll, { passive: false });
+    this.#touchTarget = event.target;
+    this.#touchTarget?.addEventListener('touchmove', this.#holdScroll, { passive: false });
     this.#frame = requestAnimationFrame(this.#loop);
   }
 
@@ -387,7 +441,7 @@ class Drag {
 
   #loop = () => {
     const scrolled = this.#autoscroll();
-    if (this.#moved || scrolled) this.#locate(scrolled);
+    if (this.#moved || scrolled || this.#pending) this.#locate(scrolled);
     this.#moved = false;
     this.#frame = requestAnimationFrame(this.#loop);
   };
@@ -419,18 +473,33 @@ class Drag {
   /** Works out the zone and slot under the pointer. Outside every zone the last preview stays. @param {boolean} force */
   #locate(force) {
     const { x, y } = this.#pointer;
-    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) return;
+    if (!force && this.zone && Math.hypot(x - this.#last.x, y - this.#last.y) < RETARGET_PX) {
+      this.#pending = null;
+      return;
+    }
     const zoneEl = document.elementFromPoint(x, y)?.closest(`[${ZONE_ATTR}]`);
     const zone = zoneEl && this.#zones.get(zoneEl);
-    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) return;
-    this.#last = { x, y };
+    if (!zoneEl || !zone || !(zone.accepts?.(this.note) ?? true)) {
+      this.#pending = null;
+      return;
+    }
     const taken = this.#takenBy(zone);
     const ids = zone.list().map((note) => note.id).filter((id) => !taken.some((note) => note.id === id));
-    const index = zone.sortable === false ? zone.naturalIndex?.(this.note) ?? 0 : slotAt(zoneEl, ids, this.id, x, y);
+    const { index, anchor } = zone.sortable === false ? { index: zone.naturalIndex?.(this.note) ?? 0, anchor: null } : slotAt(zoneEl, ids, this.id, x, y, this.#targets.get(zoneEl) ?? new Map());
+    const slot = `${index}:${anchor?.id ?? ''}:${anchor?.below ?? ''}`;
+    const now = performance.now();
+    if (zone.key === this.zone && slot === `${this.index}:${this.anchor?.id ?? ''}:${this.anchor?.below ?? ''}`) this.#pending = null;
+    else if (!force && this.zone) {
+      if (this.#pending?.key !== zone.key || this.#pending.slot !== slot) this.#pending = { key: zone.key, slot, at: now };
+      if (now - this.#pending.at < SETTLE_MS) return;
+    }
+    this.#pending = null;
+    this.#last = { x, y };
     if (zone.key !== this.zone) this.#useScrollers(zoneEl);
     this.taking = taken.length;
     this.zone = zone.key;
     this.index = index;
+    this.anchor = anchor;
   }
 
   #stop() {
@@ -439,12 +508,14 @@ class Drag {
     removeEventListener('pointerup', this.#ondrop);
     removeEventListener('pointercancel', this.#oncancel);
     removeEventListener('keydown', this.#onkey, true);
-    removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget?.removeEventListener('touchmove', this.#holdScroll);
+    this.#touchTarget = null;
+    this.#targets.clear();
   }
 
   #ondrop = () => {
-    // A quick flick can end before the next frame has worked out the slot.
-    if (this.#moved) this.#locate(true);
+    // Commit the visible preview, even when another target is still settling.
+    if (!this.zone) this.#locate(true);
     const zone = [...this.#zones.values()].find((entry) => entry.key === this.zone);
     const { note, index } = this;
     this.#stop();
@@ -453,8 +524,11 @@ class Drag {
     // Let go where it started (the block already sits together, in order, at this slot of this zone): nothing to save,
     // so the chosen sort isn't switched to manual either.
     const start = list.findIndex((entry) => entry.id === notes[0]?.id);
-    const inPlace = start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id);
+    const inPlace = zone?.unchanged?.() ?? (start === index && notes.every((moving, offset) => list[start + offset]?.id === moving.id));
     if (zone && !inPlace) zone.ondrop(notes, index);
+    // The saved order now owns the layout. Applying the preview again moves the block twice.
+    this.zone = '';
+    this.anchor = null;
     this.#land();
   };
 
@@ -483,6 +557,21 @@ class Drag {
 }
 
 export const drag = new Drag();
+
+/**
+ * Svelte action for a list of cards: a note made on this device while the list is showing is scrolled into view, so a
+ * new ticket is seen landing on top even when the list was scrolled down (on phones the board swipes to its lane).
+ * @param {HTMLElement} node
+ */
+export function followCreated(node) {
+  let seen = store.createdNote;
+  $effect(() => {
+    const id = store.createdNote;
+    if (!id || id === seen) return;
+    seen = id;
+    tick().then(() => node.querySelector(`[data-flip-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }));
+  });
+}
 
 /**
  * Svelte action: makes a list a drop zone for dragged cards.

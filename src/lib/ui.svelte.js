@@ -8,9 +8,12 @@ export const THEMES = /** @type {const} */ (['system', 'dark', 'light']);
 const SORT_KEY = 'ws_sort';
 const GROUP_KEY = 'ws_group';
 const STATE_FILTER_KEY = 'ws_state_filter';
+// Sidebar sections (projects, labels) folded shut on this device.
+const FOLDED_KEY = 'ws_folded';
 // Note grid controls: the left button cycles the order, the right one cycles the grouping.
-// manual = the order notes were dragged into (notes.position); priority = highest first, manual order within a level.
-export const ORDERS = /** @type {const} */ (['updated', 'created', 'priority', 'manual']);
+// manual = the order notes were dragged into (notes.position); priority and difficulty = highest first, manual order
+// within a level.
+export const ORDERS = /** @type {const} */ (['updated', 'created', 'priority', 'difficulty', 'manual']);
 /** Orders a drag can't express: picking a card up switches to manual so the drop sticks. */
 export const TIME_ORDERS = /** @type {const} */ (['updated', 'created']);
 export const GROUPS = /** @type {const} */ (['all', 'project', 'season']);
@@ -24,7 +27,7 @@ class Ui {
   theme = $state(/** @type {any} */ (localStorage.getItem(THEME_KEY)) || 'system');
   query = $state('');
   drawerOpen = $state(false);
-  /** @type {'updated' | 'created' | 'priority' | 'manual'} */
+  /** @type {'updated' | 'created' | 'priority' | 'difficulty' | 'manual'} */
   order = $state(/** @type {any} */ (ORDERS.includes(/** @type {any} */ (localStorage.getItem(SORT_KEY))) ? localStorage.getItem(SORT_KEY) : 'updated'));
   /** @type {'all' | 'project' | 'season'} */
   group = $state(/** @type {any} */ (localStorage.getItem(SORT_KEY) === LEGACY_PROJECT_SORT ? 'project'
@@ -33,6 +36,14 @@ class Ui {
   stateFilter = $state(/** @type {any} */ (STATE_FILTERS.includes(/** @type {any} */ (localStorage.getItem(STATE_FILTER_KEY))) ? localStorage.getItem(STATE_FILTER_KEY) : 'all'));
   /** The project just created from the sidebar: its page opens the GitHub repo picker once. */
   newProjectId = $state('');
+  /** Sidebar sections folded shut on this device ('projects', 'labels'). */
+  folded = new SvelteSet(/** @type {string[]} */ ((() => {
+    try {
+      return JSON.parse(localStorage.getItem(FOLDED_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  })()));
   /** Ids of the notes picked for bulk actions (copy, archive). Non-empty = selection mode. */
   selected = new SvelteSet();
   #media = matchMedia('(prefers-color-scheme: light)');
@@ -64,7 +75,7 @@ class Ui {
     });
   }
 
-  /** @param {'updated' | 'created' | 'priority' | 'manual'} order */
+  /** @param {'updated' | 'created' | 'priority' | 'difficulty' | 'manual'} order */
   setOrder(order) {
     this.order = order;
     localStorage.setItem(SORT_KEY, order);
@@ -80,6 +91,13 @@ class Ui {
   setStateFilter(filter) {
     this.stateFilter = filter;
     localStorage.setItem(STATE_FILTER_KEY, filter);
+  }
+
+  /** Folds a sidebar section, or opens it with open = true. @param {string} section @param {boolean} [open] */
+  toggleFolded(section, open = this.folded.has(section)) {
+    if (open) this.folded.delete(section);
+    else this.folded.add(section);
+    localStorage.setItem(FOLDED_KEY, JSON.stringify([...this.folded]));
   }
 
   /** Whether a note passes the state filter. Shared by the note grid and Ctrl+A. @param {any} note */

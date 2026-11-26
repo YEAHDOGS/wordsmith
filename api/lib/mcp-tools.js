@@ -1,0 +1,115 @@
+// The MCP tools (api/functions/api/mcp.js). Each one is a row pointing at an /api/v1 handler, which it calls in-process
+// with the caller's own auth, so MCP and REST share every check (validation, ownership, limits) and
+// can never drift. Arguments named in `path` fill the URL, the ones in `query` become ?params, the rest are the body.
+import * as v1Projects from '../functions/api/v1/projects.js';
+import * as v1Features from '../functions/api/v1/features/index.js';
+import * as v1FeaturesNext from '../functions/api/v1/features/next.js';
+import * as v1Notes from '../functions/api/v1/notes/index.js';
+import * as v1Note from '../functions/api/v1/notes/[id]/index.js';
+import * as v1NoteEvents from '../functions/api/v1/notes/[id]/events.js';
+import * as v1NoteClaim from '../functions/api/v1/notes/[id]/claim.js';
+import * as v1NoteAnalysis from '../functions/api/v1/notes/[id]/analysis.js';
+import * as v1Batches from '../functions/api/v1/batches.js';
+import * as v1Boards from '../functions/api/v1/boards.js';
+import * as v1Labels from '../functions/api/v1/labels.js';
+import * as v1Events from '../functions/api/v1/events.js';
+import * as v1Context from '../functions/api/v1/context.js';
+import * as v1ProjectContext from '../functions/api/v1/projects/[project]/context.js';
+import * as v1Diagrams from '../functions/api/v1/diagrams/index.js';
+import * as v1Diagram from '../functions/api/v1/diagrams/[id].js';
+import * as v1Tapes from '../functions/api/v1/tapes/index.js';
+import * as v1Tape from '../functions/api/v1/tapes/[id].js';
+import { COLORS, DIFFICULTY_LABELS, EDGE_STYLES, FEATURE_STATES, NODE_KINDS, PRIORITY_LABELS, TAPE_RATINGS } from '../../src/lib/models.js';
+
+const STRING = { type: 'string' };
+const ID = { type: 'string', description: 'Note or feature id' };
+const PROJECT = { type: 'string', description: 'Project id or name' };
+const PRIORITY = { type: 'integer', minimum: 0, maximum: PRIORITY_LABELS.length - 1, description: `0 none to ${PRIORITY_LABELS.length - 1} critical` };
+const DIFFICULTY = { type: 'integer', minimum: 0, maximum: DIFFICULTY_LABELS.length - 1, description: DIFFICULTY_LABELS.map((label, level) => `${level} ${label}`).join(', ') };
+const LABELS = { type: 'array', items: STRING, description: 'Label names. The list replaces the note\'s labels: send every one it should keep. The label of the group a note is in always stays.' };
+const TAPE_RATING = { type: 'integer', minimum: 0, maximum: TAPE_RATINGS.length - 1, description: TAPE_RATINGS.map((label, level) => `${level} ${label}`).join(', ') };
+const DIAGRAM_ID = { type: 'string', description: 'Design diagram id, from list_diagrams' };
+const NODES = {
+  type: 'array',
+  description: 'Boxes. Only title is needed; leave x and y out and the server lays them out along the arrows.',
+  items: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Short id to name the box in edges, e.g. "api". Made from the title when left out.' },
+      title: STRING,
+      kind: { type: 'string', enum: NODE_KINDS, description: 'zone is a boundary around other boxes (a cloud, a region, a device)' },
+      text: { type: 'string', description: 'A line or two under the title: tech, responsibility, region' },
+      color: { type: 'string', enum: COLORS },
+      inside: { type: 'string', description: 'Id of the zone this box sits in' },
+      x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' },
+    },
+  },
+};
+const EDGES = {
+  type: 'array',
+  description: 'Arrows between boxes.',
+  items: { type: 'object', properties: { from: { type: 'string', description: 'Node id or exact title' }, to: { type: 'string', description: 'Node id or exact title' }, label: STRING, style: { type: 'string', enum: EDGE_STYLES } }, required: ['from', 'to'] },
+};
+const FORMAT = { type: 'string', enum: ['json', 'md'], description: 'md for one Markdown document' };
+
+/**
+ * @typedef {object} Tool
+ * @property {string} name
+ * @property {string} description
+ * @property {'GET' | 'POST' | 'PATCH' | 'PUT'} method
+ * @property {any} module the /api/v1 handler module
+ * @property {string} path with :params filled from the arguments
+ * @property {Record<string, any>} [properties] argument schemas
+ * @property {string[]} [required]
+ * @property {string[]} [query] arguments sent as the query string
+ */
+
+/** @type {Tool[]} */
+export const TOOLS = [
+  { name: 'get_context', description: "The owner's standing context: preferences, facts and pointers. Read it first, every session.", method: 'GET', module: v1Context, path: '/api/v1/context' },
+  { name: 'list_projects', description: 'Projects with their mission statements (description, Markdown), feature counts per state and how many design diagrams each has.', method: 'GET', module: v1Projects, path: '/api/v1/projects' },
+  { name: 'get_project_context', description: "One project's whole picture in one call: mission, open features with their triage, recent events, attachment links. Load this before working a project.",
+    method: 'GET', module: v1ProjectContext, path: '/api/v1/projects/:project/context', properties: { project: PROJECT, format: FORMAT, events_since: { type: 'integer', description: 'Only events after this time (ms)' }, events_limit: { type: 'integer' } },
+    required: ['project'], query: ['format', 'events_since', 'events_limit'] },
+  { name: 'list_features', description: 'Feature requests in queue order (the claim order): newest first until the owner places them, then most important, then oldest.', method: 'GET', module: v1Features, path: '/api/v1/features',
+    properties: { project: PROJECT, state: { type: 'string', description: `Comma-separated: ${FEATURE_STATES.join(', ')}` }, analyzed: { type: 'boolean', description: 'false: not triaged yet' }, max_difficulty: DIFFICULTY, batch: STRING, q: STRING, limit: { type: 'integer' }, format: FORMAT },
+    query: ['project', 'state', 'analyzed', 'max_difficulty', 'batch', 'q', 'limit', 'format'] },
+  { name: 'list_notes', description: 'Notes and features together, with search.', method: 'GET', module: v1Notes, path: '/api/v1/notes',
+    properties: { q: STRING, label: STRING, project: PROJECT, limit: { type: 'integer' } }, query: ['q', 'label', 'project', 'limit'] },
+  { name: 'get_note', description: 'One note or feature with its project, labels, PRs and attachments.', method: 'GET', module: v1Note, path: '/api/v1/notes/:id', properties: { id: ID }, required: ['id'] },
+  { name: 'get_note_events', description: "One note's timeline, oldest first.", method: 'GET', module: v1NoteEvents, path: '/api/v1/notes/:id/events', properties: { id: ID }, required: ['id'] },
+  { name: 'get_events', description: 'Everything that happened across your projects since a moment (claims, states, analyses, PRs), oldest first. To continue, pass cursor back as since and after back as after.',
+    method: 'GET', module: v1Events, path: '/api/v1/events', properties: { since: { type: 'integer', description: 'Time in ms' }, after: { type: 'string', description: 'The after value of the previous page' }, limit: { type: 'integer' } }, query: ['since', 'after', 'limit'] },
+  { name: 'get_analysis', description: "A note's triage: difficulty, batch, analysis notes. Read it before you start.", method: 'GET', module: v1NoteAnalysis, path: '/api/v1/notes/:id/analysis', properties: { id: ID }, required: ['id'] },
+  { name: 'list_batches', description: 'Notes grouped by batch: what ships together, how much is open, which PRs carry it.', method: 'GET', module: v1Batches, path: '/api/v1/batches' },
+  { name: 'list_boards', description: 'Every board with its columns in order.', method: 'GET', module: v1Boards, path: '/api/v1/boards' },
+  { name: 'list_labels', description: 'Every label: id, name, color.', method: 'GET', module: v1Labels, path: '/api/v1/labels' },
+  { name: 'list_tapes', description: "The owner's voice recordings (raps, verses, song ideas): title, notes, transcript, rating, when recorded, length. Search with q (title, notes, transcript), filter by rating or transcribed. Use it to find the bars worth keeping.",
+    method: 'GET', module: v1Tapes, path: '/api/v1/tapes',
+    properties: { q: STRING, rating: TAPE_RATING, transcribed: { type: 'string', enum: ['1'], description: 'Only tapes with a transcript' }, limit: { type: 'integer', minimum: 1, maximum: 100 }, offset: { type: 'integer', minimum: 0 } },
+    query: ['q', 'rating', 'transcribed', 'limit', 'offset'] },
+  { name: 'update_tape', description: 'Give a tape your verdict after reading its transcript: rate it (gold for bars worth keeping), retitle it after its best line, or add notes (body_append) on what is good and where.',
+    method: 'PATCH', module: v1Tape, path: '/api/v1/tapes/:id', properties: { id: { type: 'string', description: 'Tape id, from list_tapes' }, rating: TAPE_RATING, title: STRING, body: STRING, body_append: STRING }, required: ['id'] },
+  { name: 'claim_next', description: 'Claim the next requested feature (atomic: two agents never get the same one). Empty when the queue is.', method: 'POST', module: v1FeaturesNext, path: '/api/v1/features/next', properties: { project: PROJECT } },
+  { name: 'claim_note', description: 'Claim one specific requested feature. Fails if it is taken.', method: 'POST', module: v1NoteClaim, path: '/api/v1/notes/:id/claim', properties: { id: ID }, required: ['id'] },
+  { name: 'update_note', description: 'Report progress, ask the owner (ask), or move work along. body_append adds to the body; title, body and labels replace what is there.',
+    method: 'PATCH', module: v1Note, path: '/api/v1/notes/:id',
+    properties: { id: ID, state: { type: 'string', enum: FEATURE_STATES }, column: { type: 'string', description: 'Board column id or name' }, status: { type: 'string', description: 'What is happening right now' }, ask: { type: 'string', description: 'A question for the owner, shown in their Needs you view. Options as "1. ..." lines. Their answer is appended to the body and ask clears.' }, pr_url: { type: 'string', description: 'https://github.com/owner/repo/pull/123' }, body_append: STRING, title: STRING, body: STRING, priority: PRIORITY, difficulty: DIFFICULTY, labels: LABELS, project: PROJECT },
+    required: ['id'] },
+  { name: 'post_analysis', description: 'Triage a note: difficulty, batch, and your notes (scope, files, plan, blockers, work done). analysis_append adds a paragraph.',
+    method: 'POST', module: v1NoteAnalysis, path: '/api/v1/notes/:id/analysis', properties: { id: ID, difficulty: DIFFICULTY, batch: STRING, analysis: STRING, analysis_append: STRING }, required: ['id'] },
+  { name: 'create_feature', description: 'File a new feature request.', method: 'POST', module: v1Features, path: '/api/v1/features',
+    properties: { project: PROJECT, title: STRING, body: STRING, priority: PRIORITY, labels: LABELS }, required: ['title'] },
+  { name: 'create_note', description: 'Capture a note, e.g. research to act on later.', method: 'POST', module: v1Notes, path: '/api/v1/notes', properties: { title: STRING, body: STRING, project: PROJECT, labels: LABELS } },
+  { name: 'list_diagrams', description: "Design diagrams (the Design page, and each project's Designs tab): id, name, description, project, node and edge counts. Pass project to see one project's designs.", method: 'GET', module: v1Diagrams, path: '/api/v1/diagrams', properties: { project: PROJECT }, query: ['project'] },
+  { name: 'get_diagram', description: 'One design diagram: its nodes, edges and Mermaid source. Read it before changing a system it documents.', method: 'GET', module: v1Diagram, path: '/api/v1/diagrams/:id', properties: { id: DIAGRAM_ID }, required: ['id'] },
+  { name: 'create_diagram', description: 'Draw a design diagram for the owner: clients, services, databases, queues and the zones they run in, joined by labeled arrows (one arrow per direction between two boxes; combine labels like "reads / writes"). It appears on their Design page; give it a project and it also shows in that project’s Designs tab.',
+    method: 'POST', module: v1Diagrams, path: '/api/v1/diagrams', properties: { name: STRING, project: PROJECT, description: { type: 'string', description: 'What the diagram shows, Markdown' }, nodes: NODES, edges: EDGES }, required: ['name'] },
+  { name: 'update_diagram', description: 'Change a design diagram: rename it, redraw it, or move it. add_nodes adds boxes or updates them by id (unmentioned fields and positions stay); remove_nodes takes ids or titles; nodes and edges replace everything. project links it to a project (id or name); an empty string takes it out of its project.',
+    method: 'PATCH', module: v1Diagram, path: '/api/v1/diagrams/:id',
+    properties: { id: DIAGRAM_ID, name: STRING, description: STRING, project: PROJECT, add_nodes: NODES, remove_nodes: { type: 'array', items: STRING }, add_edges: EDGES, remove_edges: { type: 'array', items: STRING, description: 'Edge ids' }, nodes: NODES, edges: EDGES },
+    required: ['id'] },
+  { name: 'delete_diagram', description: 'Delete a design diagram on every device. Only when the owner asked for it, or for one you created by mistake.', method: 'DELETE', module: v1Diagram, path: '/api/v1/diagrams/:id', properties: { id: DIAGRAM_ID }, required: ['id'] },
+  { name: 'create_project', description: 'Create a project. If the name is taken, the existing project comes back: use that one.', method: 'POST', module: v1Projects, path: '/api/v1/projects',
+    properties: { name: STRING, description: { type: 'string', description: 'Mission statement, Markdown' }, color: { type: 'string', enum: COLORS }, repo: { type: 'string', description: 'owner/name' } }, required: ['name'] },
+];

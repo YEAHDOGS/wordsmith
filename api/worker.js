@@ -6,9 +6,11 @@ import * as apiMiddleware from './functions/api/_middleware.js';
 import * as v1Middleware from './functions/api/v1/_middleware.js';
 import * as health from './functions/api/health.js';
 import * as sync from './functions/api/sync.js';
+import * as trash from './functions/api/trash.js';
 import * as authSession from './functions/api/auth/session.js';
 import * as authDev from './functions/api/auth/dev.js';
 import * as authPreview from './functions/api/auth/preview.js';
+import * as authSignup from './functions/api/auth/signup.js';
 import * as authDevice from './functions/api/auth/device/index.js';
 import * as authDevicePoll from './functions/api/auth/device/poll.js';
 import * as authStart from './functions/api/auth/[provider]/start.js';
@@ -22,6 +24,10 @@ import * as githubRepo from './functions/api/github/repo.js';
 import * as projectPulls from './functions/api/projects/[id]/pulls.js';
 import * as noteAttachments from './functions/api/notes/[id]/attachments.js';
 import * as attachment from './functions/api/attachments/[id].js';
+import * as tapes from './functions/api/tapes/index.js';
+import * as tapeAudio from './functions/api/tapes/[id]/audio.js';
+import * as tapeTranscribe from './functions/api/tapes/[id]/transcribe.js';
+import * as tapeTranscription from './functions/api/tapes/transcription.js';
 import * as v1Index from './functions/api/v1/index.js';
 import * as v1Projects from './functions/api/v1/projects.js';
 import * as v1Features from './functions/api/v1/features/index.js';
@@ -34,6 +40,17 @@ import * as v1NoteAnalysis from './functions/api/v1/notes/[id]/analysis.js';
 import * as v1Batches from './functions/api/v1/batches.js';
 import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
+import * as v1Tapes from './functions/api/v1/tapes/index.js';
+import * as v1Tape from './functions/api/v1/tapes/[id].js';
+import * as v1Events from './functions/api/v1/events.js';
+import * as v1Context from './functions/api/v1/context.js';
+import * as v1Diagrams from './functions/api/v1/diagrams/index.js';
+import * as v1Diagram from './functions/api/v1/diagrams/[id].js';
+import * as v1ProjectContext from './functions/api/v1/projects/[project]/context.js';
+import * as mcp from './functions/api/mcp.js';
+import * as scribe from './functions/api/scribe.js';
+import * as dataExport from './functions/api/export.js';
+import * as bmcWebhook from './functions/api/webhooks/bmc.js';
 import * as sharedNote from './functions/n/[id].js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
@@ -50,9 +67,12 @@ const METHOD_EXPORTS = { GET: 'onRequestGet', POST: 'onRequestPost', PATCH: 'onR
 const ROUTES = [
   ['/api/health', health, false],
   ['/api/sync', sync, false],
+  ['/api/trash', trash, false],
+  ['/api/export', dataExport, false],
   ['/api/auth/session', authSession, false],
   ['/api/auth/dev', authDev, false],
   ['/api/auth/preview', authPreview, false],
+  ['/api/auth/signup', authSignup, false],
   ['/api/auth/device', authDevice, false],
   ['/api/auth/device/poll', authDevicePoll, false],
   ['/api/auth/:provider/start', authStart, false],
@@ -61,11 +81,16 @@ const ROUTES = [
   ['/api/tokens/:id', token, false],
   ['/api/prs/refresh', prsRefresh, false],
   ['/api/github/webhook', githubWebhook, false],
+  ['/api/webhooks/bmc', bmcWebhook, false],
   ['/api/github/repos', githubRepos, false],
   ['/api/github/repo', githubRepo, false],
   ['/api/projects/:id/pulls', projectPulls, false],
   ['/api/notes/:id/attachments', noteAttachments, false],
   ['/api/attachments/:id', attachment, false],
+  ['/api/tapes', tapes, false],
+  ['/api/tapes/transcription', tapeTranscription, false],
+  ['/api/tapes/:id/audio', tapeAudio, false],
+  ['/api/tapes/:id/transcribe', tapeTranscribe, false],
   ['/api/v1', v1Index, true],
   ['/api/v1/projects', v1Projects, true],
   ['/api/v1/features', v1Features, true],
@@ -78,6 +103,18 @@ const ROUTES = [
   ['/api/v1/batches', v1Batches, true],
   ['/api/v1/boards', v1Boards, true],
   ['/api/v1/labels', v1Labels, true],
+  ['/api/v1/tapes', v1Tapes, true],
+  ['/api/v1/tapes/:id', v1Tape, true],
+  ['/api/v1/events', v1Events, true],
+  ['/api/v1/context', v1Context, true],
+  ['/api/v1/diagrams', v1Diagrams, true],
+  ['/api/v1/diagrams/:id', v1Diagram, true],
+  // The app calls diagrams designs (the Design page): the same routes answer under that name too.
+  ['/api/v1/designs', v1Diagrams, true],
+  ['/api/v1/designs/:id', v1Diagram, true],
+  ['/api/v1/projects/:project/context', v1ProjectContext, true],
+  ['/api/mcp', mcp, false],
+  ['/api/scribe', scribe, false],
 ];
 
 /**

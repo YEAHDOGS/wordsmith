@@ -4,6 +4,14 @@
 # Local only: shows a "Local dev" sign-in button on localhost so you can work before OAuth apps exist.
 DEV_LOGIN=true
 
+# Local only: PAYWALL=optional lets every account in whatever its trial says, and shows the "Show the paywall" switch
+# in Settings, the same as Worker Previews and staging (wrangler.jsonc). Leave it out to test the real lock.
+# PAYWALL=optional
+
+# Private beta: while set, creating a new account needs this password (existing users sign in as usual).
+# Production: npx wrangler secret put SIGNUP_PASSWORD. Delete the secret to open sign-up.
+# SIGNUP_PASSWORD=
+
 # 32 random bytes, base64url. Encrypts stored GitHub OAuth tokens (PR auto-sync).
 # node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 TOKEN_ENCRYPTION_KEY=
@@ -36,3 +44,8 @@ APPLE_CLIENT_ID=
 APPLE_TEAM_ID=
 APPLE_KEY_ID=
 APPLE_PRIVATE_KEY=
+
+# Scribe's wordsmith cloud runs on the real Workers AI even in local dev (it has no local copy), and spends the
+# account's shared 10,000 free neurons a day, but local D1 counts it separately. Keep local dev small:
+SCRIBE_USER_NEURONS=500
+SCRIBE_DAILY_NEURONS=800

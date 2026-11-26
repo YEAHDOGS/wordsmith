@@ -1,6 +1,7 @@
 // Sessions (web cookie or native bearer) and agent API tokens.
 import { HttpError, isTrustedOrigin } from './http.js';
 import { randomToken, sha256 } from './crypto.js';
+import { APP_HOST, SHORT_HOSTS, TOP_PLAN, TRIAL_ENDED, planOf, trialEndsAt } from '../../src/lib/models.js';
 
 export const SESSION_COOKIE = 'ws_session';
 export const SESSION_PREFIX = 'wss_';
@@ -12,9 +13,32 @@ export const SESSION_MAX_AGE_SECONDS = SESSION_MS / 1000;
 const TOKEN_TOUCH_MS = 3_600_000;
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 const MAX_USER_AGENT = 200;
+const PAYMENT_REQUIRED = 402;
+// The value of the PAYWALL var that switches the paywall off (see paywallOptional).
+const PAYWALL_OPTIONAL = 'optional';
+// The account's Buy Me a Coffee memberships, as a JSON array: every row whose email is one a sign-in provider verified
+// for this account (identities.email_verified), so an unverified address can't borrow someone else's membership.
+// models.js planOf turns them into a plan.
+const MEMBERSHIPS = `(SELECT json_group_array(json_object('level_id', m.level_id, 'duration', m.duration, 'amount', m.amount, 'currency', m.currency, 'status', m.status, 'period_end', m.period_end))
+  FROM memberships m WHERE m.email IN (SELECT lower(i.email) FROM identities i WHERE i.user_id = u.id AND i.email_verified = 1)) AS memberships`;
+const USER_COLUMNS = `u.id, u.email, u.name, u.avatar_url, u.created_at, u.access, u.plan, ${MEMBERSHIPS}`;
 
-/** @typedef {{ id: string, email: string | null, name: string | null, avatar_url: string | null }} User */
-/** @typedef {{ user: User, via: 'cookie' | 'bearer' | 'token', tokenHash: string, tokenName?: string }} Auth */
+/** plan: the best plan the account holds now (models.js planOf), null when locked.
+ * @typedef {{ id: string, email: string | null, name: string | null, avatar_url: string | null, created_at: number, access: string, plan: import('../../src/lib/models.js').Plan | null, trial_ends_at: number }} User */
+/** @typedef {{ user: User, via: 'cookie' | 'bearer' | 'token', tokenHash: string, tokenName?: string, tokenColor?: string }} Auth */
+
+/**
+ * Worker Previews and staging never lock anyone out: an account with no plan there gets TOP_PLAN, so a pull request
+ * can be tried whatever the shared test accounts' trials say. The app shows a Settings toggle there to look at the
+ * paywall anyway (src/lib/auth.svelte.js). Needs the PAYWALL var, set only in the `previews` and `env.preview` blocks
+ * of wrangler.jsonc (or .dev.vars), never at the top level; the host check keeps it off the production domains even
+ * if it were.
+ * @param {Request} request @param {Record<string, any>} env
+ */
+export function paywallOptional(request, env) {
+  const { hostname } = new URL(request.url);
+  return env.PAYWALL === PAYWALL_OPTIONAL && hostname !== APP_HOST && !SHORT_HOSTS.includes(hostname);
+}
 
 /** @param {Request} request @param {string} name */
 export function readCookie(request, name) {
@@ -68,21 +92,22 @@ export async function getAuth(request, env) {
   if (!token) return null;
   const tokenHash = await sha256(token);
   const now = Date.now();
+  const open = paywallOptional(request, env);
 
   if (token.startsWith(API_TOKEN_PREFIX)) {
     const row = await env.DB.prepare(
-      `SELECT t.last_used_at, t.name AS token_name, u.id, u.email, u.name, u.avatar_url FROM api_tokens t JOIN users u ON u.id = t.user_id
+      `SELECT t.last_used_at, t.name AS token_name, t.color AS token_color, ${USER_COLUMNS} FROM api_tokens t JOIN users u ON u.id = t.user_id
        WHERE t.token_hash = ? AND t.revoked_at IS NULL`,
     ).bind(tokenHash).first();
     if (!row) return null;
     if (!row.last_used_at || now - Number(row.last_used_at) > TOKEN_TOUCH_MS) {
       await env.DB.prepare('UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?').bind(now, tokenHash).run();
     }
-    return { user: pickUser(row), via: 'token', tokenHash, tokenName: String(row.token_name || '') };
+    return { user: pickUser(row, open), via: 'token', tokenHash, tokenName: String(row.token_name || ''), tokenColor: String(row.token_color || 'default') };
   }
 
   const row = await env.DB.prepare(
-    `SELECT u.id, u.email, u.name, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT ${USER_COLUMNS} FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ?`,
   ).bind(tokenHash, now).first();
   if (!row) return null;
@@ -90,22 +115,29 @@ export async function getAuth(request, env) {
   if (via === 'cookie' && !SAFE_METHODS.includes(request.method) && !isTrustedOrigin(request, env)) {
     throw new HttpError(403, 'Untrusted origin');
   }
-  return { user: pickUser(row), via, tokenHash };
+  return { user: pickUser(row, open), via, tokenHash };
 }
 
-/** @param {Record<string, any>} row @returns {User} */
-function pickUser(row) {
-  return { id: row.id, email: row.email, name: row.name, avatar_url: row.avatar_url };
+/** @param {Record<string, any>} row @param {boolean} open the paywall is off here (paywallOptional) @returns {User} */
+function pickUser(row, open) {
+  const created_at = Number(row.created_at);
+  const access = String(row.access || 'trial');
+  const plan = planOf({ created_at, access, plan: row.plan, memberships: JSON.parse(row.memberships || '[]') }) ?? (open ? TOP_PLAN : null);
+  return { id: row.id, email: row.email, name: row.name, avatar_url: row.avatar_url, created_at, access, plan, trial_ends_at: trialEndsAt({ created_at }) };
 }
 
 /**
  * Like getAuth, but throws 401 when nobody is signed in. Agent tokens are only accepted when allowToken is set.
+ * allowLocked lets an account with no plan through (free trial over): only the data export and the file downloads it
+ * needs set it, so leaving with your data never takes a membership. Everything else still answers 402.
  * @param {{ request: Request, env: Record<string, any> }} context
- * @param {{ allowToken?: boolean }} [options]
+ * @param {{ allowToken?: boolean, allowLocked?: boolean }} [options]
  */
-export async function requireAuth({ request, env }, { allowToken = false } = {}) {
+export async function requireAuth({ request, env }, { allowToken = false, allowLocked = false } = {}) {
   const auth = await getAuth(request, env);
   if (!auth) throw new HttpError(401, 'Sign in required');
+  // The free trial is over and the account holds no plan: nothing works but signing in and out (and agent tokens stop).
+  if (!auth.user.plan && !allowLocked) throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
   if (auth.via === 'token' && !allowToken) throw new HttpError(403, 'API tokens cannot use this route');
   return auth;
 }

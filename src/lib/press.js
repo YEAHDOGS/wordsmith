@@ -9,14 +9,9 @@ const MOUSE_SLOP_PX = 5;
 const HAPTIC_MS = 10;
 const PRIMARY_BUTTON = 0;
 // Presses that start on these keep their own behaviour (the card's select and pin buttons, its hold menu).
-const OWN_CONTROLS = 'button, a, input, textarea, select';
+const OWN_CONTROLS = 'button, a, input, textarea, select, audio, video';
 
 /** @typedef {{ onhold?: () => void, onlift?: (event: PointerEvent) => void }} PressOptions */
-
-/** Once a hold has fired, the finger belongs to the card: stop the page from scrolling under it. @param {TouchEvent} event */
-function holdScroll(event) {
-  if (event.cancelable) event.preventDefault();
-}
 
 /** A short buzz where supported; Chrome refuses (with a console warning) before the first real tap. */
 export function buzz() {
@@ -43,14 +38,12 @@ export function press(node, options) {
     removeEventListener('pointermove', onmove);
     removeEventListener('pointerup', end);
     removeEventListener('pointercancel', end);
-    removeEventListener('touchmove', holdScroll);
   }
 
   function hold() {
     held = true;
     swallow = true;
     buzz();
-    addEventListener('touchmove', holdScroll, { passive: false });
     current.onhold?.();
   }
 
@@ -81,6 +74,16 @@ export function press(node, options) {
     current.onlift?.(event);
   }
 
+  /**
+   * Once a hold has fired or a drag has begun, the finger belongs to the card: stop the page from scrolling under it.
+   * Being on the card from touchstart is what makes the browser wait for us, so every touchmove stays cancelable;
+   * the drag itself (src/lib/reorder.svelte.js) also listens on the touch's target, which outlives this card.
+   * @param {TouchEvent} event
+   */
+  function ontouchmove(event) {
+    if ((held || lifted) && event.cancelable) event.preventDefault();
+  }
+
   /** Capture phase on the card, so neither the card nor anything inside it sees the click. @param {MouseEvent} event */
   function onclick(event) {
     if (!swallow) return;
@@ -91,6 +94,7 @@ export function press(node, options) {
 
   node.addEventListener('pointerdown', ondown);
   node.addEventListener('click', onclick, true);
+  node.addEventListener('touchmove', ontouchmove, { passive: false });
   return {
     /** @param {PressOptions} next */
     update: (next) => (current = next),
@@ -98,6 +102,7 @@ export function press(node, options) {
       end();
       node.removeEventListener('pointerdown', ondown);
       node.removeEventListener('click', onclick, true);
+      node.removeEventListener('touchmove', ontouchmove);
     },
   };
 }

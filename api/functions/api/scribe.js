@@ -1,0 +1,168 @@
+// wordsmith cloud for Scribe: turns a stretch of speech into ticket actions with Workers AI, for people who run no model
+// of their own. The prompt is built here from the same code the app uses for local models (src/lib/scribe-llm.js), so
+// the route answers Scribe's question and nothing else, and every field is bounded. Each account gets a daily
+// allowance of Workers AI neurons from its plan (PLANS in src/lib/models.js), and all accounts together stay under
+// SCRIBE_DAILY_NEURONS, so Scribe can never spend the account's whole free allowance. Each request reserves its worst-case cost (the longest answer allowed) in the
+// same statement that checks the cap, so requests arriving together can never carry the total past it; the
+// reservation is then corrected to what the request really used, and given back if it fails.
+// GET  /api/scribe -> { available, models: [{ id, name, note }], default, used, limit }
+// POST /api/scribe { model?, project, tickets: [{ ref, title, body, state, priority_level }], earlier, speech }
+//   -> { content: '{"actions":[...]}', used, limit }: only checked ticket actions, never the model's own text, so the
+//   route can't be used as a general-purpose model   429 { code: 'scribe_allowance' } once today's allowance is spent
+import { requireAuth } from '../../lib/auth.js';
+import { HttpError, json, readJson } from '../../lib/http.js';
+import { rateLimit } from '../../lib/rate-limit.js';
+import { EVERYONE, adjust, dayOf, reserve, today } from '../../lib/ai-usage.js';
+import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
+import { FEATURE_STATES, MAX_PRIORITY, PLANS } from '../../../src/lib/models.js';
+import CLOUD from '../../../src/lib/scribe-cloud-models.json';
+
+const ALLOWANCE_CODE = 'scribe_allowance';
+// Everyone's daily cap when the Worker's vars don't say (wrangler.jsonc sets it per environment).
+const DEFAULT_DAILY_NEURONS = 4_000;
+const TOKENS_PER_MILLION = 1_000_000;
+// The models here tokenize bytes (byte-level BPE, or SentencePiece with byte fallback), so a text never has more
+// tokens than UTF-8 bytes, in any language. Each message adds a few tokens of chat template; this covers them.
+const TEMPLATE_TOKENS_PER_MESSAGE = 32;
+const UTF8 = new TextEncoder();
+const USED_UP_MINE = 'Today\'s wordsmith cloud allowance is used up. It resets at midnight UTC; a local model keeps working meanwhile.';
+const USED_UP_EVERYONE = 'wordsmith cloud is out of allowance for today. It resets at midnight UTC; a local model keeps working meanwhile.';
+// A person talking sends a request every few seconds at most; this stops a runaway loop well before the allowance does.
+const REQUEST_LIMIT = 30;
+const REQUEST_WINDOW_MS = 60_000;
+const KEEP_DAYS = 7;
+// A model call that fails this fast did no work (a retired model, a full queue): its reservation goes back. A slower
+// failure may have read the input, so that share stays counted.
+const FAST_FAILURE_MS = 1_000;
+// Old days are swept now and then rather than on every request, to keep writes down.
+const CLEANUP_CHANCE = 0.02;
+const DAY_MS = 86_400_000;
+
+/** @typedef {{ id: string, name: string, note: string, input: number, output: number, suffix?: string, options?: Record<string, any> }} CloudModel */
+
+/** @type {CloudModel[]} */
+const MODELS = CLOUD.models;
+
+/**
+ * Today's caps: this account's plan's allowance (PLANS in src/lib/models.js) and everyone's together.
+ * @param {Record<string, any>} env @param {import('../../../src/lib/models.js').Plan} plan
+ */
+function limits(env, plan) {
+  return {
+    user: PLANS[plan].scribeNeurons,
+    everyone: Number(env.SCRIBE_DAILY_NEURONS) || DEFAULT_DAILY_NEURONS,
+  };
+}
+
+/** Today's usage for this account and for everyone. @param {Record<string, any>} env @param {string} userId @param {string} day */
+async function usage(env, userId, day) {
+  const { results } = await env.DB.prepare('SELECT user_id, neurons FROM scribe_usage WHERE day = ?1 AND user_id IN (?2, ?3)').bind(day, userId, EVERYONE).all();
+  const of = (/** @type {string} */ id) => Number(results.find((row) => row.user_id === id)?.neurons ?? 0);
+  return { mine: of(userId), everyone: of(EVERYONE) };
+}
+
+/** A bounded string from the request, or ''. @param {unknown} value @param {number} max */
+function text(value, max) {
+  if (typeof value !== 'string') return '';
+  return value.slice(0, max);
+}
+
+/** The tickets from the request, checked field by field. @param {unknown} value */
+function tickets(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_TICKETS).map((ticket, index) => ({
+    ref: `T${index + 1}`,
+    id: '',
+    title: text(ticket?.title, MAX_NAME_CHARS),
+    body: text(ticket?.body, MAX_TICKET_BODY),
+    state: FEATURE_STATES.includes(ticket?.state) ? ticket.state : FEATURE_STATES[0],
+    priority_level: Math.min(MAX_PRIORITY, Math.max(0, Math.round(Number(ticket?.priority_level) || 0))),
+  }));
+}
+
+/** @param {{ request: Request, env: Record<string, any> }} context */
+export async function onRequestGet(context) {
+  const { user } = await requireAuth(context);
+  const { env } = context;
+  const { mine } = await usage(env, user.id, today());
+  return json({
+    available: Boolean(env.AI),
+    models: MODELS.map(({ id, name, note }) => ({ id, name, note })),
+    default: CLOUD.default,
+    used: Math.round(mine),
+    limit: limits(env, user.plan).user,
+  });
+}
+
+/** @param {{ request: Request, env: Record<string, any>, waitUntil: (promise: Promise<any>) => void }} context */
+export async function onRequestPost(context) {
+  const { user } = await requireAuth(context);
+  const { env, request } = context;
+  if (!env.AI) throw new HttpError(503, 'wordsmith cloud is not set up on this server');
+  await rateLimit(env, `scribe:${user.id}`, REQUEST_LIMIT, REQUEST_WINDOW_MS);
+  const body = await readJson(request);
+  const model = MODELS.find((candidate) => candidate.id === (body.model || CLOUD.default));
+  if (!model) throw new HttpError(400, 'Pick one of the wordsmith cloud models');
+  const speech = text(body.speech, MAX_SPEECH_CHARS).trim();
+  if (!speech) throw new HttpError(400, 'Send some speech');
+
+  const listed = tickets(body.tickets);
+  const messages = scribeMessages({ project: text(body.project, MAX_NAME_CHARS), tickets: listed, earlier: text(body.earlier, EARLIER_CHARS), speech });
+  // The switch that turns this model's hidden reasoning off, where it is a few words at the end of the request.
+  if (model.suffix) messages[messages.length - 1].content += model.suffix;
+
+  // The most this request can cost: a token for every byte of input (the most any of these tokenizers makes), and
+  // the longest answer allowed. Real use is far lower, and the reservation is corrected to it afterwards, so a
+  // request can never cost more than it reserved and the caps hold whatever the language.
+  const maxTokensIn = messages.reduce((sum, message) => sum + UTF8.encode(message.content).length + TEMPLATE_TOKENS_PER_MESSAGE, 0);
+  const worst = (maxTokensIn * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
+  const day = today();
+  const cap = limits(env, user.plan);
+  if (worst > Math.min(cap.user, cap.everyone)) throw new HttpError(413, 'This is more than one request may carry. Say less at once, or use fewer tickets.');
+  if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
+  if (!(await reserve(env, day, user.id, worst, cap.user))) {
+    await adjust(env, day, [EVERYONE], -worst, -1);
+    throw new HttpError(429, USED_UP_MINE, ALLOWANCE_CODE);
+  }
+
+  // The model call and the count it settles run under waitUntil, so the count is put right even if the app hangs up
+  // or gives up first.
+  const started = Date.now();
+  const settled = (async () => {
+    try {
+      const answer = await env.AI.run(model.id, {
+        messages, temperature: TEMPERATURE, max_tokens: MAX_ANSWER_TOKENS, response_format: { type: 'json_object' }, ...model.options,
+      });
+      const tokensIn = Number(answer?.usage?.prompt_tokens) || 0;
+      const tokensOut = Number(answer?.usage?.completion_tokens) || 0;
+      // An answer that doesn't say what it used counts as its whole reservation, so the count never runs low.
+      const neurons = Number(answer?.usage?.neurons) || (tokensIn || tokensOut ? (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION : worst);
+      // The reservation becomes what the request really cost.
+      await adjust(env, day, [EVERYONE, user.id], neurons - worst);
+      return answer;
+    } catch (error) {
+      // A fast failure did no work and gives everything back; a slow one keeps the input's share.
+      const fast = Date.now() - started < FAST_FAILURE_MS;
+      const back = fast ? worst : (MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
+      const requests = fast ? -1 : 0;
+      await adjust(env, day, [EVERYONE, user.id], -back, requests);
+      throw error;
+    }
+  })();
+  context.waitUntil(settled.catch(() => {}));
+  const answer = await settled;
+  const content = answer?.choices?.[0]?.message?.content ?? answer?.response ?? '';
+  if (Math.random() < CLEANUP_CHANCE) {
+    const oldest = dayOf(Date.now() - KEEP_DAYS * DAY_MS);
+    await env.DB.prepare('DELETE FROM scribe_usage WHERE day < ?').bind(oldest).run();
+  }
+  if (typeof content !== 'string' || !content) throw new HttpError(502, 'The model sent no answer; your words are kept for the next try');
+  let actions;
+  try {
+    actions = parseActions(content, listed);
+  } catch (error) {
+    throw new HttpError(502, `${/** @type {Error} */ (error).message}; your words are kept for the next try`);
+  }
+  const { mine } = await usage(env, user.id, day);
+  return json({ content: JSON.stringify({ actions }), used: Math.round(mine), limit: cap.user });
+}

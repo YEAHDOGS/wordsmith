@@ -1,19 +1,21 @@
-// GET /api/attachments/:id - streams the file (Range requests supported, so videos can seek).
+// GET /api/attachments/:id - streams the file (streamFile in api/lib/attachments.js: Range requests, cached for a year).
 // DELETE /api/attachments/:id - removes it from R2 and tombstones the row.
-// Files are immutable, so browsers cache them for a year and repeat views cost no requests.
 import { requireAuth } from '../../../lib/auth.js';
-import { bucket, release, reserve } from '../../../lib/attachments.js';
+import { bucket, release, streamFile } from '../../../lib/attachments.js';
 import { HttpError, json } from '../../../lib/http.js';
 import { actorFor } from '../../../lib/notes.js';
-import { isId } from '../../../../src/lib/models.js';
+import { TRIAL_ENDED, isId } from '../../../../src/lib/models.js';
 
-const CACHE_FOREVER = 'private, max-age=31536000, immutable';
-const PARTIAL_CONTENT = 206;
-const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
+const PAYMENT_REQUIRED = 402;
 
-/** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
-async function load(context) {
-  const auth = await requireAuth(context, { allowToken: true });
+/**
+ * The attachment and who asked. Reading is open to a locked account's own session (the data export, src/lib/data-export.js);
+ * deleting is not, and neither is an agent token of a locked account.
+ * @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context @param {boolean} [allowLocked]
+ */
+async function load(context, allowLocked = false) {
+  const auth = await requireAuth(context, { allowToken: true, allowLocked });
+  if (!auth.user.plan && auth.via === 'token') throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
   if (!isId(context.params.id)) throw new HttpError(400, 'Bad id');
   const row = await context.env.DB.prepare('SELECT * FROM attachments WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .bind(context.params.id, auth.user.id).first();
@@ -23,42 +25,8 @@ async function load(context) {
 
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
 export async function onRequestGet(context) {
-  const { request, env } = context;
-  const files = bucket(env);
-  const { row } = await load(context);
-  if (request.headers.get('If-None-Match') === `"${row.id}"`) return new Response(null, { status: 304 });
-
-  /** @type {{ offset: number, length: number } | undefined} */
-  let range;
-  const match = RANGE_PATTERN.exec(request.headers.get('Range') || '');
-  if (match && (match[1] || match[2])) {
-    const size = Number(row.size);
-    const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
-    const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
-    if (start <= end && start < size) range = { offset: start, length: end - start + 1 };
-  }
-
-  await reserve(env, { reads: 1 });
-  const object = await files.get(row.r2_key, range ? { range } : undefined);
-  if (!object) throw new HttpError(404, 'File is missing from storage');
-
-  const headers = new Headers({
-    'Content-Type': String(row.type),
-    'Cache-Control': CACHE_FOREVER,
-    ETag: `"${row.id}"`,
-    'Accept-Ranges': 'bytes',
-    'X-Content-Type-Options': 'nosniff',
-    // Served from the app's origin, so never let a file act like a page.
-    'Content-Security-Policy': "default-src 'none'; sandbox",
-    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(String(row.name))}`,
-  });
-  if (!range) {
-    headers.set('Content-Length', String(row.size));
-    return new Response(object.body, { headers });
-  }
-  headers.set('Content-Length', String(range.length));
-  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${row.size}`);
-  return new Response(object.body, { status: PARTIAL_CONTENT, headers });
+  const { row } = await load(context, true);
+  return streamFile(context, { key: String(row.r2_key), size: Number(row.size), type: String(row.type), name: String(row.name), etag: String(row.id) });
 }
 
 /** @param {{ request: Request, env: Record<string, any>, params: { id: string } }} context */
@@ -69,11 +37,16 @@ export async function onRequestDelete(context) {
   await files.delete(row.r2_key);
   const now = Date.now();
   const actor = actorFor(auth);
-  await env.DB.batch([
-    env.DB.prepare('UPDATE attachments SET deleted_at = ?, updated_at = ? WHERE id = ?').bind(now, now, row.id),
-    env.DB.prepare('INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(crypto.randomUUID(), auth.user.id, row.note_id, 'detached', actor.type, actor.name, JSON.stringify({ attachment_id: row.id, name: row.name }), now),
-  ]);
+  const deleted = await env.DB.prepare(`UPDATE attachments
+    SET note_id = '', r2_key = '', name = '', type = '', size = 0, deleted_at = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id`)
+    .bind(now, now, row.id, auth.user.id).first();
+  // A trash purge or another delete may have won after load(); only the winner erases metadata and releases storage.
+  if (!deleted) return json({ ok: true });
+  await env.DB.prepare(`INSERT INTO note_events (id, user_id, note_id, type, actor_type, actor_name, data, created_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE EXISTS (SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND purged_at IS NULL)`)
+    .bind(crypto.randomUUID(), auth.user.id, row.note_id, 'detached', actor.type, actor.name, JSON.stringify({ attachment_id: row.id, name: row.name }), now, row.note_id, auth.user.id).run();
   await release(env, Number(row.size));
   return json({ ok: true });
 }

@@ -14,35 +14,43 @@
   import { backOut } from 'svelte/easing';
   import Pin from '@lucide/svelte/icons/pin';
   import Bot from '@lucide/svelte/icons/bot';
+  import BotMessageSquare from '@lucide/svelte/icons/bot-message-square';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import Folder from '@lucide/svelte/icons/folder';
-  import Paperclip from '@lucide/svelte/icons/paperclip';
+  import Volume2 from '@lucide/svelte/icons/volume-2';
+  import FileText from '@lucide/svelte/icons/file-text';
+  import Image from '@lucide/svelte/icons/image';
+  import Video from '@lucide/svelte/icons/video';
+  import { attachmentKind } from '../lib/models.js';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Archive from '@lucide/svelte/icons/archive';
   import ArchiveRestore from '@lucide/svelte/icons/archive-restore';
   import Trash from '@lucide/svelte/icons/trash';
   import AttachmentMedia from './AttachmentMedia.svelte';
   import StateBadge from './StateBadge.svelte';
+  import LevelDots from './LevelDots.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
+  import { AGENT_TEXT, DOT_BG, DOT_TEXT, PR_STYLE, TINT_BG } from '../lib/colors.js';
   import { ago, duration, fullTime } from '../lib/time.js';
-  import { LOUD_PRIORITY, MAX_PRIORITY, PRIORITY_LABELS } from '../lib/models.js';
   import { press } from '../lib/press.js';
   import { drag, NUDGE_KEYS } from '../lib/reorder.svelte.js';
   import { exit } from '../lib/flip.js';
+  import { renderMarkdown } from '../lib/markdown.js';
 
-  /** @type {{ note: any, showProject?: boolean }} */
-  let { note, showProject = true } = $props();
+  /** @type {{ note: any, showProject?: boolean, inTrash?: boolean }} */
+  let { note, showProject = true, inTrash = false } = $props();
 
+  const ATTACHMENT_TYPES = [
+    { kind: 'audio', label: 'Audio files', icon: Volume2 },
+    { kind: 'document', label: 'Documents', icon: FileText },
+    { kind: 'image', label: 'Images', icon: Image },
+    { kind: 'video', label: 'Videos', icon: Video },
+  ];
+  const OWN_CONTROLS = 'a, button, audio, video, input, select';
   const BODY_PREVIEW_CHARS = 600;
-  // Priority meter: one rising bar per level, bar i lit when priority > i; loud levels light up in the accent.
-  // Bar i is (i + BAR_BASE_STEPS) * BAR_STEP_REM tall, so five bars run from h-1 to h-3.
-  const PRIORITY_BARS = Array.from({ length: MAX_PRIORITY }, (_, bar) => bar);
-  const BAR_STEP_REM = 0.125;
-  const BAR_BASE_STEPS = 2;
   const FLIP_WRAPPER = '[data-flip-id]';
   // On narrow cards (two columns on a 320px phone) the labels hide and the actions sit icon-only in one row, so the
   // menu fits a title-only card; the label text stays for screen readers.
@@ -59,11 +67,22 @@
   const menuOpen = $derived(menu.id === note.id);
 
   const project = $derived(showProject && note.project_id ? store.find('projects', note.project_id) : null);
-  const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.deleted_at));
+  const labels = $derived(note.label_ids.map((/** @type {string} */ id) => store.find('labels', id)).filter((/** @type {any} */ label) => label && !label.purged_at && (inTrash || !label.deleted_at)));
   const isFeature = $derived(note.kind === 'feature');
+  const agent = $derived(note.created_by_type === 'agent' ? note.created_by : '');
+  // The card's bottom line names one agent: who it's assigned to, else the agent that filed it (the server stamps
+  // notes.created_by for agent tokens). A different filer, when both are set, stays in the meta row.
+  const credited = $derived(note.assignee ? { name: note.assignee, icon: Bot, title: `Assigned to ${note.assignee}` }
+    : agent ? { name: agent, icon: BotMessageSquare, title: `Created by agent ${agent}` } : null);
+  // ...in the agent's marker color (AGENT_TEXT), muted for agents without one
+  const credit = $derived(credited && { ...credited, text: AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (credited.name.toLowerCase())] || DOT_TEXT.default });
+  const filedBy = $derived(note.assignee && agent && agent !== note.assignee ? agent : '');
   const files = $derived(store.attachmentsFor(note.id));
-  // Keep-style cover: the first image, else the first video frame.
-  const cover = $derived(files.find((file) => file.type.startsWith('image/')) ?? files[0] ?? null);
+  const attachmentCounts = $derived(ATTACHMENT_TYPES.map((type) => ({
+    ...type, count: files.filter((file) => attachmentKind(file.type) === type.kind).length,
+  })).filter((type) => type.count));
+  // Keep-style cover: the first image, else the first video frame. Documents are never a cover.
+  const cover = $derived(files.find((file) => file.type.startsWith('image/')) ?? files.find((file) => file.type.startsWith('video/')) ?? null);
   // The latest timestamp in the chain is the one worth showing on a card.
   const stamp = $derived(
     note.completed_at ? { label: 'completed', at: note.completed_at }
@@ -94,6 +113,8 @@
 
   /** @param {MouseEvent | KeyboardEvent} event */
   function activate(event) {
+    if (event.target instanceof Element && event.target.closest(OWN_CONTROLS)) return;
+    if (inTrash) { router.openNote(note.id); return; }
     if (selecting || event.ctrlKey || event.metaKey || event.shiftKey) ui.toggleSelected(note.id);
     else router.openNote(note.id);
   }
@@ -107,6 +128,7 @@
 
   /** Keyboard path to the menu: open it and focus its first action. */
   async function openMenuFromKeys() {
+    if (inTrash) return;
     menu.id = note.id;
     await tick();
     /** @type {HTMLElement | null | undefined} */ (card?.querySelector('[role="menuitem"]'))?.focus();
@@ -129,6 +151,7 @@
 
   /** Moving after a hold (or dragging with a mouse) picks the card up. @param {PointerEvent} event */
   function lift(event) {
+    if (inTrash) return;
     const wrapper = /** @type {HTMLElement | null | undefined} */ (card?.closest(FLIP_WRAPPER));
     menu.id = '';
     if (!wrapper) return;
@@ -145,7 +168,7 @@
     } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault();
       openMenuFromKeys();
-    } else if (event.altKey && event.key in NUDGE_KEYS) {
+    } else if (!inTrash && event.altKey && event.key in NUDGE_KEYS) {
       event.preventDefault();
       drag.nudge(note, /** @type {HTMLElement} */ (card), /** @type {keyof typeof NUDGE_KEYS} */ (event.key));
     }
@@ -154,7 +177,7 @@
   /** Right-click and the long-press menu of touch browsers open the card's own menu. @param {MouseEvent} event */
   function oncontextmenu(event) {
     event.preventDefault();
-    if (!drag.id) menu.id = note.id;
+    if (!inTrash && !drag.id) menu.id = note.id;
   }
 
   /** Plays the card out, then archives or deletes it. @param {MouseEvent} event @param {() => void} commit */
@@ -186,9 +209,9 @@
   role="button"
   tabindex="0"
   aria-label="{note.title || 'Untitled note'}{selected ? ', selected' : ''}"
-  aria-haspopup="menu"
+  aria-haspopup={inTrash ? undefined : 'menu'}
   aria-keyshortcuts="Shift+F10 Alt+ArrowUp Alt+ArrowDown"
-  use:press={{ onhold: () => (menu.id = note.id), onlift: lift }}
+  use:press={inTrash ? {} : { onhold: () => (menu.id = note.id), onlift: lift }}
   ondragstart={(event) => event.preventDefault()}
   onclick={activate}
   {onkeydown}
@@ -200,27 +223,32 @@
       <AttachmentMedia file={cover} class="spring size-full object-cover group-hover:scale-[1.02]" />
     </div>
   {/if}
-  <div class="flex items-start gap-2">
-    {#if note.priority_level}
-      <span class="mt-1 flex h-3 shrink-0 items-end gap-px tv:mt-2" role="img" aria-label="{PRIORITY_LABELS[note.priority_level]} priority" title="Priority: {PRIORITY_LABELS[note.priority_level]}">
-        {#each PRIORITY_BARS as bar (bar)}
-          <span class="spring w-0.5 tv:w-1 {bar < note.priority_level ? (note.priority_level >= LOUD_PRIORITY ? 'bg-accent' : 'bg-ink-muted') : 'bg-line-strong'}" style:height="{(bar + BAR_BASE_STEPS) * BAR_STEP_REM}rem"></span>
-        {/each}
-      </span>
-    {/if}
-    {#if note.title}
-      <h3 class="min-w-0 flex-1 text-fluid-sm font-semibold leading-snug text-ink">{note.title}</h3>
-    {:else}
-      <span class="flex-1"></span>
-    {/if}
-    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+  <!-- Pin and select: hover-only on desktop; phones have no hover, so they show only when active -->
+  {#snippet selectButton()}
+    {#if !inTrash}
+    <button class="spring press -m-1 p-1 {selected ? 'text-accent' : selecting ? 'text-ink-faint' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={selected ? 'Deselect' : 'Select'} aria-pressed={selected} onclick={toggleSelect}><CircleCheck class="size-4" /></button>
-    <button class="spring press -m-1 p-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
+    {/if}
+  {/snippet}
+  {#snippet pinButton()}
+    {#if !inTrash}
+    <button class="spring press -mx-1 flex h-[1.375em] items-center px-1 {note.pinned ? 'text-accent' : 'text-ink-faint opacity-0 pointer-coarse:hidden group-hover:opacity-100 focus-visible:opacity-100'}"
       aria-label={note.pinned ? 'Unpin' : 'Pin'} aria-pressed={note.pinned} onclick={togglePin}><Pin class="size-4" /></button>
+    {/if}
+  {/snippet}
+
+  <!-- Title at the top, taking all the width it can; pin over select in one column in the top-right corner.
+       The column shares the title's type, so the pin's box is one title line tall (leading-snug: 1.375em) and centers on it. -->
+  <div class="flex items-start gap-2">
+    {#if note.title}<h3 class="min-w-0 flex-1 line-clamp-4 break-words text-fluid-sm font-semibold leading-snug text-ink [overflow-wrap:anywhere]" title={note.title}>{note.title}</h3>{:else}<span class="flex-1"></span>{/if}
+    <div class="flex shrink-0 flex-col items-center gap-0.5 text-fluid-sm leading-snug">
+      {@render pinButton()}
+      {@render selectButton()}
+    </div>
   </div>
 
   {#if note.body}
-    <p class="line-clamp-10 whitespace-pre-wrap wrap-break-word text-[0.8125rem] tv:text-lg leading-relaxed text-ink-muted">{note.body.slice(0, BODY_PREVIEW_CHARS)}</p>
+    <div class="markdown note-card-preview line-clamp-10 text-ink-muted tv:text-lg">{@html renderMarkdown(note.body.slice(0, BODY_PREVIEW_CHARS))}</div>
   {/if}
 
   {#if isFeature && note.status}
@@ -229,11 +257,18 @@
 
   <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
     {#if isFeature}<StateBadge state={note.state} />{/if}
-    {#if files.length}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{files.length} attachment{files.length === 1 ? '' : 's'}"><Paperclip class="size-3" />{files.length}</span>
+    {#if attachmentCounts.length}
+      <!-- Attachment counts stay together on one line, never split across the wrap -->
+      <span class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+        {#each attachmentCounts as type (type.kind)}
+          <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted" title="{type.label}: {type.count}" aria-label="{type.label}: {type.count}">
+            <type.icon class="size-3" />{type.count}
+          </span>
+        {/each}
+      </span>
     {/if}
-    {#if note.assignee}
-      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-ink-muted"><Bot class="size-3" />{note.assignee}</span>
+    {#if filedBy}
+      <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {AGENT_TEXT[/** @type {keyof typeof AGENT_TEXT} */ (filedBy.toLowerCase())] || DOT_TEXT.default}" title="Created by agent {filedBy}"><BotMessageSquare class="size-3" />{filedBy}</span>
     {/if}
     {#each note.pull_requests as pr (pr.url)}
       <span class="inline-flex items-center gap-1 font-mono text-[0.6875rem] {PR_STYLE[/** @type {keyof typeof PR_STYLE} */ (pr.state)]}" title="{pr.repo}#{pr.number} {pr.state}">
@@ -255,8 +290,21 @@
     {stamp.label} {ago(stamp.at)}{#if note.completed_at}&nbsp;· took {duration(note.created_at, note.completed_at)}{/if}
   </p>
 
+  <!-- The card closes on its levels: priority at the far left, difficulty at the far right, and the credited agent
+       centered between them -->
+  {#if note.priority_level || note.difficulty || credit}
+    <LevelDots priority={note.priority_level} difficulty={note.difficulty}>
+      {#if credit}
+        <!-- Robot over the full name (agent names run about 7 characters); never truncated -->
+        <span class="flex flex-col items-center gap-0.5 font-mono text-[0.6875rem] leading-none whitespace-nowrap tv:text-sm tv:@max-[11rem]:text-[0.6875rem] {credit.text}" title={credit.title}>
+          <credit.icon class="size-3 shrink-0 tv:size-4" /><span>{credit.name}</span>
+        </span>
+      {/if}
+    </LevelDots>
+  {/if}
+
   <!-- Hold menu: dims the card in place (absolute, so nothing moves) and floats the actions over it -->
-  {#if menuOpen}
+  {#if menuOpen && !inTrash}
     <div class="absolute inset-0 z-10 flex items-center justify-center p-2" transition:fade={{ duration: 150 }}>
       <button class="absolute inset-0 cursor-default bg-scrim" tabindex="-1" aria-label="Close menu" onclick={(event) => { event.stopPropagation(); closeMenu(); }}></button>
       <!-- A real menu: arrow keys, Home and End move between the actions, which stay out of the Tab order -->

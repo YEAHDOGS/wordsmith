@@ -39,16 +39,26 @@
   "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments" }],
   // R2's free allowance (10 GB, 1M writes, 10M reads a month) is shared account-wide. dogs-data already uses ~5.75 GB,
   // so production gets 3 GB and staging 0.5 GB: 9.25 GB worst case. See api/lib/attachments.js.
-  "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000" },
+  // Workers AI (AI, for Scribe's wordsmith cloud: api/functions/api/scribe.js) is free for 10,000 neurons a day across
+  // the account. Each person gets their plan's scribeNeurons a day (PLANS in src/lib/models.js) and all of production
+  // SCRIBE_DAILY_NEURONS; staging and the Previews share one staging counter (they share its D1), capped lower, so all together stay under 8,000.
+  // Cloud transcripts for tapes (api/functions/api/tapes/[id]/transcribe.js) come out of the same everyone-together cap:
+  // TAPE_CLOUD_MINUTES a day per person (about 47 neurons a minute), and all tapes together at most
+  // TAPE_CLOUD_DAILY_NEURONS, so Scribe always keeps the rest.
+  "vars": { "R2_MAX_GB": "3", "R2_MAX_MONTHLY_WRITES": "300000", "R2_MAX_MONTHLY_READS": "3000000", "SCRIBE_DAILY_NEURONS": "6000", "TAPE_CLOUD_MINUTES": "15", "TAPE_CLOUD_DAILY_NEURONS": "2000" },
+  "ai": { "binding": "AI" },
   // Worker Previews: every pull request branch gets its own Preview (`npx wrangler preview`, run by Workers Builds and
   // scripts/preview.js) at <branch>-wordsmith.<subdomain>.workers.dev. Previews never inherit the production bindings
   // above, so they are pointed at the staging D1 database and R2 bucket here: PR code never touches production data.
+  // PAYWALL "optional": nobody is locked out on Previews or staging (api/lib/auth.js paywallOptional); Settings there
+  // has a switch to look at the paywall. Never set it at the top level.
   "previews": {
     "d1_databases": [
       { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }
     ],
     "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
-    "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
+    "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000", "PAYWALL": "optional", "TAPE_CLOUD_MINUTES": "5", "TAPE_CLOUD_DAILY_NEURONS": "600" },
+    "ai": { "binding": "AI" }
   },
   "env": {
     // Staging: `npx wrangler deploy --env preview` deploys a separate Worker, wordsmith-preview, on staging data only.
@@ -69,7 +79,8 @@
         { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations", "remote": true }
       ],
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging", "remote": true }],
-      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000" }
+      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000", "PAYWALL": "optional", "TAPE_CLOUD_MINUTES": "5", "TAPE_CLOUD_DAILY_NEURONS": "600" },
+      "ai": { "binding": "AI" }
     }
   }
 }

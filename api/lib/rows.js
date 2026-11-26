@@ -1,9 +1,9 @@
 // Converts synced rows between D1 (JSON text, 0/1 integers) and the API shape (arrays, booleans), and builds upserts.
-import { BOOL_FIELDS, JSON_FIELDS, MODELS, SERVER_FIELDS } from '../../src/lib/models.js';
+import { BOOL_FIELDS, JSON_FIELDS, MODELS, SERVER_FIELDS, SYNCED_TABLES } from '../../src/lib/models.js';
 
 // D1 caps bound parameters per query at 100.
 export const MAX_BIND_PARAMS = 100;
-export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups']);
+export { SYNCED_TABLES };
 // Never changed by an upsert.
 const FIXED_COLUMNS = ['id', 'user_id', 'created_at'];
 
@@ -36,7 +36,7 @@ export function safeJson(text, fallback) {
 }
 
 /** A column's value as D1 stores it: JSON text, 0/1, or null. @param {string} column @param {any} value */
-function dbValue(column, value) {
+export function dbValue(column, value) {
   if (JSON_FIELDS.includes(column)) return JSON.stringify(value ?? []);
   if (BOOL_FIELDS.includes(column)) return value ? 1 : 0;
   return value ?? null;

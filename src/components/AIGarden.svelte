@@ -7,7 +7,8 @@
   import { auth } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
 
-  let { gardenMode = $bindable(false) } = $props();
+  /** @type {{ onleave?: () => void }} onleave: back to the notes */
+  let { onleave = () => {} } = $props();
 
   const INITIAL_AGENTS = [
     { id: 'claude', name: 'Claude', x: 24, y: 63, active: true },
@@ -116,7 +117,7 @@
   }
 
   function openView(view) {
-    gardenMode = false;
+    onleave();
     router.go(view);
   }
 </script>

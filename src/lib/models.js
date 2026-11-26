@@ -10,35 +10,217 @@ export const PR_STATES = ['open', 'merged', 'closed'];
 // Card and label tints. Each maps to a --color-tint-* token in src/styles/theme.css.
 export const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 export const PROVIDERS = ['github', 'google', 'apple'];
-// Timeline entries in note_events, written by the server on every interaction.
-export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed'];
+// The Needs you page (agent questions and the review queue, one card at a time). false hides it: no navigation entry,
+// and its address opens All notes, while its data and the agent API (ask, snooze) keep working.
+export const NEEDS_YOU_ENABLED = true;
+// Free trial and plans. New accounts get TRIAL_DAYS of full access from when they signed up, then every route but
+// sign-in and sign-out answers 402 with TRIAL_ENDED until the account holds a plan: a DOGS membership on Buy Me a
+// Coffee (the memberships table, kept by api/functions/api/webhooks/bmc.js), or one given by hand (users.access =
+// 'member' with users.plan, scripts/access.js). users.access = 'lapsed' locks an account whatever it holds.
+export const DAY_MS = 86_400_000;
+export const TRIAL_DAYS = 5;
+export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
+export const TRIAL_ENDED = 'trial_ended';
+// DOGS's memberships on Buy Me a Coffee: $1 a month or $5 a year. No price is promised beyond the period paid for.
+export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs/membership';
+// Buy DOGS a coffee (CoffeeButton.svelte): a one-time thank you, a large pumpkin spice latte, plus tax. It unlocks
+// nothing. Point COFFEE_URL at the Buy Me a Coffee item priced COFFEE_PRICE_USD once that exists; until then it is
+// DOGS's page, where a supporter picks the amount.
+export const COFFEE_URL = 'https://buymeacoffee.com/dogsdogsdogs';
+export const COFFEE_PRICE_USD = 6.96;
+const MB = 1024 * 1024;
+// What each plan unlocks, lowest first. `level` is the Buy Me a Coffee membership_level_id, and `monthly` and `yearly`
+// its prices in USD, which place a level added later (one with no id here) at the highest plan it pays for.
+// scribeNeurons: Scribe's daily wordsmith cloud allowance (Workers AI neurons, api/functions/api/scribe.js; everyone's
+// total is still capped by SCRIBE_DAILY_NEURONS in wrangler.jsonc). tapeBytes: the audio all of an account's tapes may
+// hold in R2 (api/functions/api/tapes/index.js; R2_MAX_GB caps everyone's total).
+// uploads: the largest video, audio file and document an account may attach to a note (uploadLimits below; images are
+// always shrunk to MAX_IMAGE_BYTES on the device). A Worker request tops out at 100 MB on the free plan, so nothing
+// goes past 95 MB, and the R2 caps in api/lib/attachments.js still bound what everyone stores together.
+export const PLANS = {
+  trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB, uploads: { video: 10 * MB, audio: 10 * MB, document: 5 * MB } },
+  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 5, scribeNeurons: 2_500, tapeBytes: 250 * MB, uploads: { video: 25 * MB, audio: 25 * MB, document: 10 * MB } },
+  animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB, uploads: { video: 50 * MB, audio: 50 * MB, document: 25 * MB } },
+  megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB, uploads: { video: 95 * MB, audio: 95 * MB, document: 50 * MB } },
+};
+/** @typedef {keyof typeof PLANS} Plan */
+const PLAN_RANK = /** @type {Plan[]} */ (Object.keys(PLANS));
+const PAID_PLANS = PLAN_RANK.filter((plan) => PLANS[plan].level !== null);
+// The currency of PLANS' prices.
+const PRICE_CURRENCY = 'USD';
+// The plan scripts/access.js gives when approving by hand without naming one.
+export const GRANTED_PLAN = 'rockstar';
+// The highest plan anyone can pay for: what the owner's own account runs on, and what Previews and staging give
+// everyone while their paywall is off (api/lib/auth.js paywallOptional).
+export const TOP_PLAN = PAID_PLANS[PAID_PLANS.length - 1];
+/** When an account's trial ends (ms). @param {{ created_at: number }} user */
+export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
 
-// Attachments: images and videos on notes, stored in R2. SVG is left out on purpose (it can carry script).
+/**
+ * The plan a Buy Me a Coffee membership pays for, or null while it isn't paid up (paused, or canceled and past the end
+ * of its paid period). A level not in PLANS gets the highest plan its price covers (prices are USD; another currency
+ * gets the lowest paid plan), and at least the lowest paid one.
+ * An active membership counts even past period_end: Buy Me a Coffee isn't documented to send an event on every
+ * renewal, so expiring on it could lock out paying members. A cancellation that never arrives (Buy Me a Coffee retries
+ * for hours and emails the owner when deliveries keep failing) shows in `npm run access -- list` instead.
+ * @param {{ level_id: number | null, duration: string, amount: number, currency?: string, status: string, period_end: number | null }} membership
+ * @param {number} now
+ * @returns {Plan | null}
+ */
+export function membershipPlan(membership, now) {
+  const paidUp = membership.status === 'active' || (membership.status === 'canceled' && Number(membership.period_end) > now);
+  if (!paidUp) return null;
+  const known = PAID_PLANS.find((plan) => PLANS[plan].level === Number(membership.level_id));
+  if (known) return known;
+  if (membership.currency && membership.currency.toUpperCase() !== PRICE_CURRENCY) return PAID_PLANS[0];
+  const price = (/** @type {Plan} */ plan) => (membership.duration === 'year' ? PLANS[plan].yearly : PLANS[plan].monthly);
+  // Not findLast: Firefox 97 (the Potato Target) lacks it.
+  return [...PAID_PLANS].reverse().find((plan) => Number(membership.amount) >= price(plan)) ?? PAID_PLANS[0];
+}
+
+/**
+ * The best plan an account holds now, or null when it is locked (the paywall). The server works this out
+ * (api/lib/auth.js) and sends it as user.plan, so the app never judges by its own clock.
+ * @param {{ access?: string, plan?: string | null, created_at: number, memberships?: any[] }} user @param {number} [now]
+ * @returns {Plan | null}
+ */
+export function planOf(user, now = Date.now()) {
+  if (user.access === 'lapsed') return null;
+  /** @type {Plan[]} */
+  const held = (user.memberships ?? []).map((membership) => membershipPlan(membership, now)).filter((plan) => plan !== null);
+  if (user.access === 'member') held.push(Object.hasOwn(PLANS, user.plan ?? '') ? /** @type {Plan} */ (user.plan) : GRANTED_PLAN);
+  if (now < trialEndsAt(user)) held.push('trial');
+  return held.sort((a, b) => PLAN_RANK.indexOf(b) - PLAN_RANK.indexOf(a))[0] ?? null;
+}
+// Longest Preview or beta password the sign-in screen accepts and the server checks.
+export const MAX_PASSWORD_LENGTH = 200;
+// Timeline entries in note_events, written by the server on every interaction.
+export const EVENT_TYPES = ['created', 'edited', 'state', 'status', 'claimed', 'assigned', 'pr_linked', 'pr_merged', 'pr_closed', 'archived', 'unarchived', 'deleted', 'restored', 'attached', 'detached', 'published', 'unpublished', 'analyzed', 'asked', 'answered'];
+
+// Attachments: images, videos, audio and documents on notes, stored in R2. SVG is left out on purpose (it can carry script).
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 export const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+export const AUDIO_TYPES = {
+  'audio/aac': ['.aac'],
+  'audio/flac': ['.flac'],
+  'audio/mp4': ['.m4a'],
+  'audio/mpeg': ['.mp3'],
+  'audio/ogg': ['.oga', '.ogg'],
+  'audio/wav': ['.wav'],
+  'audio/webm': ['.weba', '.webm'],
+};
 // Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
 // and the server rejects anything larger.
 export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
-// Videos can't be re-encoded in the browser without a large library, so they're only capped: about a minute of 720p screen recording.
-export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+// Videos, audio and documents can't be shrunk in the browser without a large library, so they're only capped, by plan
+// (PLANS[plan].uploads). These are the free trial's caps, the lowest: about a minute of 720p screen recording.
+export const MAX_VIDEO_BYTES = PLANS.trial.uploads.video;
+export const MAX_AUDIO_BYTES = PLANS.trial.uploads.audio;
+
+/**
+ * The largest file of each kind an account on a plan may attach to a note, in bytes. No plan, or one this build
+ * doesn't know, gets the free trial's. The app checks before uploading and the server checks again (checkUpload).
+ * @param {string | null | undefined} plan
+ * @returns {{ image: number, video: number, audio: number, document: number }}
+ */
+export function uploadLimits(plan) {
+  const known = /** @type {Plan} */ (Object.hasOwn(PLANS, plan ?? '') ? plan : 'trial');
+  return { image: MAX_IMAGE_BYTES, ...PLANS[known].uploads };
+}
 // Images up to this size are accepted for shrinking on the device before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+// Documents: each type and the file extensions it may carry. The server requires both to match, and never serves
+// HTML, so nothing uploaded can run as a page. Browsers report .md (and sometimes .docx) with an empty or odd type,
+// so the app names the type from the extension (documentType) before uploading.
+export const DOCUMENT_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/markdown': ['.md', '.markdown'],
+  'text/plain': ['.txt'],
+};
+// Documents aren't shrunk on the device, so they're only capped; the trial's 5 MB covers long specs and exported PDFs.
+export const MAX_DOCUMENT_BYTES = PLANS.trial.uploads.document;
+// The file pickers' accept list: every type, plus document extensions for systems that don't know the types.
+export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(AUDIO_TYPES), ...Object.values(AUDIO_TYPES).flat(), ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
+
+/** The lowercase extension of a file name, with its dot ('' when none). @param {string} name */
+export const fileExtension = (name) => (/\.[^.]+$/.exec(name)?.[0] || '').toLowerCase();
+
+/**
+ * The document type a file name stands for ('' when it isn't a document). @param {string} name
+ * @returns {string}
+ */
+export function documentType(name) {
+  const extension = fileExtension(name);
+  if (!extension) return '';
+  return Object.keys(DOCUMENT_TYPES).find((type) => DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].includes(extension)) || '';
+}
+
+/** The audio type a file name stands for, or '' when it is not a supported audio file. @param {string} name */
+export function audioType(name) {
+  const extension = fileExtension(name);
+  return Object.keys(AUDIO_TYPES).find((type) => AUDIO_TYPES[/** @type {keyof typeof AUDIO_TYPES} */ (type)].includes(extension)) || '';
+}
+
+/** 'image', 'video', 'audio', 'document', or '' for a type that can't be attached. @param {string} type */
+export function attachmentKind(type) {
+  if (IMAGE_TYPES.includes(type)) return 'image';
+  if (VIDEO_TYPES.includes(type)) return 'video';
+  if (Object.hasOwn(AUDIO_TYPES, type)) return 'audio';
+  return Object.hasOwn(DOCUMENT_TYPES, type) ? 'document' : '';
+}
+
+/**
+ * The type a picked file uploads as: images and videos keep the browser's type; audio and documents use their
+ * extension. '' when the file can't be attached. @param {{ name: string, type: string }} file
+ */
+export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : audioType(file.name) || documentType(file.name));
+// Tapes (the tapes table, the Tapes page): voice recordings shrunk to Opus on the device before they upload
+// (src/lib/tape-encode.js). At TAPE_BITRATE an hour is about 11 MB, so MAX_TAPE_BYTES holds a two-hour session.
+export const TAPE_TYPE = 'audio/ogg';
+export const TAPE_EXTENSION = '.ogg';
+export const TAPE_BITRATE = 24_000;
+export const MAX_TAPE_BYTES = 25 * 1024 * 1024;
+// Originals this large are still read on the device to be shrunk; anything bigger isn't a phone recording.
+export const MAX_TAPE_SOURCE_BYTES = 500 * 1024 * 1024;
+export const MAX_TAPES = 20_000;
+export const TAPE_EXISTS = 'tape_exists';
+export const TAPE_LIMIT = 'tape_limit';
+// The account's tapes already hold its plan's tapeBytes (PLANS above).
+export const TAPE_STORAGE = 'tape_storage';
+// A SHA-256 in hex: how a tape remembers which original file it came from.
+export const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
+// Longest recording a tape can say it is (ms): past this a duration is a mistake, not a recording.
+export const MAX_TAPE_DURATION_MS = 24 * 3_600_000;
+// The owner's verdict on a tape (tapes.rating). Index = stored value; GOLD_RATING is the one worth going back to.
+export const TAPE_RATINGS = ['Unrated', 'Trash', 'Maybe', 'Gold'];
+export const GOLD_RATING = TAPE_RATINGS.indexOf('Gold');
+// An hour of fast rap is about 10,000 words; this holds several.
+export const MAX_TRANSCRIPT = 100_000;
+// Transcripts made by wordsmith cloud (Workers AI's Whisper; api/functions/api/tapes/[id]/transcribe.js) for devices
+// with no local speech model. It is free only up to a few minutes a day, so the desktop apps do the rest on the device.
+export const CLOUD_TRANSCRIPT_MODEL = 'wordsmith-cloud-whisper';
+export const TAPE_CLOUD_ALLOWANCE = 'tape_cloud_allowance';
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
 
-export const MAX_TITLE = 300;
+export const MAX_TITLE = 2_000;
 export const MAX_BODY = 100_000;
 export const MAX_NAME = 80;
 const MAX_ID = 64;
 export const MAX_STATUS = 500;
 // A project's mission statement (projects.description): Markdown, what the project is, why, and how to build it.
 export const MAX_MISSION = 20_000;
+// The owner's standing context (user_context.body): what every agent reads before it starts.
+export const MAX_CONTEXT = 50_000;
 // Projects per user: bounds every projects query and sync download (agents can create projects, see api/lib/agent.js).
 export const MAX_PROJECTS = 200;
 // Why sync refused a project row, so the app knows what to do: rename a clashing new project, or just say so.
 export const NAME_TAKEN = 'name_taken';
 export const PROJECT_LIMIT = 'project_limit';
+// Why a GitHub route failed: GitHub rejected the stored sign-in token, and signing in with GitHub again replaces it.
+export const GITHUB_RECONNECT = 'github_reconnect';
 export const MAX_REPO = 140;
 export const MAX_LABELS_PER_NOTE = 30;
 export const MAX_PRS_PER_NOTE = 20;
@@ -65,8 +247,31 @@ export const DIFFICULTY_LABELS = ['Unrated', 'Trivial', 'Easy', 'Medium', 'Hard'
 export const MAX_DIFFICULTY = DIFFICULTY_LABELS.length - 1;
 export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
 export const MAX_ANALYSIS = 20_000;
+// Trash: deleted rows of these tables stay recoverable for TRASH_DAYS, then the server purges them (api/lib/trash.js).
+export const TRASH_DAYS = 30;
+export const TRASH_MS = TRASH_DAYS * DAY_MS;
+export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
+// Design diagrams (the Design page; the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the
+// icon and shape. A zone is a boundary drawn behind other boxes (a cloud, a region, a device); text is a bare caption.
+export const NODE_KINDS = ['client', 'service', 'worker', 'database', 'storage', 'queue', 'external', 'agent', 'zone', 'text'];
+export const DEFAULT_NODE_KIND = 'service';
+export const EDGE_STYLES = ['solid', 'dashed'];
+// Live diagrams per user: bounds the list query and what sync downloads.
+export const MAX_DIAGRAMS = 200;
+export const DIAGRAM_LIMIT = 'diagram_limit';
+export const MAX_DIAGRAM_NODES = 200;
+export const MAX_DIAGRAM_EDGES = 400;
+export const MAX_NODE_TEXT = 500;
+// Boxes sit on this grid (pixels at 100% zoom) and stay within MAX_DIAGRAM_EXTENT of the origin.
+export const DIAGRAM_GRID = 20;
+export const MAX_DIAGRAM_EXTENT = 20_000;
+export const MIN_NODE_SIZE = 40;
+export const MAX_NODE_SIZE = 2_000;
+// Size of a new box; a new zone starts larger so it can hold a few.
+export const NODE_SIZE = { w: 180, h: 80 };
+export const ZONE_SIZE = { w: 480, h: 320 };
 
-/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number }} FieldRule */
+/** @typedef {{ type: 'text', max: number } | { type: 'enum', values: string[] } | { type: 'bool' } | { type: 'int', min: number, max: number } | { type: 'real', nullable?: boolean } | { type: 'id', nullable?: boolean } | { type: 'ids', max: number } | { type: 'prs', max: number } | { type: 'columns', max: number } | { type: 'nodes', max: number } | { type: 'edges', max: number }} FieldRule */
 
 /** Writable fields per synced table, with defaults for new rows. @type {Record<string, Record<string, FieldRule & { default: any }>>} */
 export const MODELS = {
@@ -80,6 +285,8 @@ export const MODELS = {
   labels: {
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // The note group this label mirrors (note_groups.id; src/lib/groups.js), or null for an ordinary label
+    group_id: { type: 'id', nullable: true, default: null },
   },
   notes: {
     project_id: { type: 'id', nullable: true, default: null },
@@ -100,6 +307,10 @@ export const MODELS = {
     priority: { type: 'int', min: 0, max: MAX_LEGACY_PRIORITY, default: 0 },
     // Manual order from hold-and-drag. Lower sorts first; null = never placed by hand (fall back to the active sort).
     position: { type: 'real', nullable: true, default: null },
+    // An agent's open question to the owner ("Needs you"). Lines "1. ..." to "9. ..." are one-key options.
+    ask: { type: 'text', max: MAX_STATUS, default: '' },
+    // Hidden from "Needs you" until this time (ms). Set by the owner in the app; agents can't snooze.
+    snoozed_until: { type: 'real', nullable: true, default: null },
     pull_requests: { type: 'prs', max: MAX_PRS_PER_NOTE, default: [] },
     assignee: { type: 'text', max: MAX_NAME, default: '' },
     difficulty: { type: 'int', min: 0, max: MAX_DIFFICULTY, default: 0 },
@@ -120,16 +331,43 @@ export const MODELS = {
     project_id: { type: 'id', nullable: true, default: null },
     name: { type: 'text', max: MAX_NAME, default: '' },
     color: { type: 'enum', values: COLORS, default: 'default' },
+    // Folded on the notes page, where the group is one band
     collapsed: { type: 'bool', default: false },
+    // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
+    folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
+  },
+  // Voice recordings. Created only by uploading their audio (POST /api/tapes); sync edits these fields.
+  tapes: {
+    title: { type: 'text', max: MAX_TITLE, default: '' },
+    // The owner's notes or lyrics, Markdown.
+    body: { type: 'text', max: MAX_BODY, default: '' },
+    rating: { type: 'int', min: 0, max: TAPE_RATINGS.length - 1, default: 0 },
+    // Written by the desktop app's local speech engine (src/lib/tape-transcribe.svelte.js); the owner may correct it.
+    transcript: { type: 'text', max: MAX_TRANSCRIPT, default: '' },
+    transcript_model: { type: 'text', max: MAX_NAME, default: '' },
+    transcribed_at: { type: 'real', nullable: true, default: null },
+  },
+  // Design diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
+  diagrams: {
+    project_id: { type: 'id', nullable: true, default: null },
+    name: { type: 'text', max: MAX_NAME, default: '' },
+    description: { type: 'text', max: MAX_MISSION, default: '' },
+    nodes: { type: 'nodes', max: MAX_DIAGRAM_NODES, default: [] },
+    edges: { type: 'edges', max: MAX_DIAGRAM_EDGES, default: [] },
   },
 };
 
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
+// purged_at: when a deleted row left the trash for good (migration 20261028100000); restoring it clears it.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: ['name_key'], labels: [], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at'], boards: [], note_groups: [] };
+export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [],
+  // Set from the upload (POST /api/tapes); audio_size drops to 0 once a deleted tape's audio is gone.
+  tapes: ['source_name', 'source_hash', 'source_size', 'recorded_at', 'duration_ms', 'audio_type', 'audio_size'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
-export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns'];
+export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns', 'nodes', 'edges'];
+// Every table the app keeps on the device and syncs (api/functions/api/sync.js, src/lib/store.svelte.js).
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'tapes']);
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';
@@ -187,6 +425,51 @@ function cleanColumns(name, value) {
   return columns;
 }
 
+/** A number rounded and held between two bounds, or the fallback when it isn't one. @param {unknown} value @param {number} min @param {number} max @param {number} fallback */
+function bounded(value, min, max, fallback) {
+  const number = Number(value);
+  if (value === null || value === undefined || value === '' || !Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+/**
+ * Diagram boxes: an id each (unique), a known kind and color, text within limits, position and size on the canvas.
+ * @param {string} name @param {any[]} value
+ */
+function cleanNodes(name, value) {
+  const nodes = value.map((node) => {
+    const size = node?.kind === 'zone' ? ZONE_SIZE : NODE_SIZE;
+    return {
+      id: node?.id,
+      kind: NODE_KINDS.includes(node?.kind) ? node.kind : DEFAULT_NODE_KIND,
+      title: String(node?.title ?? '').slice(0, MAX_NAME),
+      text: String(node?.text ?? '').slice(0, MAX_NODE_TEXT),
+      color: COLORS.includes(node?.color) ? node.color : 'default',
+      x: bounded(node?.x, -MAX_DIAGRAM_EXTENT, MAX_DIAGRAM_EXTENT, 0),
+      y: bounded(node?.y, -MAX_DIAGRAM_EXTENT, MAX_DIAGRAM_EXTENT, 0),
+      w: bounded(node?.w, MIN_NODE_SIZE, MAX_NODE_SIZE, size.w),
+      h: bounded(node?.h, MIN_NODE_SIZE, MAX_NODE_SIZE, size.h),
+    };
+  });
+  if (nodes.some((node) => !isId(node.id))) throw new Error(`${name} need an id each (letters, digits, - and _)`);
+  if (new Set(nodes.map((node) => node.id)).size !== nodes.length) throw new Error(`${name} need unique ids`);
+  return nodes;
+}
+
+/** Diagram arrows: an id each (unique), the ids of the two boxes they join, a label and a line style. @param {string} name @param {any[]} value */
+function cleanEdges(name, value) {
+  const edges = value.map((edge) => ({
+    id: edge?.id,
+    from: edge?.from,
+    to: edge?.to,
+    label: String(edge?.label ?? '').slice(0, MAX_NAME),
+    style: EDGE_STYLES.includes(edge?.style) ? edge.style : EDGE_STYLES[0],
+  }));
+  if (edges.some((edge) => !isId(edge.id) || !isId(edge.from) || !isId(edge.to))) throw new Error(`${name} need an id, a from and a to each`);
+  if (new Set(edges.map((edge) => edge.id)).size !== edges.length) throw new Error(`${name} need unique ids`);
+  return edges;
+}
+
 /**
  * Checks one field against its rule and returns the cleaned value, or throws with a readable message.
  * @param {string} name
@@ -221,6 +504,8 @@ function cleanField(name, rule, value) {
   }
   if (!Array.isArray(value) || value.length > rule.max) throw new Error(`${name} must be a list of at most ${rule.max}`);
   if (rule.type === 'columns') return cleanColumns(name, value);
+  if (rule.type === 'nodes') return cleanNodes(name, value);
+  if (rule.type === 'edges') return cleanEdges(name, value);
   if (rule.type === 'ids') {
     if (!value.every(isId)) throw new Error(`${name} must contain ids`);
     return [...new Set(value)];

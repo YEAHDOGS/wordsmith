@@ -1,0 +1,23 @@
+// The sidebar's order of pages, shared by the Sidebar (which draws it) and the Shell's page carousel (which slides
+// between them in that order): Needs you, All notes, Features, Calendar, Design, Scribe (and Tapes, its other side), the Projects page, projects A-Z, labels A-Z, then the Archive and Trash in the footer.
+import { NEEDS_YOU_ENABLED } from './models.js';
+
+const TOP_VIEWS = [...(NEEDS_YOU_ENABLED ? ['attention'] : []), 'notes', 'features', 'calendar', 'design', 'scribe'];
+const PROJECTS_VIEW = 'projects';
+const BOTTOM_VIEWS = ['archive', 'trash'];
+
+/** Live rows sorted by name, the way the sidebar lists them. @param {any[]} rows */
+export function byName(rows) {
+  return rows.filter((row) => !row.deleted_at).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Every page key in sidebar order (`notes`, `project/<id>`, ...). @param {{ projects: any[], labels: any[] }} store */
+export function navOrder({ projects, labels }) {
+  return [
+    ...TOP_VIEWS,
+    PROJECTS_VIEW,
+    ...byName(projects).map((project) => `project/${project.id}`),
+    ...byName(labels).map((label) => `label/${label.id}`),
+    ...BOTTOM_VIEWS,
+  ];
+}

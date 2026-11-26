@@ -17,7 +17,7 @@ const NATIVE_SHELL_GLOB = '**/src/tauri/**'
 const LOCAL_API = 'http://localhost:8788'
 
 // https://vite.dev/config/
-// Builds ask GitHub for the version (v1.0.0.NN, see scripts/version.js); the dev server stays offline and uses git.
+// Builds count merged PRs in git for the version (v1.0.0.NN, see scripts/version.js); the dev server skips deepening a shallow clone.
 export default defineConfig(async ({ command }) => {
   const { version, latestPr } = await readVersion({ offline: command !== 'build' })
   return {

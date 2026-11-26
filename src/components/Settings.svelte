@@ -6,27 +6,37 @@
 </script>
 
 <script>
-  // Account, linked providers, agent API tokens, appearance, the app version and installers, the step-by-step guide to
+  // Account, linked providers, agent API tokens, appearance, the app version and installers, local speech models, the step-by-step guide to
   // connecting an agent (T3 Code or any other), its two copy-paste prompts, and webhook help. One stacked column on phones, a 1px grid of cards from lg up.
   import KeyRound from '@lucide/svelte/icons/key-round';
   import Copy from '@lucide/svelte/icons/copy';
   import LogOut from '@lucide/svelte/icons/log-out';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import Compass from '@lucide/svelte/icons/compass';
+  import Lock from '@lucide/svelte/icons/lock';
+  import { tour } from '../lib/tour.svelte.js';
   import { fade, slide } from 'svelte/transition';
   import ProviderIcon from './ProviderIcon.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
+  import SpeechSettings from './SpeechSettings.svelte';
   import InstallApp from './InstallApp.svelte';
+  import StandingContext from './StandingContext.svelte';
+  import CoffeeButton from './CoffeeButton.svelte';
+  import ExportButton from './ExportButton.svelte';
+  import TrialMeter from './TrialMeter.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { IS_NATIVE, api, apiUrl } from '../lib/api.js';
-  import { MAX_NAME, PROVIDERS } from '../lib/models.js';
+  import { COLORS, MAX_NAME, PROVIDERS } from '../lib/models.js';
+  import { DOT_BG, DOT_TEXT } from '../lib/colors.js';
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
-  import { githubProfileUrl } from './settings-data.js';
-  import { agentInstructions, triagePrompt } from './agent-prompts.js';
+  import { githubProfileUrl } from '../lib/github-public.js';
+  import { agentInstructions, mcpSetup, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';
+  import PAYWALL from './paywall.json';
 
   const COPIED_MS = 1400;
   const SWAP = { duration: 150 };
@@ -37,6 +47,8 @@
   const WIDE_SCREEN = '(min-width: 1024px)';
 
   /** @type {any[]} */
+  // The token whose color dots are open, if any.
+  let pickingColor = $state('');
   let tokens = $state([]);
   let tokenName = $state('');
   let secret = $state('');
@@ -48,8 +60,10 @@
 
   const linkedProviders = $derived(auth.linked.map((identity) => identity.provider));
   const githubId = $derived(auth.linked.find((identity) => identity.provider === 'github')?.provider_user_id || '');
-  // The two copy-paste prompts (agent-prompts.js), each shown folded to SETUP_PREVIEW_LINES until expanded.
+  // The copy-paste setups (agent-prompts.js), each shown folded to SETUP_PREVIEW_LINES until expanded. MCP comes first;
+  // the pasted prompt is the fallback for harnesses without MCP.
   const prompts = $derived([
+    { key: 'mcp', title: TEXT.mcp, hint: TEXT.mcpHint, text: mcpSetup(apiUrl) },
     { key: 'setup', title: TEXT.setup, hint: TEXT.setupHint, text: agentInstructions(apiUrl) },
     { key: 'triage', title: TEXT.triage, hint: TEXT.triageHint, text: triagePrompt(apiUrl) },
   ]);
@@ -68,8 +82,8 @@
   }
   $effect(() => {
     loadTokens();
-    // Linked accounts come with the session, which start-up may have skipped.
-    if (!auth.sessionFetched) auth.load();
+    // Linked accounts come with the session, which start-up may have skipped. Not in the demo: a full load ends it.
+    if (!auth.sessionFetched && !auth.demo) auth.load();
   });
 
   $effect(() => {
@@ -92,6 +106,18 @@
     } catch (failure) {
       error = /** @type {Error} */ (failure).message;
     }
+  }
+
+  /** Every note the token creates takes this color (the server stamps it). @param {any} token @param {string} color */
+  async function setTokenColor(token, color) {
+    const before = token.color;
+    token.color = color;
+    pickingColor = '';
+    tokenCache.tokens = $state.snapshot(tokens);
+    await api(`/api/tokens/${token.id}`, { method: 'PATCH', body: { color } }).catch((failure) => {
+      token.color = before;
+      error = failure.message;
+    });
   }
 
   /** @param {string} id */
@@ -143,6 +169,8 @@
           <p class="selectable truncate font-mono text-xs text-ink-muted">{auth.user?.email || ''}</p>
         </div>
       </div>
+      <!-- The free trial as a meter, while the account is on it -->
+      <TrialMeter />
       <p class="mb-2 text-xs text-ink-faint">{TEXT.linked}</p>
       <div class="mb-3 flex flex-wrap gap-2">
         {#each PROVIDERS.filter((provider) => auth.providers.includes(provider) || linkedProviders.includes(provider)) as provider (provider)}
@@ -162,6 +190,21 @@
       <p class={HINT}>{TEXT.linkHint}</p>
       <button class="{BUTTON} hover:text-accent" onclick={signOut}><LogOut class="size-4" />{TEXT.signOut}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.signOutHint}</p>
+      <!-- The guided tour again, from the start; it comes back here when it closes -->
+      <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
+      <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
+      <!-- Not in the demo: its sample data never reaches the server, so there is nothing to export -->
+      {#if !auth.demo}
+        <div class="mt-4 flex flex-col items-start gap-2"><ExportButton class={BUTTON} /></div>
+        <p class="mt-2 text-xs text-ink-faint">{PAYWALL.exportHint}</p>
+      {/if}
+      <CoffeeButton class="{BUTTON} mt-4" />
+      <p class="mt-2 text-xs text-ink-faint">{PAYWALL.coffeeHint}</p>
+      {#if auth.paywallOptional}
+        <!-- Worker Previews and staging only: nobody is locked out there, so this is the way to look at the paywall -->
+        <button class="{BUTTON} mt-4" onclick={() => auth.setShowPaywall(true)}><Lock class="size-4" />{PAYWALL.previewOn}</button>
+        <p class="mt-2 text-xs text-ink-faint">{PAYWALL.previewHint}</p>
+      {/if}
     </section>
 
     <!-- Flex column so the token list can fill whatever height the Account card sets for this row -->
@@ -187,13 +230,25 @@
       <div class="relative min-h-40 flex-1">
         <ul class="absolute inset-0 divide-y divide-line overflow-y-auto overscroll-contain {BOX}">
           {#each tokens as token (token.id)}
-            <li class="flex items-center gap-3 px-3 py-2" transition:slide={SWAP}>
-              <KeyRound class="size-4 shrink-0 text-ink-faint" />
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-semibold">{token.name}</p>
-                <p class="truncate font-mono text-[0.6875rem] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
+            <li class="px-3 py-2" transition:slide={SWAP}>
+              <div class="flex items-center gap-3">
+                <button class="spring press -m-1 shrink-0 p-1 {DOT_TEXT[token.color] || DOT_TEXT.default}" aria-expanded={pickingColor === token.id}
+                  aria-label={TEXT.tokenColor.replace('{name}', token.name)} title={TEXT.tokenColor.replace('{name}', token.name)}
+                  onclick={() => (pickingColor = pickingColor === token.id ? '' : token.id)}><KeyRound class="size-4" /></button>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-semibold">{token.name}</p>
+                  <p class="truncate font-mono text-[0.6875rem] text-ink-faint" title={fullTime(token.last_used_at)}>{token.prefix}… · {token.last_used_at ? `${TEXT.lastUsed} ${ago(token.last_used_at)}` : TEXT.never}</p>
+                </div>
+                <button class="spring press shrink-0 px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
               </div>
-              <button class="spring press shrink-0 px-2 py-1 text-xs text-ink-muted hover:text-accent" onclick={() => revoke(token.id)}>{TEXT.revoke}</button>
+              {#if pickingColor === token.id}
+                <div class="flex flex-wrap gap-2 pt-2 pl-7" role="group" aria-label={TEXT.tokenColor.replace('{name}', token.name)} transition:slide={SWAP}>
+                  {#each COLORS as color (color)}
+                    <button class="spring press size-5 rounded-full {DOT_BG[color]} {token.color === color ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : 'hover:scale-110'}"
+                      aria-label={color} aria-pressed={token.color === color} title={color} onclick={() => setTokenColor(token, color)}></button>
+                  {/each}
+                </div>
+              {/if}
             </li>
           {:else}
             <li class="px-3 py-4 text-center text-xs text-ink-faint" in:fade={SWAP}>{TEXT.noTokens}</li>
@@ -211,6 +266,14 @@
     </section>
 
     <section class="{CARD} lg:col-span-2" use:reveal={4}>
+      <SpeechSettings />
+    </section>
+
+    <section class="{CARD} lg:col-span-2" use:reveal={4}>
+      <StandingContext />
+    </section>
+
+    <section class="{CARD} lg:col-span-2" use:reveal={5}>
       <h2 class={HEADING}>{TEXT.connect}</h2>
       <p class={HINT}>{TEXT.connectHint}</p>
       <ol class="mb-8 grid gap-px border border-line bg-line sm:grid-cols-2 xl:grid-cols-3">

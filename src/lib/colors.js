@@ -28,6 +28,9 @@ export const DOT_BG = {
   pink: 'bg-dot-pink',
 };
 
+/** Lit difficulty dots on note cards (LevelDots), one color per level: 1 trivial green up to 5 epic red. */
+export const DIFFICULTY_DOT = ['', 'bg-dot-green', 'bg-dot-blue', 'bg-dot-orange', 'bg-dot-purple', 'bg-dot-red'];
+
 /** Text in a project's color: the project chip on note cards. Default projects keep muted ink. */
 export const DOT_TEXT = {
   default: 'text-ink-muted',
@@ -40,6 +43,9 @@ export const DOT_TEXT = {
   purple: 'text-dot-purple',
   pink: 'text-dot-pink',
 };
+
+/** Default marker color per agent (lowercase name) for the robot and name on note cards; any other agent stays muted (DOT_TEXT.default). */
+export const AGENT_TEXT = { muse: 'text-dot-blue', codex: 'text-dot-green', claude: 'text-dot-orange', agy: 'text-dot-purple' };
 
 /** Left rail in a note group's color, beside its indented notes on the notes page and the board. */
 export const RAIL_BORDER = {

@@ -1,11 +1,16 @@
 <script>
-  // Sync icon beside the wordmark. Always the same size and color; it spins while syncing and finishes its turn
+  // Sync icon beside the wordmark. Always the same size; it spins while syncing and finishes its turn
   // before stopping, so it never snaps. On a problem it turns yellow with a "?" and opens a plain-words explanation.
+  // A ring around it sweeps clockwise toward red as time since the last sync runs out; once full the whole symbol
+  // turns red. Each successful sync snaps the ring back. The sweep is one CSS animation keyed to the sync time.
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import X from '@lucide/svelte/icons/x';
+  import FlaskConical from '@lucide/svelte/icons/flask-conical';
+  import LogIn from '@lucide/svelte/icons/log-in';
   import { fly, scale } from 'svelte/transition';
   import { backOut, cubicOut } from 'svelte/easing';
   import { store } from '../lib/store.svelte.js';
+  import { auth } from '../lib/auth.svelte.js';
   import { ago, fullTime } from '../lib/time.js';
   import { syncProblem } from './sync-problem.js';
 
@@ -17,18 +22,57 @@
   const PANEL_IN = { y: -6, duration: 180, easing: backOut };
   const PANEL_OUT = { y: -4, duration: 120, easing: cubicOut };
   const BADGE = { start: 0.4, duration: 180, easing: backOut };
+  const STALE_AFTER_MS = 120_000;
+  const SNAP_BACK_MS = 360;
+  const SNAP_BACK_TURN_DEG = -270;
+  const SNAP_BACK_MIN_SCALE = 0.6;
+  // How often "Last synced N ago" in the label refreshes; ago() rounds to minutes anyway.
+  const LABEL_TICK_MS = 30_000;
+  // The ring circle in a 32-unit box, inside the button edge
+  const RING_CENTER = 16;
+  const RING_RADIUS = 14;
 
   let open = $state(false);
   let spinning = $state(false);
   /** @type {HTMLElement | undefined} */ let root = $state();
   /** @type {HTMLButtonElement | undefined} */ let trigger = $state();
+  let stale = $state(false);
+  let now = $state(Date.now());
+  // Never synced yet (offline from the start): count from when the icon appeared.
+  const mountedAt = Date.now();
+  const since = $derived(store.lastSync || mountedAt);
+  const sinceText = $derived.by(() => {
+    if (!store.lastSync || !now) return 'Not synced yet';
+    return `Last synced ${ago(store.lastSync)}`;
+  });
 
   const problem = $derived(syncProblem(store));
   const label = $derived.by(() => {
+    if (problem?.demo) return `${problem.title}. Show details`;
     if (problem) return `Sync problem: ${problem.title}. Show details`;
     if (store.syncing) return 'Syncing';
-    return store.lastSync ? `Synced ${ago(store.lastSync)}. Sync now` : 'Sync now';
+    return `${sinceText}${stale ? ', out of date' : ''}. Sync now`;
   });
+
+  // Restart the clock on every sync; already past the limit (e.g. on wake) means stale straight away.
+  $effect(() => {
+    stale = Date.now() - since >= STALE_AFTER_MS;
+  });
+
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), LABEL_TICK_MS);
+    return () => clearInterval(timer);
+  });
+
+  /** The old arc unwinds counterclockwise and shrinks away while the fresh one starts empty. @param {Element} _node */
+  function snapBack(_node) {
+    return {
+      duration: SNAP_BACK_MS,
+      easing: cubicOut,
+      css: (/** @type {number} */ t, /** @type {number} */ u) =>
+        `transform: rotate(${u * SNAP_BACK_TURN_DEG}deg) scale(${SNAP_BACK_MIN_SCALE + (1 - SNAP_BACK_MIN_SCALE) * t}); opacity: ${t}`,
+    };
+  }
 
   // Start spinning as soon as a sync starts; stopping waits for the end of a turn (onanimationiteration).
   $effect(() => {
@@ -48,6 +92,11 @@
     store.sync();
   }
 
+  async function exitDemo() {
+    await auth.signOut();
+    await store.wipe();
+  }
+
   /** @param {PointerEvent} event */
   function onpointerdown(event) {
     if (!open || root?.contains(/** @type {Node} */ (event.target))) return;
@@ -65,37 +114,55 @@
 <svelte:window {onpointerdown} {onkeydown} />
 
 <div class="contents" bind:this={root}>
-  <button bind:this={trigger} class="spring press relative flex size-8 tv:size-11 shrink-0 items-center justify-center hover:bg-surface-raised {problem ? 'text-requested' : 'text-ink-faint'}"
-    {onclick} aria-label={label} title={store.lastSync ? `Last synced ${fullTime(store.lastSync)}` : 'Not synced yet'}
+  <button bind:this={trigger} class="spring press relative flex size-8 tv:size-11 shrink-0 items-center justify-center hover:bg-surface-raised {problem?.demo ? 'text-accent' : problem ? 'text-requested' : stale ? 'text-stale' : 'text-ink-faint'}"
+    {onclick} aria-label={label} title={problem?.demo ? problem.title : store.lastSync ? `${sinceText} (${fullTime(store.lastSync)})` : sinceText}
     aria-expanded={problem ? open : undefined} aria-controls={problem ? PANEL_ID : undefined}>
+    {#if problem?.demo}
+      <FlaskConical class="size-4 tv:size-6" />
+    {:else}
+    {#key since}
+      {@const ringSince = since}
+      <svg class="pointer-events-none absolute inset-0 size-full -rotate-90 text-stale" viewBox="0 0 32 32" aria-hidden="true" out:snapBack>
+        <circle class="stale-sweep" cx={RING_CENTER} cy={RING_CENTER} r={RING_RADIUS} fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" pathLength="1" style:--stale-ms="{STALE_AFTER_MS}ms" style:animation-delay="{-(Date.now() - since)}ms"
+          onanimationend={() => (stale = ringSince === since)} />
+      </svg>
+    {/key}
     <span class="flex {spinning ? 'spinning' : ''}" onanimationiteration={() => !store.syncing && (spinning = false)}>
       <RefreshCw class="size-4 tv:size-6" />
     </span>
-    {#if problem}
+    {/if}
+    {#if problem && !problem.demo}
       <span class="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-requested font-mono text-[0.5625rem] leading-none font-bold text-app"
         aria-hidden="true" transition:scale={BADGE}>?</span>
     {/if}
   </button>
 
   {#if open && problem}
-    <div id={PANEL_ID} role="dialog" aria-label="Sync problem"
+    <div id={PANEL_ID} role="dialog" aria-label={problem.demo ? problem.title : 'Sync problem'}
       class="absolute z-30 max-h-[70dvh] overflow-y-auto border border-line bg-surface-raised shadow-lg {compact ? 'top-0 left-full ml-px w-72' : 'inset-x-0 top-full'}"
       in:fly={PANEL_IN} out:fly={PANEL_OUT}>
-      <div class="h-0.5 bg-requested"></div>
+      <div class="h-0.5 {problem.demo ? 'bg-accent' : 'bg-requested'}"></div>
       <div class="flex items-start gap-2 p-3 tv:p-5">
         <div class="min-w-0 flex-1">
-          <p class="text-sm tv:text-xl font-bold text-requested">{problem.title}</p>
+          <p class="text-sm tv:text-xl font-bold {problem.demo ? 'text-accent' : 'text-requested'}">{problem.title}</p>
           <p class="mt-1 text-sm tv:text-lg text-ink selectable">{problem.detail}</p>
           <p class="mt-2 text-xs tv:text-base text-ink-muted">{problem.advice}</p>
         </div>
         <button class="spring press -mt-1 -mr-1 p-1 text-ink-faint hover:text-ink" aria-label="Close" onclick={() => (open = false)}><X class="size-4" /></button>
       </div>
       <div class="flex items-center gap-3 border-t border-line px-3 py-2 tv:px-5">
+        {#if problem.demo}
+        <button class="spring press flex items-center gap-1.5 bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover" onclick={exitDemo}>
+          <LogIn class="size-4" />Exit demo and sign in
+        </button>
+        {:else}
         <button class="spring press flex items-center gap-1.5 bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-60"
           onclick={() => store.sync()} disabled={store.syncing}>
           <RefreshCw class="size-4 {store.syncing ? 'spinning' : ''}" />{store.syncing ? 'Retrying' : 'Retry'}
         </button>
         <span class="min-w-0 truncate font-mono text-[0.6875rem] text-ink-faint">{store.lastSync ? `Last synced ${ago(store.lastSync)}` : 'Not synced yet'}</span>
+        {/if}
       </div>
     </div>
   {/if}

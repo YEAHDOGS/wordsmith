@@ -1,6 +1,6 @@
 <script>
   // Bulk actions while notes are selected. It covers the top bar in place (absolute, so nothing below moves):
-  // select all, archive, group (inside a project: see src/lib/groups.js), copy everything as one Markdown document (made for
+  // select all (deselect all once everything in view is picked), archive, group (inside a project: see src/lib/groups.js), copy everything as one Markdown document (made for
   // pasting into Claude Code), clear.
   // Escape clears the selection; Ctrl/Cmd+A selects everything in view (handled in Shell).
   import X from '@lucide/svelte/icons/x';
@@ -8,6 +8,7 @@
   import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy';
   import Check from '@lucide/svelte/icons/check';
   import Archive from '@lucide/svelte/icons/archive';
+  import Trash from '@lucide/svelte/icons/trash';
   import Group from '@lucide/svelte/icons/group';
   import GroupDialog from './GroupDialog.svelte';
   import { fly } from 'svelte/transition';
@@ -19,6 +20,8 @@
   let { notes, archiveView = false, projectId = null } = $props();
 
   const COPIED_MS = 1600;
+  // Crossfade for the Select all / Deselect all icon and label, which swap in place
+  const SWAP = 'transition-[opacity,scale] duration-150 ease-(--ease-spring)';
   const TOOL = 'spring press flex h-9 tv:h-12 shrink-0 items-center gap-1.5 px-2 sm:px-2.5 text-sm text-ink-muted hover:bg-surface-raised hover:text-ink disabled:opacity-40';
 
   let copied = $state(0);
@@ -44,6 +47,11 @@
     ui.selected.clear();
   }
 
+  function trash() {
+    for (const note of picked) store.remove('notes', note.id);
+    ui.selected.clear();
+  }
+
   /** @param {KeyboardEvent} event */
   function onkeydown(event) {
     if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
@@ -60,11 +68,23 @@
     <p class="min-w-0 shrink truncate text-fluid-base font-bold tracking-tight" in:fly={{ y: 6, duration: 150 }} aria-live="polite">{count} <span class="hidden font-normal text-ink-muted sm:inline">selected</span></p>
   {/key}
   <span class="flex-1"></span>
-  <button class={TOOL} onclick={() => ui.selectAll(notes.map((note) => note.id))} disabled={allSelected} title="Select all ({navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}A)">
-    <CheckCheck class="size-4" /><span class="hidden sm:inline">Select all</span>
+  <!-- Select all, or Deselect all once everything in view is picked; both icons and labels share one cell, so it never resizes -->
+  <button class={TOOL} onclick={() => (allSelected ? ui.selected.clear() : ui.selectAll(notes.map((note) => note.id)))}
+    aria-label={allSelected ? 'Deselect all' : 'Select all'} title={allSelected ? 'Deselect all (Esc)' : `Select all (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'}A)`}>
+    <span class="grid *:col-start-1 *:row-start-1" aria-hidden="true">
+      <CheckCheck class="size-4 {SWAP} {allSelected ? 'scale-50 opacity-0' : ''}" />
+      <X class="size-4 {SWAP} {allSelected ? '' : 'scale-50 opacity-0'}" />
+    </span>
+    <span class="hidden *:col-start-1 *:row-start-1 sm:grid" aria-hidden="true">
+      <span class="{SWAP} {allSelected ? 'opacity-0' : ''}">Select all</span>
+      <span class="{SWAP} {allSelected ? '' : 'opacity-0'}">Deselect all</span>
+    </span>
   </button>
   <button class={TOOL} onclick={archive} title={archiveView ? 'Unarchive selected' : 'Archive selected'}>
     <Archive class="size-4" /><span class="hidden md:inline">{archiveView ? 'Unarchive' : 'Archive'}</span>
+  </button>
+  <button class="{TOOL} hover:text-accent" onclick={trash} title="Move selected notes to trash" aria-label="Move selected notes to trash">
+    <Trash class="size-4" /><span class="hidden md:inline">Trash</span>
   </button>
   {#if projectId && !archiveView}
     <button class={TOOL} onclick={() => (grouping = true)} title="Group the selected notes under a name and color you can fold away">

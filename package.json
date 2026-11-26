@@ -14,7 +14,10 @@
     "cloudflare:dev": "npx --yes wrangler dev --persist-to .wrangler/state --port 8788 --local-upstream localhost:8788",
     "cloudflare:db:migrate:local": "npx --yes wrangler d1 migrations apply wordsmith-production --local --persist-to .wrangler/state",
     "seed:staging": "node scripts/seed-staging.js",
+    "scribe:ollama": "node scripts/scribe-ollama.js",
+    "access": "node scripts/access.js",
     "cloudflare:deploy:preview": "npx --yes wrangler deploy --env preview",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "node scripts/build-platforms.js windows macos linux",
     "tauri:build:platforms": "node scripts/build-platforms.js android ios windows macos linux",
@@ -22,18 +25,18 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@tauri-apps/cli": "^2.12.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/svelte": "^5.4.2",
-    "jsdom": "^30.1.1",
+    "jsdom": "^31.0.0",
     "svelte": "^5.57.3",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.3.5",
-    "vitest": "^5.0.3"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.62.0",
+    "@lucide/svelte": "^1.70.0",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-opener": "^2.7.2"
   }

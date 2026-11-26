@@ -2,8 +2,12 @@
 
 const DB_PREFIX = 'wordsmith-';
 // v2 adds attachments (metadata only; the files themselves are cached by the browser's HTTP cache). v3 adds boards, v4 note_groups.
-const DB_VERSION = 4;
-export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'events', 'attachments', 'meta'];
+// v5 adds nothing: it re-pulls once on devices that skipped note groups while their older build didn't know the table.
+// v6 adds diagrams, v7 tapes.
+const DB_VERSION = 7;
+// Every upgrade forgets the sync cursor, so rows of tables the old build ignored come down on the next pull.
+const CURSOR_KEY = 'cursor';
+export const STORES = ['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'tapes', 'events', 'attachments', 'meta'];
 
 /** @param {IDBRequest} request @returns {Promise<any>} */
 function done(request) {
@@ -22,6 +26,11 @@ function committed(tx) {
   });
 }
 
+/** Deletes a user's local copy without opening it (signing out from the paywall, where it never opened). @param {string} userId */
+export function deleteLocalDb(userId) {
+  return done(indexedDB.deleteDatabase(DB_PREFIX + userId));
+}
+
 /** Local database for one user. */
 export class LocalDb {
   /**
@@ -33,10 +42,11 @@ export class LocalDb {
     /** @type {Promise<IDBDatabase>} */
     this.ready = new Promise((resolve, reject) => {
       const request = indexedDB.open(this.name, DB_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         for (const store of STORES) {
           if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store, { keyPath: store === 'meta' ? 'key' : 'id' });
         }
+        if (event.oldVersion) request.transaction?.objectStore('meta').delete(CURSOR_KEY);
       };
       // The upgrade resumes by itself once the other tab closes or reloads.
       request.onblocked = onblocked;

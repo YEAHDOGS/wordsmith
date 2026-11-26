@@ -1,24 +1,37 @@
 // Delta sync for the offline-first app.
-// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, note_groups, events, attachments, cursor, more }
-// POST /api/sync { projects?, labels?, notes?, boards?, note_groups? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments, cursor, more }
+// POST /api/sync { projects?, labels?, notes?, boards?, note_groups?, diagrams?, tapes? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// Tapes are created by uploading their audio (POST /api/tapes), so sync only edits and deletes them; a deleted
+// tape's audio goes with it, and it can't come back.
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
+import { rateLimit } from '../../lib/rate-limit.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { actorFor, saveNotes } from '../../lib/notes.js';
 import { SYNCED_TABLES, loadByIds, safeJson, toApi, upsertStatement } from '../../lib/rows.js';
-import { MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
+import { schedulePurge, settleTrash } from '../../lib/trash.js';
+import { DIAGRAM_LIMIT, MAX_DIAGRAMS, MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
+import { mergeDiagram } from '../../../src/lib/diagram.js';
+import { ERASED_DIAGRAM } from '../../lib/diagrams.js';
+import { eraseTapeAudio } from '../../lib/tapes.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
 const CURSOR_OVERLAP_MS = 5_000;
+// Per user, across all their devices. A device pulls about once a minute (more on focus and after edits) and pushes
+// after edits, so a few devices stay far below these; a runaway loop hits 429 and backs off instead of eating quota.
+const SYNC_LIMIT = 300;
+const SYNC_WINDOW_MS = 600_000;
 
-/** @param {{ request: Request, env: Record<string, any> }} context */
+/** @param {{ request: Request, env: Record<string, any>, waitUntil?: (promise: Promise<any>) => void }} context */
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { env, request } = context;
   const since = Math.max(0, Number(new URL(request.url).searchParams.get('since')) || 0);
   const now = Date.now();
+  // Rows past their days in the trash are purged in the background; the purge stamps updated_at, so the next pull has them.
+  schedulePurge(context, user.id);
 
   // Most polls find nothing new: answer those with one small query instead of one per table.
   if (since) {
@@ -31,6 +44,9 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Counted only here, past the "nothing new" answer above: the limiter writes a D1 row per hit, and idle polls (the
+  // common case, one a minute per open device) must stay a single small read.
+  await rateLimit(env, `sync-pull:${user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const queries = SYNCED_TABLES.map((table) =>
     env.DB.prepare(`SELECT * FROM ${table} WHERE user_id = ? AND updated_at > ? ORDER BY updated_at LIMIT ?`).bind(user.id, since, PULL_LIMIT));
   queries.push(env.DB.prepare('SELECT id, note_id, type, actor_type, actor_name, data, created_at FROM note_events WHERE user_id = ? AND created_at > ? ORDER BY created_at LIMIT ?')
@@ -61,6 +77,7 @@ export async function onRequestGet(context) {
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestPost(context) {
   const auth = await requireAuth(context);
+  await rateLimit(context.env, `sync-push:${auth.user.id}`, SYNC_LIMIT, SYNC_WINDOW_MS);
   const { env, request } = context;
   const body = await readJson(request);
   const total = SYNCED_TABLES.reduce((sum, table) => sum + (Array.isArray(body[table]) ? body[table].length : 0), 0);
@@ -103,21 +120,87 @@ export async function onRequestPost(context) {
     }
 
     const statements = [];
-    for (const row of incoming) {
+    /**
+     * Tapes this push deletes, as they were, each with the batch position of the statement that claims the delete.
+     * Only a claim that matched a live row erases the audio, so a tape deleted twice (in one push, or by two devices at
+     * once) gives its storage back once. @type {{ tape: any, claim: number }[]}
+     */
+    const erased = [];
+    // Room left under the diagram cap, counted only when this push brings a new diagram.
+    let diagramRoom = Infinity;
+    if (table === 'diagrams' && incoming.some((/** @type {any} */ row) => !row.deleted_at && !existing.has(row.id))) {
+      const live = await env.DB.prepare('SELECT COUNT(*) AS n FROM diagrams WHERE user_id = ? AND deleted_at IS NULL').bind(auth.user.id).first();
+      diagramRoom = MAX_DIAGRAMS - Number(live?.n ?? 0);
+    }
+    for (const pushed of incoming) {
+      const before = existing.get(pushed.id) ?? null;
+      if (table === 'tapes' && !before) {
+        rejected.push({ id: pushed.id, table, error: 'Upload the recording first', current: null });
+        continue;
+      }
+      // A deleted tape's audio is gone, so it stays deleted: the device gets the stored row back.
+      if (table === 'tapes' && before?.deleted_at) {
+        saved[table].push(before);
+        continue;
+      }
       try {
-        const base = existing.get(row.id) ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-        const next = { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
-        const upsert = upsertStatement(env, table, next, existing.get(row.id) ?? null);
+        const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
+        // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
+        if (!row) {
+          saved[table].push(before);
+          continue;
+        }
+        if (table === 'diagrams' && !before && !row.deleted_at && diagramRoom-- <= 0) {
+          rejected.push({ id: row.id, table, code: DIAGRAM_LIMIT, error: `You can have at most ${MAX_DIAGRAMS} designs; delete one first`, current: null });
+          continue;
+        }
+        const base = before ?? newRow(table, { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
+        const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
+        // Diagrams have no Trash: a deleted one is erased at once, leaving only the marker other devices need.
+        if (table === 'diagrams' && next.deleted_at) Object.assign(next, structuredClone(ERASED_DIAGRAM));
+        if (table === 'tapes' && next.deleted_at && before) {
+          next.audio_size = 0;
+          erased.push({ tape: before, claim: statements.length });
+          statements.push(env.DB.prepare('UPDATE tapes SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id')
+            .bind(next.deleted_at, before.id, auth.user.id));
+        }
+        const upsert = upsertStatement(env, table, next, before);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
         saved[table].push(apiRow);
       } catch (error) {
-        rejected.push({ id: row.id, error: /** @type {Error} */ (error).message });
+        rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message, ...(table === 'diagrams' && { table, current: before }) });
       }
     }
-    if (statements.length) await env.DB.batch(statements);
+    const results = statements.length ? await env.DB.batch(statements) : [];
+    const claimed = erased.filter(({ claim }) => results[claim]?.results?.length).map(({ tape }) => tape);
+    // The rows are saved: a failed R2 delete must not fail the push (the device would retry a delete that's done).
+    try {
+      await eraseTapeAudio(env, auth.user.id, claimed);
+    } catch (error) {
+      console.error('Tape audio erase failed', error);
+    }
   }
   return json({ saved, rejected, server_time: now });
+}
+
+/**
+ * A pushed diagram, set against what happened to it elsewhere. A device sends `base`: what the server's copy looked
+ * like when it last had it (diagramBase in src/lib/diagram.js). When the stored row has changed since (an agent drew
+ * on it, another device edited it), the two are merged rather than letting this push replace the whole drawing.
+ * Without a base (an old app build) the push is saved as sent, as before.
+ * @param {Record<string, any> | null} before the stored row, API-shaped (loadByIds)
+ * @param {Record<string, any>} row the pushed row
+ * @returns {Record<string, any> | null} the row to save, or null when the diagram was deleted elsewhere and stays so
+ */
+function reconcileDiagram(before, row) {
+  // Deleting a diagram erases it and nothing restores one, so a deleted diagram stays deleted whatever is pushed,
+  // base or no base: otherwise a stale device, or a replayed request, could bring it back.
+  if (before?.deleted_at) return null;
+  const base = row.base;
+  // Anything but a plain base with a numeric time is treated as no base at all.
+  if (!before || !base || typeof base !== 'object' || Array.isArray(base) || typeof base.at !== 'number' || !(Number(before.updated_at) > base.at)) return row;
+  return row.deleted_at ? row : mergeDiagram(before, row, base);
 }
 
 /**
@@ -153,14 +236,15 @@ async function saveProjects(env, userId, incoming, existing, now) {
     let next;
     try {
       const base = before ?? newRow('projects', { id: row.id, created_at: Math.min(Number(row.created_at) || now, now) });
-      next = { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null };
+      next = settleTrash('projects', { ...base, ...cleanRow('projects', row), user_id: userId, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
     } catch (error) {
       // A refused deletion keeps its project, so it gives its slot back.
       if (freed.delete(String(row.id))) count++;
       rejected.push({ id: row.id, table: 'projects', error: /** @type {Error} */ (error).message, current: before });
       continue;
     }
-    next.name_key = projectKey(next.name);
+    // A purged project keeps the NULL name_key the purge gave it.
+    next.name_key = next.purged_at ? null : projectKey(next.name);
     const holder = names.get(next.name_key);
     const keepsOwnName = before !== null && projectKey(before.name) === next.name_key;
     const taken = !next.deleted_at && holder !== undefined && holder !== next.id && !keepsOwnName;

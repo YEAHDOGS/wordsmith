@@ -1,20 +1,23 @@
 // Every note write (app sync, agent API, PR poll, GitHub webhook) goes through saveNotes, which applies the
 // feature lifecycle, stamps started_at / completed_at and appends note_events in the same D1 batch.
 import { LEGACY_PRIORITY, cleanRow, newRow } from '../../src/lib/models.js';
+import { POSITION_STEP, TOP_LIMIT, topPosition } from '../../src/lib/order.js';
 import { HttpError } from './http.js';
 import { upsertStatement } from './rows.js';
+import { settleTrash } from './trash.js';
 
 // Autosave sends many small edits; only one "edited" event is logged per note per window.
 const EDIT_EVENT_WINDOW_MS = 600_000;
 const STATE_IN_PROGRESS = 'in_progress';
 const STATE_COMPLETE = 'complete';
 const FEATURE_KIND = 'feature';
+const DEFAULT_COLOR = 'default';
 
-/** @typedef {{ type: 'user' | 'agent' | 'github', name: string }} Actor */
+/** @typedef {{ type: 'user' | 'agent' | 'github', name: string, color?: string }} Actor color: an agent token's note color */
 
 /** Who is acting, for the timeline. Agents go by their token's name, which the auth lookup already read. @param {import('./auth.js').Auth} auth @returns {Actor} */
 export function actorFor(auth) {
-  return auth.via === 'token' ? { type: 'agent', name: auth.tokenName || 'agent' } : { type: 'user', name: auth.user.name || 'you' };
+  return auth.via === 'token' ? { type: 'agent', name: auth.tokenName || 'agent', color: auth.tokenColor } : { type: 'user', name: auth.user.name || 'you' };
 }
 
 /**
@@ -61,6 +64,7 @@ function lifecycle(before, after, now, actor) {
     events.push({ type: 'analyzed', data: { difficulty: after.difficulty, batch: after.batch } });
   }
   if (before.status !== after.status && after.status) events.push({ type: 'status', data: { text: after.status } });
+  if ((before.ask ?? '') !== after.ask) events.push(after.ask ? { type: 'asked', data: { text: after.ask } } : { type: 'answered', data: {} });
   if (before.assignee !== after.assignee && after.assignee) events.push({ type: 'assigned', data: { to: after.assignee } });
   if (Boolean(before.public) !== Boolean(after.public)) events.push({ type: after.public ? 'published' : 'unpublished', data: {} });
   if (before.archived !== after.archived) events.push({ type: after.archived ? 'archived' : 'unarchived', data: {} });
@@ -83,6 +87,13 @@ export async function saveNotes(env, userId, actor, changes) {
   const now = Date.now();
   const statements = [];
   const saved = [];
+  // A new note that comes without a position (the agent API, an old app build) goes on top of the queue, like one
+  // made in the app (src/lib/order.js). One small read, and only when this save creates such a note.
+  let top = null;
+  if (changes.some(({ before, patch }) => !before && typeof patch.position !== 'number')) {
+    const row = await env.DB.prepare('SELECT MIN(position) AS top FROM notes WHERE user_id = ? AND deleted_at IS NULL AND position <= ?').bind(userId, TOP_LIMIT).first();
+    top = topPosition([row?.top]);
+  }
   for (const { before, patch, extraEvents = [] } of changes) {
     // A bad field from an agent (difficulty 9, unknown state) is the caller's mistake: 400 with the reason, not a 500.
     let cleaned;
@@ -97,8 +108,6 @@ export async function saveNotes(env, userId, actor, changes) {
     // Every note is a feature (migration 20261027070000): older app builds and the agent API may still send "note".
     const after = { ...base, ...cleaned, kind: FEATURE_KIND, user_id: userId, updated_at: now };
     if (patch.deleted_at !== undefined) after.deleted_at = patch.deleted_at ? Math.min(Number(patch.deleted_at), now) : null;
-    // Deleted notes keep only their tombstone on the server.
-    if (after.deleted_at) Object.assign(after, { title: '', body: '', analysis: '', public: false });
     if (patch.prs_checked_at !== undefined) after.prs_checked_at = patch.prs_checked_at;
     // Two priority columns while old builds are around (migration 20261027040000): a patch without priority_level
     // comes from an old build, or a row cached before the upgrade, so a changed old-scale value is converted up.
@@ -107,6 +116,18 @@ export async function saveNotes(env, userId, actor, changes) {
       after.priority_level = Math.max(0, LEGACY_PRIORITY.indexOf(cleaned.priority));
     }
     after.priority = LEGACY_PRIORITY[after.priority_level] ?? 0;
+    if (!before && top !== null && typeof after.position !== 'number') {
+      after.position = top;
+      top -= POSITION_STEP;
+    }
+    // Authorship is the server's to stamp, once: who created it, and an agent token's color on everything it makes.
+    if (!before) {
+      after.created_by = actor.name;
+      after.created_by_type = actor.type;
+      if (actor.type === 'agent' && actor.color && actor.color !== DEFAULT_COLOR) after.color = actor.color;
+    }
+    // A deleted note keeps its content in the trash until it's purged (api/lib/trash.js); restoring clears purged_at.
+    settleTrash('notes', after, before);
 
     const events = [...extraEvents, ...lifecycle(before, after, now, actor)];
     // Only the changed columns are written; an unchanged note (autosave, a repeat PATCH) isn't written at all.

@@ -6,6 +6,15 @@
   line-height: 1.7;
 }
 
+.markdown.note-card-preview {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.markdown.note-card-preview > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown > :first-child {
   margin-top: 0;
 }

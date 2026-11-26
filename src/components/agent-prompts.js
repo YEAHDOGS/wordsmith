@@ -6,6 +6,31 @@ const TOKEN_HEADER = 'Your wordsmith token is in the WORDSMITH_TOKEN environment
 const SMALL_LEVELS = DIFFICULTY_LABELS.slice(1, SMALL_DIFFICULTY + 1).map((label, index) => `${index + 1} ${label}`).join(', ');
 const LARGE_LEVELS = DIFFICULTY_LABELS.slice(SMALL_DIFFICULTY + 1).map((label, index) => `${index + SMALL_DIFFICULTY + 1} ${label}`).join(', ');
 
+/**
+ * MCP setup, the primary way in: one config block per harness, then every tool is there (api/lib/mcp-tools.js).
+ * The token stays in WORDSMITH_TOKEN; nothing secret is pasted into config files.
+ * @param {(path: string) => string} url
+ */
+export function mcpSetup(url) {
+  const endpoint = url('/api/mcp');
+  return `## wordsmith over MCP
+Endpoint: ${endpoint} (Streamable HTTP). Auth: your agent token as a bearer, kept in WORDSMITH_TOKEN.
+
+Claude Code (one command):
+claude mcp add --transport http wordsmith ${endpoint} --header "Authorization: Bearer $WORDSMITH_TOKEN"
+
+Codex (~/.codex/config.toml):
+[mcp_servers.wordsmith]
+url = "${endpoint}"
+bearer_token_env_var = "WORDSMITH_TOKEN"
+
+Any other MCP client (JSON config):
+{ "mcpServers": { "wordsmith": { "type": "http", "url": "${endpoint}", "headers": { "Authorization": "Bearer \${WORDSMITH_TOKEN}" } } } }
+
+Then tell the agent: "Start every session with the wordsmith get_context tool, then get_project_context for this repo's project."
+Tools: get_context, get_project_context, list_features, claim_next, update_note, post_analysis, get_events and more. The server explains the loop when the client connects.`;
+}
+
 /** Standing instructions for an agent's AGENTS.md / CLAUDE.md: the claim, report, PR loop. @param {(path: string) => string} url */
 export function agentInstructions(url) {
   return `## wordsmith (feature queue)
@@ -16,11 +41,14 @@ Loop:
 1. Before you start a feature, read its triage: GET ${url('/api/v1/notes/<id>/analysis')}. Earlier agents leave scope, files and plans there.
 2. Claim work: POST ${url('/api/v1/features/next')} with JSON {"project":"<project name or id>"}. 204 means the queue is empty.
 3. Report progress: PATCH ${url('/api/v1/notes/<id>')} with {"status":"short present-tense update"}. Do this at each milestone.
+   Need a decision? PATCH {"ask":"question\\n1. option\\n2. option"}. It lands in the owner's Needs you view; the answer is appended to the body and ask clears.
 4. When your pull request is open: PATCH the same URL with {"pr_url":"https://github.com/owner/repo/pull/123"}.
 5. Record what you did: POST ${url('/api/v1/notes/<id>/analysis')} with {"analysis_append":"Done: ..."}.
 6. Don't mark features complete yourself. Merging the PR completes them.
 7. Have a new idea? POST ${url('/api/v1/features')} with {"project":"...","title":"...","body":"..."}.
-8. Need a project that doesn't exist yet? POST ${url('/api/v1/projects')} with {"name":"...","repo":"owner/name"} (409 means it already exists; use that one).
+8. Designs: a project can carry diagrams of its system. Read them before changing what they show: GET ${url('/api/v1/diagrams?project=<project>')}, then GET ${url('/api/v1/diagrams/<id>')}.
+   Draw one: POST ${url('/api/v1/diagrams')} with {"name":"...","project":"...","nodes":[{"id":"api","title":"API","kind":"service"}],"edges":[{"from":"api","to":"db","label":"SQL"}]}. Keep one true: PATCH it with add_nodes, remove_nodes, add_edges, remove_edges.
+9. Need a project that doesn't exist yet? POST ${url('/api/v1/projects')} with {"name":"...","repo":"owner/name"} (409 means it already exists; use that one).
 Every call is timestamped on the feature's timeline under your token's name.`;
 }
 

@@ -5,6 +5,7 @@ import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
 import { saveNotes } from './notes.js';
 import { safeJson, toApi } from './rows.js';
+import { QUEUE_ORDER_SQL } from '../../src/lib/order.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -18,8 +19,9 @@ const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
 // name not '.' or '..'.
 const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
-// Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
-const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
+// Claim order for features: queue order, the same as the board's Requested columns (src/lib/order.js): new tickets
+// on top, then priority, then hand-placed order, then age.
+const CLAIM_ORDER = QUEUE_ORDER_SQL;
 
 /**
  * Finds a project by id or case-insensitive name.
@@ -100,7 +102,7 @@ export async function createProject(env, userId, input) {
 async function lookups(env, userId) {
   const [projects, labels, boards] = await env.DB.batch([
     env.DB.prepare('SELECT id, name, repo FROM projects WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
-    env.DB.prepare('SELECT id, name, color FROM labels WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
+    env.DB.prepare('SELECT id, name, color, group_id FROM labels WHERE user_id = ? AND deleted_at IS NULL').bind(userId),
     env.DB.prepare('SELECT scope, columns FROM boards WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at').bind(userId),
   ]);
   /** @type {Map<string, { id: string, name: string, state: string }[]>} */
@@ -260,7 +262,7 @@ export async function updateNote(env, userId, actor, id, input) {
   const before = await getNote(env, userId, id, maps);
   /** @type {Record<string, any>} */
   const patch = {};
-  for (const field of ['title', 'body', 'state', 'status', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
+  for (const field of ['title', 'body', 'state', 'status', 'ask', 'archived', 'pinned', 'assignee', ...TRIAGE_FIELDS]) {
     if (input[field] !== undefined) patch[field] = input[field];
   }
   if (typeof input.analysis_append === 'string') patch.analysis = `${patch.analysis ?? before.analysis}\n\n${input.analysis_append}`.trim();
@@ -277,6 +279,9 @@ export async function updateNote(env, userId, actor, id, input) {
     Object.assign(patch, { column_id: column.id, state: column.state });
   }
   const ids = labelIds(maps, input.labels);
+  // The label that mirrors the note's group (src/lib/groups.js) stays on while the note is in the group.
+  const groupLabel = before.group_id ? maps.labelRows.find((/** @type {any} */ row) => row.group_id === before.group_id) : null;
+  if (ids && groupLabel && before.label_ids.includes(groupLabel.id) && !ids.includes(groupLabel.id)) ids.push(String(groupLabel.id));
   if (ids) patch.label_ids = ids;
 
   let linkedPr = false;
@@ -317,7 +322,7 @@ export async function claimFeature(env, userId, actor, id) {
 }
 
 /**
- * Claims the most important, oldest requested feature (optionally within one project).
+ * Claims the requested feature at the top of the queue (optionally within one project).
  * @param {Record<string, any>} env
  * @param {string} userId
  * @param {import('./notes.js').Actor} actor
@@ -378,6 +383,7 @@ export function featuresMarkdown(features) {
     if (note.batch) lines.push(`  - batch: ${note.batch}`);
     if (note.analysis) lines.push('  - analysis:', ...note.analysis.split('\n').map((/** @type {string} */ line) => `    > ${line}`));
     for (const pr of note.pull_requests) lines.push(`  - PR (${pr.state}): ${pr.url}`);
+    for (const file of note.attachments ?? []) lines.push(`  - attachment: ${file.name} (${file.type}) ${file.url}`);
     if (note.body) lines.push('', ...note.body.split('\n').map((/** @type {string} */ line) => `    ${line}`), '');
   }
   return lines.join('\n');

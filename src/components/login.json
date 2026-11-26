@@ -1,14 +1,23 @@
 {
-  "tagline": "Feed your agents from anywhere.",
-  "pitch": "Capture an idea on any device. Your AI agents claim it, ship a pull request, and the moment you merge it on GitHub the note files itself away as complete. Every step timestamped.",
-  "steps": ["You write it", "An agent claims it", "A PR gets linked", "You merge, it completes"],
+  "tagline": "Speak your truth",
+  "pitch": "A notes, design, and features app for agentic AI. wordsmith gives all your agents a unified space to document and resolve anything",
+  "steps": ["Say it", "AI makes ticket", "AI makes PR", "You merge"],
   "continue": "Continue with",
-  "providers": { "github": "GitHub", "google": "Google", "apple": "Apple" },
+  "providers": {
+    "github": "GitHub",
+    "google": "Google",
+    "apple": "Apple"
+  },
   "none": "No sign-in providers are configured yet. Add OAuth credentials in .dev.vars (see .dev.vars.example).",
   "dev": "Local dev sign-in",
+  "demo": "Launch demo",
+  "demoHint": "Explore sample data, read-only. Nothing is sent to the server.",
+  "notSetUp": "Sign-in with {provider} is not set up on this server yet.",
   "previewLabel": "Preview password",
   "previewHint": "This is a pull request Preview on test data. Enter the Preview password to look around.",
   "previewButton": "Unlock Preview",
+  "betaLabel": "Beta password (new accounts only)",
+  "betaAccepted": "Beta password accepted. Choose how to sign in.",
   "deviceTitle": "Finish signing in in your browser",
   "deviceBody": "Check the browser shows this code, then continue there.",
   "cancel": "Cancel",
@@ -17,5 +26,6 @@
   "confirmButton": "Yes, continue",
   "doneTitle": "You're signed in",
   "doneBody": "Head back to the wordsmith app. You can close this tab.",
-  "madeBy": "This product was made by DOGS"
+  "madeBy": "This product was made by DOGS",
+  "privacy": "Privacy"
 }

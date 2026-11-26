@@ -83,6 +83,7 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - Desktop landscape: full dashboard capped at `max-w-7xl`; desktop portrait stacks content into rows.
 - TV: large type and spacing for 10-foot viewing. Ultra-wide: spread panels to use available width.
 - Fit on one screen. Vertical scrolling is allowed only inside lists. Never show a horizontal scrollbar; sideways content must support swipe, drag and scroll wheel and provide controls.
+- Overflow is hidden by default. Opt into scrolling only for content that needs it; text and form controls should wrap, shrink, or expand to fit instead of creating scrollbars. Never let a single-line field, long title, or other ordinary content introduce horizontal scrolling.
 - Nothing is cropped or unreachable at any size, down to a 320×320 window.
 
 ## Layout stability and accessibility
@@ -108,11 +109,12 @@ Every screen gets its own deliberate layout on mobile portrait, mobile landscape
 - `src/tauri/` is the Rust shell; the Svelte/Vite web app remains the product and must continue to build independently.
 - Detect native-only behavior with `isTauri()` from `@tauri-apps/api/core`. Keep web behavior available when running in a browser.
 - `npm run tauri:dev` opens the Tauri development shell. `npm run tauri:build` builds the current host target. `npm run tauri:build:platforms` builds the selected native targets where the host toolchain supports them.
-- Release builds are manually triggered from `.github/workflows/build-apps.yml`. Each selected platform is built on its required GitHub-hosted runner and uploaded as an artifact.
+- Release builds are manually triggered from `.github/workflows/build-apps.yml`. Each selected platform is built on its required GitHub-hosted runner and uploaded as an artifact. Only a run on `master` publishes a release; other branches just build.
+- Installed apps update themselves from the newest release (`src/lib/updates.svelte.js`, `src/tauri/src/updates.rs`): desktop through the Tauri updater and the release's `latest.json`, Android by offering the new APK. The secrets `TAURI_SIGNING_PRIVATE_KEY`(`_PASSWORD`) and `ANDROID_KEYSTORE`(`_PASSWORD`) sign them; never replace either key, or installed apps can no longer update.
 - Android builds require Android Studio command line tools and an installed SDK/NDK; iOS builds require macOS and Xcode. Linux and Windows builds use their native runner toolchains.
 - Check native window layouts down to 320×320; every responsive layout requirement applies.
 - Built binaries are collected into `/build/` at the repo root as `wordsmith-<platform>-<arch>.<ext>` (e.g. `build/wordsmith-win-x64.exe`) by `scripts/collect-builds.js`. `/build/` is gitignored.
-- GitHub Actions workflows are manual only (`workflow_dispatch`) for now. Do not add push or pull_request triggers.
+- GitHub Actions workflows are manual only (`workflow_dispatch`) for now. Do not add push or pull_request triggers. The one exception is `.github/workflows/delete-preview.yml`, which deletes a branch's Worker Preview when its pull request closes. It builds nothing and deploys nothing.
 
 # System Prompt: AAA Superpower Architecture Blueprint
 You are an expert interactive front-end engineer specializing in award-winning digital experiences. Replicate the core visual framework of the Superpower.com design system with flawless token execution. Avoid generic corporate bento grids. Focus on a high-fidelity, fluid layout structured around a continuous vertical alignment concept (human spine aesthetic).

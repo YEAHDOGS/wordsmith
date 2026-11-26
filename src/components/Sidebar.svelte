@@ -2,29 +2,40 @@
   // Navigation: views, projects and labels. Full width on desktop, icon rail on tablets (compact), drawer on phones.
   // Projects and Labels scroll inside their own capped boxes; LOWER_NAV holds future tabs right above the footer.
   // Top: logo, wordmark and the sync icon, the same height as the top bar so their bottom lines meet. Bottom: the app
-  // version, the archive (no count badge; the count is in its tooltip) and a settings cog; the rail stacks the two buttons. The Made by DOGS
+  // version, the archive and the trash (no count badges; the counts are in their tooltips) and a settings cog; the rail stacks the buttons. The Made by DOGS
   // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
+  import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import Archive from '@lucide/svelte/icons/archive';
   import Building2 from '@lucide/svelte/icons/building-2';
+  import Trash2 from '@lucide/svelte/icons/trash-2';
   import Settings from '@lucide/svelte/icons/settings';
   import Plus from '@lucide/svelte/icons/plus';
   import Pencil from '@lucide/svelte/icons/pencil';
   import Check from '@lucide/svelte/icons/check';
   import Trash from '@lucide/svelte/icons/trash';
   import Tag from '@lucide/svelte/icons/tag';
+  import Group from '@lucide/svelte/icons/group';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import BellDot from '@lucide/svelte/icons/bell-dot';
+  import Network from '@lucide/svelte/icons/network';
+  import Mic from '@lucide/svelte/icons/mic';
+  import LayoutGrid from '@lucide/svelte/icons/layout-grid';
+  import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
-  import { slide } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import SyncStatus from './SyncStatus.svelte';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
   import { DOT_BG } from '../lib/colors.js';
-  import { MAX_NAME, projectKey } from '../lib/models.js';
+  import { MAX_NAME, NEEDS_YOU_ENABLED, projectKey } from '../lib/models.js';
+  import { trashItems } from './trash.js';
   import { APP_VERSION } from '../lib/version.js';
+  import { byName } from '../lib/nav-order.js';
 
   /** @type {{ compact?: boolean }} */
   let { compact = false, gardenMode = $bindable(false) } = $props();
@@ -37,17 +48,28 @@
   const LIST = 'relative min-h-0 shrink overflow-x-hidden overflow-y-auto overscroll-contain';
   const LIST_CAP = 'max-h-64 short:max-h-32 tv:max-h-96';
   const NAV = [
+    ...(NEEDS_YOU_ENABLED ? [{ view: 'attention', label: 'Needs you', icon: BellDot }] : []),
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
+    { view: 'calendar', label: 'Calendar', icon: CalendarDays },
+    { view: 'design', label: 'Design', icon: Network },
+    // Scribe and Tapes are one page with a switch in its corner; either side lights this row.
+    { view: 'scribe', label: 'Scribe', icon: Mic, also: 'tapes' },
   ];
-  const ITEM = 'spring press group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink';
+  const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';
   // The red bar on the active row is always there and scales in and out, so switching pages never pops.
-  const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent spring';
+  // Keep the indicator inside its row: spring overshoot creates temporary scroll overflow on the last item.
+  const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent transition-transform duration-150 ease-out';
   // Section headers: the + sits in the count column (same right edge as the project counts), centered on the label.
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
-  const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';
+  const SECTION_LABEL_TEXT = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest';
+  const SECTION_LABEL = `${SECTION_LABEL_TEXT} text-ink-faint`;
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
+  // The section name folds its list; the chevron turns to point at the closed list. In Projects the chevron alone folds
+  // and the name opens the Projects page (every project as a card).
+  const SECTION_TOGGLE = 'spring press -mx-1 -my-1 flex items-center gap-1 px-1 py-1 hover:text-ink';
+  const FOLD_MS = 180;
   // Same heights as the TopBar header (h-12 sm:h-14 tv:h-20).
   const HEADER_HEIGHT = 'h-12 sm:h-14 tv:h-20';
   const FOOTER_BUTTON = 'spring press relative flex size-9 tv:size-12 items-center justify-center hover:bg-surface-raised';
@@ -59,9 +81,13 @@
   let addingLabel = $state(false);
   let editingLabels = $state(false);
 
-  const projects = $derived(store.projects.filter((p) => !p.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
-  const labels = $derived(store.labels.filter((l) => !l.deleted_at).sort((a, b) => a.name.localeCompare(b.name)));
+  const projects = $derived(byName(store.projects));
+  const labels = $derived(byName(store.labels));
   const archivedCount = $derived(store.notes.filter((note) => note.archived && !note.deleted_at).length);
+  // Read on each change to the store; the page itself keeps the countdown fresh.
+  const trashCount = $derived(trashItems(Date.now()).length);
+  // Read on each change to the store; the Needs you page itself re-checks snoozes every minute.
+  const attentionCount = $derived(NEEDS_YOU_ENABLED ? needsYou(Date.now()).length : 0);
   /** Open (not complete) features per project, for the badge. */
   const openCounts = $derived.by(() => {
     /** @type {Record<string, number>} */
@@ -123,6 +149,8 @@
   });
 
   const active = (/** @type {string} */ view, id = '') => router.route.view === view && (!id || router.route.id === id);
+  /** A top nav row is lit by its own page, or the other side of a two-sided one. @param {{ view: string, also?: string }} item */
+  const lit = (item) => active(item.view) || (Boolean(item.also) && active(item.also ?? ''));
 </script>
 
 <nav class="flex h-full min-h-0 flex-col bg-app" aria-label="Main">
@@ -140,20 +168,35 @@
        window with both add forms open), the whole column scrolls, so nothing is ever cut off. -->
   <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2 {gardenMode ? 'hidden' : ''}" bind:this={lists}>
     {#each NAV as item (item.view)}
-      <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.label} aria-current={active(item.view) ? 'page' : undefined}>
-        <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
-        <item.icon class="size-4 tv:size-6 shrink-0" />
-        {#if !compact}<span>{item.label}</span>{/if}
+      <button class="{ITEM} {lit(item) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.view === 'attention' && attentionCount ? `${item.label}, ${attentionCount}` : item.label} aria-current={lit(item) ? 'page' : undefined}>
+        <span class="{INDICATOR} {lit(item) ? 'scale-y-100' : 'scale-y-0'}"></span>
+        <span class="relative flex shrink-0">
+          <item.icon class="size-4 tv:size-6 shrink-0" />
+          {#if compact && item.view === 'attention' && attentionCount}<span class="absolute -top-1 -right-1 size-2 rounded-full bg-accent" in:fade={{ duration: 150 }}></span>{/if}
+        </span>
+        {#if !compact}
+          <span class="min-w-0 flex-1 truncate">{item.label}</span>
+          {#if item.view === 'attention' && attentionCount}<span class="min-w-5 bg-accent px-1 text-center font-mono text-xs tabular-nums text-accent-ink" in:fade={{ duration: 150 }}>{attentionCount}</span>{/if}
+        {/if}
       </button>
     {/each}
 
     {#if compact}
-      <!-- Rail: a plain divider. New projects and their counts live in the full sidebar (drawer), not floating here. -->
+      <!-- Rail: a plain divider, then the Projects page. New projects and their counts live in the full sidebar (drawer), not floating here. -->
       <div class="mx-3 my-2 border-t border-line" role="separator"></div>
+      <button class="{ITEM} {active('projects') ? ACTIVE : ''} justify-center px-0" onclick={() => go('projects')} title="Projects" aria-label="Projects" aria-current={active('projects') ? 'page' : undefined}>
+        <span class="{INDICATOR} {active('projects') ? 'scale-y-100' : 'scale-y-0'}"></span>
+        <LayoutGrid class="size-4 tv:size-6 shrink-0" />
+      </button>
     {:else}
       <div class={SECTION}>
-        <span class={SECTION_LABEL}>Projects</span>
-        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; }}>
+        <div class="flex min-w-0 items-center gap-1">
+          <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-label={ui.folded.has('projects') ? 'Show the project list' : 'Hide the project list'} aria-expanded={!ui.folded.has('projects')} aria-controls="sidebar-projects" onclick={() => ui.toggleFolded('projects')}>
+            <ChevronDown class="size-3 spring {ui.folded.has('projects') ? '-rotate-90' : ''}" />
+          </button>
+          <button class="{SECTION_LABEL_TEXT} {SECTION_TOGGLE} {active('projects') ? 'text-accent' : 'text-ink-faint'}" title="All projects" aria-current={active('projects') ? 'page' : undefined} onclick={() => go('projects')}>Projects</button>
+        </div>
+        <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; ui.toggleFolded('projects', true); }}>
           <span class="flex spring {addingProject ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
         </button>
       </div>
@@ -167,7 +210,8 @@
         {#if projectError}<p id="new-project-name-error" class="mt-1 text-xs text-accent" role="alert" transition:slide={{ duration: 150 }}>{projectError}</p>{/if}
       </form>
     {/if}
-    <div class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects">
+    {#if compact || !ui.folded.has('projects')}
+    <div id={compact ? undefined : 'sidebar-projects'} class="{LIST} {compact ? '' : LIST_CAP}" role="group" aria-label="Projects" transition:slide={{ duration: FOLD_MS }}>
     {#each projects as project (project.id)}
       <button animate:flip={{ duration: 150 }} class="{ITEM} {active('project', project.id) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go('project', project.id)}
         title={openCounts[project.id] ? `${project.name}, ${openCounts[project.id]} open` : project.name} aria-current={active('project', project.id) ? 'page' : undefined}>
@@ -182,17 +226,20 @@
       </button>
     {/each}
     </div>
+    {/if}
 
     {#if !compact}
       <div class={SECTION}>
-        <span class={SECTION_LABEL}>Labels</span>
+        <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-expanded={!ui.folded.has('labels')} aria-controls="sidebar-labels" onclick={() => ui.toggleFolded('labels')}>
+          <ChevronDown class="size-3 spring {ui.folded.has('labels') ? '-rotate-90' : ''}" />Labels
+        </button>
         <div class="-mr-1 flex gap-1">
-          <button class={SECTION_BUTTON} title={editingLabels ? 'Done editing' : 'Edit labels'} aria-label={editingLabels ? 'Done editing labels' : 'Edit labels'} onclick={() => (editingLabels = !editingLabels)}>
+          <button class={SECTION_BUTTON} title={editingLabels ? 'Done editing' : 'Edit labels'} aria-label={editingLabels ? 'Done editing labels' : 'Edit labels'} onclick={() => { editingLabels = !editingLabels; ui.toggleFolded('labels', true); }}>
             {#key editingLabels}
               <span class="icon-swap flex">{#if editingLabels}<Check class="size-4" />{:else}<Pencil class="size-4" />{/if}</span>
             {/key}
           </button>
-          <button class={SECTION_BUTTON} title="New label" aria-label="New label" aria-expanded={addingLabel} onclick={() => (addingLabel = !addingLabel)}>
+          <button class={SECTION_BUTTON} title="New label" aria-label="New label" aria-expanded={addingLabel} onclick={() => { addingLabel = !addingLabel; ui.toggleFolded('labels', true); }}>
             <span class="flex spring {addingLabel ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
           </button>
         </div>
@@ -204,12 +251,13 @@
             onkeydown={(event) => event.key === 'Escape' && (addingLabel = false)} />
         </form>
       {/if}
-      <div class="{LIST} {LIST_CAP}" role="group" aria-label="Labels">
+      {#if !ui.folded.has('labels')}
+      <div id="sidebar-labels" class="{LIST} {LIST_CAP}" role="group" aria-label="Labels" transition:slide={{ duration: FOLD_MS }}>
       {#each labels as label (label.id)}
         <div animate:flip={{ duration: 150 }}>
           {#if editingLabels}
             <div class="flex items-center gap-2 px-4 py-1" transition:slide={{ duration: 150 }}>
-              <Tag class="size-4 shrink-0 text-ink-faint" />
+              {#if label.group_id}<Group class="size-4 shrink-0 text-ink-faint" />{:else}<Tag class="size-4 shrink-0 text-ink-faint" />{/if}
               <input value={label.name} maxlength={MAX_NAME} aria-label="Rename label"
                 class="min-w-0 flex-1 border border-line bg-surface px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
                 onchange={(event) => event.currentTarget.value.trim() && store.update('labels', label.id, { name: event.currentTarget.value.trim() })} />
@@ -219,7 +267,8 @@
             <div transition:slide={{ duration: 150 }}>
               <button class="{ITEM} {active('label', label.id) ? ACTIVE : ''}" onclick={() => go('label', label.id)} aria-current={active('label', label.id) ? 'page' : undefined}>
                 <span class="{INDICATOR} {active('label', label.id) ? 'scale-y-100' : 'scale-y-0'}"></span>
-                <Tag class="size-4 shrink-0" />
+                <!-- A note group's label (labels.group_id, src/lib/groups.js) wears the group icon -->
+                {#if label.group_id}<Group class="size-4 shrink-0" />{:else}<Tag class="size-4 shrink-0" />{/if}
                 <span class="truncate">{label.name}</span>
               </button>
             </div>
@@ -227,6 +276,7 @@
         </div>
       {/each}
       </div>
+      {/if}
     {/if}
   </div>
 
@@ -261,6 +311,10 @@
       <button class="{FOOTER_BUTTON} {active('archive') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('archive')}
         title={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-label={archivedCount ? `Archive, ${archivedCount} archived` : 'Archive'} aria-current={active('archive') ? 'page' : undefined}>
         <span class="flex spring {active('archive') ? '-translate-y-px scale-110' : ''}"><Archive class="size-4 tv:size-6" /></span>
+      </button>
+      <button class="{FOOTER_BUTTON} {active('trash') ? 'bg-accent-soft text-accent' : 'text-ink-muted hover:text-ink'}" onclick={() => go('trash')}
+        title={trashCount ? `Trash, ${trashCount} deleted` : 'Trash'} aria-label={trashCount ? `Trash, ${trashCount} deleted` : 'Trash'} aria-current={active('trash') ? 'page' : undefined}>
+        <span class="flex spring {active('trash') ? '-translate-y-px scale-110' : ''}"><Trash2 class="size-4 tv:size-6" /></span>
       </button>
       <button class="{FOOTER_BUTTON} {active('settings') ? 'text-accent' : 'text-ink-muted hover:text-ink'}"
         onclick={() => go('settings')} title={compact ? `Settings (v${APP_VERSION})` : 'Settings'} aria-label="Settings" aria-current={active('settings') ? 'page' : undefined}>

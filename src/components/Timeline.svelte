@@ -7,7 +7,7 @@
   import { fade, fly } from 'svelte/transition';
   import { store } from '../lib/store.svelte.js';
   import { STATE_STYLE } from '../lib/colors.js';
-  import { DIFFICULTY_LABELS } from '../lib/models.js';
+  import { DIFFICULTY_LABELS, attachmentKind } from '../lib/models.js';
   import { clockTime, dayLabel, duration, fullTime } from '../lib/time.js';
 
   /** @type {{ note: any }} */
@@ -16,6 +16,7 @@
   const ACTOR_ICONS = { user: User, agent: Bot, github: GitMerge };
   const ROW_STAGGER_MS = 40;
   const MAX_STAGGER_MS = 400;
+  const ATTACHED = { image: 'an image', video: 'a video', audio: 'an audio file', document: 'a document' };
 
   const events = $derived(store.eventsFor(note.id));
   const firstPr = $derived(events.find((event) => event.type === 'pr_linked')?.created_at ?? null);
@@ -46,6 +47,8 @@
       case 'claimed': return 'claimed it and started work';
       case 'state': return `moved it ${stateName(data.from)} → ${stateName(data.to)}${data.reason ? ` (${data.reason})` : ''}`;
       case 'status': return `status: “${data.text}”`;
+      case 'asked': return `asked: “${data.text}”`;
+      case 'answered': return 'answered the question';
       case 'assigned': return `assigned it to ${data.to}`;
       case 'pr_linked': return `linked ${data.repo}#${data.number}`;
       case 'pr_merged': return `merged ${data.url?.split('/').slice(-3).join('/').replace('/pull/', '#')}`;
@@ -55,7 +58,7 @@
       case 'unarchived': return 'restored it from the archive';
       case 'deleted': return 'deleted it';
       case 'restored': return 'restored it';
-      case 'attached': return `attached ${data.type?.startsWith('video/') ? 'a video' : 'an image'}: ${data.name}`;
+      case 'attached': return `attached ${ATTACHED[attachmentKind(data.type)] || ATTACHED.image}: ${data.name}`;
       case 'detached': return `removed ${data.name}`;
       case 'published': return 'made it public';
       case 'unpublished': return 'made it private';
@@ -66,7 +69,7 @@
 </script>
 
 {#if note.kind === 'feature'}
-  <ol class="grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4" aria-label="Lifecycle" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
+  <ol class="grid grid-cols-2 gap-px border border-line bg-line @xl:grid-cols-4" aria-label="Lifecycle" in:fly={{ y: -8, duration: 180 }} out:fade={{ duration: 100 }}>
     {#each milestones as step, index (step.label)}
       <li class="bg-app px-3 py-2 transition-opacity duration-300 {step.at ? '' : 'opacity-50'}">
         <p class="flex items-center gap-1.5 text-[0.6875rem] font-semibold {step.at ? step.tone.text : 'text-ink-faint'}">
@@ -93,9 +96,9 @@
         {@const Icon = ACTOR_ICONS[/** @type {keyof typeof ACTOR_ICONS} */ (event.actor_type)] ?? User}
         <li class="relative py-1.5" in:fly={{ x: -8, duration: 200, delay: Math.min(index * ROW_STAGGER_MS, MAX_STAGGER_MS) }}>
           <span class="absolute top-2.5 -left-5 size-2 rounded-full ring-4 ring-app {event.type === 'pr_merged' || event.data?.to === 'complete' ? 'bg-complete' : event.actor_type === 'agent' ? 'bg-progress' : 'bg-accent'}"></span>
-          <p class="text-[0.8125rem] leading-snug text-ink">
-            <span class="inline-flex items-center gap-1 font-semibold"><Icon class="size-3.5 text-ink-muted" />{event.actor_name || event.actor_type}</span>
-            <span class="text-ink-muted">{describe(event)}</span>
+          <p class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-1 text-[0.8125rem] leading-snug text-ink">
+            <Icon class="mt-[0.15em] size-3.5 text-ink-muted" />
+            <span class="min-w-0 break-words"><span class="font-semibold">{event.actor_name || event.actor_type}</span>{' '}<span class="text-ink-muted">{describe(event)}</span></span>
           </p>
           <time class="selectable font-mono text-[0.6875rem] text-ink-faint" datetime={new Date(event.created_at).toISOString()} title={fullTime(event.created_at)}>{clockTime(event.created_at)}</time>
         </li>
