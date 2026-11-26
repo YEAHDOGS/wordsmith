@@ -128,14 +128,16 @@ function pickUser(row, open) {
 
 /**
  * Like getAuth, but throws 401 when nobody is signed in. Agent tokens are only accepted when allowToken is set.
+ * allowLocked lets an account with no plan through (free trial over): only the data export and the file downloads it
+ * needs set it, so leaving with your data never takes a membership. Everything else still answers 402.
  * @param {{ request: Request, env: Record<string, any> }} context
- * @param {{ allowToken?: boolean }} [options]
+ * @param {{ allowToken?: boolean, allowLocked?: boolean }} [options]
  */
-export async function requireAuth({ request, env }, { allowToken = false } = {}) {
+export async function requireAuth({ request, env }, { allowToken = false, allowLocked = false } = {}) {
   const auth = await getAuth(request, env);
   if (!auth) throw new HttpError(401, 'Sign in required');
   // The free trial is over and the account holds no plan: nothing works but signing in and out (and agent tokens stop).
-  if (!auth.user.plan) throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
+  if (!auth.user.plan && !allowLocked) throw new HttpError(PAYMENT_REQUIRED, 'Your free trial has ended. Subscribe to DOGS to keep using wordsmith.', TRIAL_ENDED);
   if (auth.via === 'token' && !allowToken) throw new HttpError(403, 'API tokens cannot use this route');
   return auth;
 }

@@ -23,6 +23,7 @@
   import InstallApp from './InstallApp.svelte';
   import StandingContext from './StandingContext.svelte';
   import CoffeeButton from './CoffeeButton.svelte';
+  import ExportButton from './ExportButton.svelte';
   import TrialMeter from './TrialMeter.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
@@ -192,6 +193,11 @@
       <!-- The guided tour again, from the start; it comes back here when it closes -->
       <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
+      <!-- Not in the demo: its sample data never reaches the server, so there is nothing to export -->
+      {#if !auth.demo}
+        <div class="mt-4 flex flex-col items-start gap-2"><ExportButton class={BUTTON} /></div>
+        <p class="mt-2 text-xs text-ink-faint">{PAYWALL.exportHint}</p>
+      {/if}
       <CoffeeButton class="{BUTTON} mt-4" />
       <p class="mt-2 text-xs text-ink-faint">{PAYWALL.coffeeHint}</p>
       {#if auth.paywallOptional}
