@@ -30,6 +30,7 @@
   import CALENDAR_TEXT from './calendar.json';
   import PROJECTS_TEXT from './projects-board.json';
   import { scribe } from '../lib/scribe.svelte.js';
+  import { mini } from '../lib/mini-scribe.svelte.js';
   import { recorder } from '../lib/recorder.svelte.js';
   import { tapeImport } from '../lib/tapes.svelte.js';
   import { tour } from '../lib/tour.svelte.js';
@@ -50,6 +51,8 @@
   // So does the ticket calendar, and the guided tour.
   const loadCalendar = () => import('./Calendar.svelte');
   const loadTour = () => import('./Tour.svelte');
+  // And the desktop apps' mini Scribe strip.
+  const loadMini = () => import('./MiniScribe.svelte');
   const loadProjects = () => import('./ProjectsBoard.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
@@ -79,6 +82,8 @@
     recorder.stop();
     tapeImport.claim('');
   });
+  // The mini strip unfolds too: the next screen (sign-in) needs the whole window.
+  onDestroy(() => mini.exit());
 
   let projectTab = $state('board');
   const route = $derived(router.route);
@@ -143,6 +148,7 @@
 
   /** Escape closes the phone drawer; Ctrl/Cmd+A outside a text field selects every card in view. @param {KeyboardEvent} event */
   function onkeydown(event) {
+    if (mini.on) return;
     if (event.key === 'Escape' && ui.drawerOpen) {
       ui.drawerOpen = false;
       return;
@@ -188,7 +194,8 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex h-dvh w-full overflow-hidden bg-app text-ink">
+<!-- Inert behind the Mini Scribe strip, so keyboard focus can't wander into the hidden app -->
+<div class="flex h-dvh w-full overflow-hidden bg-app text-ink" inert={mini.on}>
   <aside class="hidden w-16 shrink-0 border-r border-line md:block lg:w-64 ultrawide:w-72 tv:w-80">
     <div class="h-full lg:hidden"><Sidebar compact /></div>
     <div class="hidden h-full lg:block"><Sidebar /></div>
@@ -315,3 +322,6 @@
 
   {#if store.demo}<DemoGuard />{/if}
 </div>
+
+<!-- Desktop apps: the window folded into the always-on-top Scribe strip covers everything else -->
+{#if mini.on}<LazyPage load={loadMini} />{/if}
