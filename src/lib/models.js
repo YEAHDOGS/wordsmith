@@ -197,6 +197,10 @@ export const TAPE_RATINGS = ['Unrated', 'Trash', 'Maybe', 'Gold'];
 export const GOLD_RATING = TAPE_RATINGS.indexOf('Gold');
 // An hour of fast rap is about 10,000 words; this holds several.
 export const MAX_TRANSCRIPT = 100_000;
+// Transcripts made by wordsmith cloud (Workers AI's Whisper; api/functions/api/tapes/[id]/transcribe.js) for devices
+// with no local speech model. It is free only up to a few minutes a day, so the desktop apps do the rest on the device.
+export const CLOUD_TRANSCRIPT_MODEL = 'wordsmith-cloud-whisper';
+export const TAPE_CLOUD_ALLOWANCE = 'tape_cloud_allowance';
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];

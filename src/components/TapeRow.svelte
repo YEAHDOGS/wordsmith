@@ -12,7 +12,7 @@
   import Star from '@lucide/svelte/icons/star';
   import AudioLines from '@lucide/svelte/icons/audio-lines';
   import { store } from '../lib/store.svelte.js';
-  import { GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
+  import { CLOUD_TRANSCRIPT_MODEL, TAPE_TYPE, GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
   import { speech } from '../lib/speech.svelte.js';
   import { transcriber } from '../lib/tape-transcribe.svelte.js';
   import { player } from './tape-player.svelte.js';
@@ -24,6 +24,7 @@
 
   const OPEN = { duration: 200, easing: quintOut };
   const MS_PER_SECOND = 1000;
+  const MS_PER_MINUTE = 60_000;
   const BYTES_PER_KB = 1024;
   const BYTES_PER_MB = 1024 * 1024;
   const RECORDED = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -38,6 +39,11 @@
   const gist = $derived(tape.body || (tape.transcript || '').split('\n')[0] || '');
   const modelName = $derived(speech.catalog?.models.find((model) => model.id === tape.transcript_model)?.name || tape.transcript_model);
   const failure = $derived(transcriber.failures.get(tape.id));
+  // No local engine: wordsmith cloud, while today's free minutes cover this tape.
+  const cloud = $derived(!speech.available && Boolean(transcriber.cloud?.available));
+  const tapeMinutes = $derived(Math.max(1, Math.ceil((tape.duration_ms || 0) / MS_PER_MINUTE)));
+  const canTranscribe = $derived(speech.available || (cloud && transcriber.fitsCloud(tape)));
+  const byLine = $derived(tape.transcript_model === CLOUD_TRANSCRIPT_MODEL ? TEXT.transcriptByCloud : TEXT.transcriptBy.replace('{model}', modelName));
 
   /** @param {number} bytes */
   const size = (bytes) => (bytes >= BYTES_PER_MB ? `${(bytes / BYTES_PER_MB).toFixed(1)} MB` : `${Math.round(bytes / BYTES_PER_KB)} KB`);
@@ -86,10 +92,10 @@
       <div class="grid gap-1 text-xs text-ink-faint">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <label for="transcript-{tape.id}">{TEXT.transcript}</label>
-          {#if speech.available}
+          {#if speech.available || cloud}
             <button class="spring press inline-flex items-center gap-1.5 px-2 py-1 text-ink-muted hover:text-accent disabled:opacity-40"
-              disabled={transcriber.current === tape.id} onclick={() => transcriber.one(tape)}>
-              <AudioLines class="size-3.5 {transcriber.current === tape.id ? 'animate-pulse' : ''}" />{transcriber.current === tape.id ? TEXT.transcribing : TEXT.transcribe}
+              disabled={transcriber.current === tape.id || !canTranscribe} onclick={() => transcriber.one(tape)}>
+              <AudioLines class="size-3.5 {transcriber.current === tape.id ? 'animate-pulse' : ''}" />{transcriber.current === tape.id ? TEXT.transcribing : cloud ? TEXT.transcribeCloud.replace('{minutes}', String(tapeMinutes)) : TEXT.transcribe}
             </button>
           {/if}
         </div>
@@ -97,7 +103,8 @@
           maxlength={MAX_TRANSCRIPT} placeholder={TEXT.transcriptPlaceholder} value={tape.transcript}
           oninput={(event) => store.update('tapes', tape.id, { transcript: event.currentTarget.value })}></textarea>
         {#if failure}<p class="text-accent">{TEXT.transcribeFailed.replace('{error}', failure)}</p>
-        {:else if tape.transcribed_at}<p>{TEXT.transcriptBy.replace('{model}', modelName)}</p>{/if}
+        {:else if tape.transcribed_at}<p>{byLine}</p>
+        {:else if cloud && !canTranscribe}<p>{tape.audio_type === TAPE_TYPE ? TEXT.cloudTooLong : TEXT.cloudOriginal}</p>{/if}
       </div>
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-ink-muted">
         <p class="min-w-0 break-all"><span class="text-ink-faint">{TEXT.original}</span> {tape.source_name} · {size(tape.source_size)}

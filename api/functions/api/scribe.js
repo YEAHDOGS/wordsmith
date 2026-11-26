@@ -12,11 +12,11 @@
 import { requireAuth } from '../../lib/auth.js';
 import { HttpError, json, readJson } from '../../lib/http.js';
 import { rateLimit } from '../../lib/rate-limit.js';
+import { EVERYONE, adjust, dayOf, reserve, today } from '../../lib/ai-usage.js';
 import { EARLIER_CHARS, MAX_ANSWER_TOKENS, MAX_NAME_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, TEMPERATURE, parseActions, scribeMessages } from '../../../src/lib/scribe-llm.js';
 import { FEATURE_STATES, MAX_PRIORITY, PLANS } from '../../../src/lib/models.js';
 import CLOUD from '../../../src/lib/scribe-cloud-models.json';
 
-const EVERYONE = '*';
 const ALLOWANCE_CODE = 'scribe_allowance';
 // Everyone's daily cap when the Worker's vars don't say (wrangler.jsonc sets it per environment).
 const DEFAULT_DAILY_NEURONS = 4_000;
@@ -25,8 +25,6 @@ const TOKENS_PER_MILLION = 1_000_000;
 // tokens than UTF-8 bytes, in any language. Each message adds a few tokens of chat template; this covers them.
 const TEMPLATE_TOKENS_PER_MESSAGE = 32;
 const UTF8 = new TextEncoder();
-// Changes a row of today's usage by ?3 neurons and ?4 requests: negative gives a reservation back.
-const ADJUST = 'UPDATE scribe_usage SET neurons = MAX(0, neurons + ?3), requests = MAX(0, requests + ?4) WHERE day = ?1 AND user_id = ?2';
 const USED_UP_MINE = 'Today\'s wordsmith cloud allowance is used up. It resets at midnight UTC; a local model keeps working meanwhile.';
 const USED_UP_EVERYONE = 'wordsmith cloud is out of allowance for today. It resets at midnight UTC; a local model keeps working meanwhile.';
 // A person talking sends a request every few seconds at most; this stops a runaway loop well before the allowance does.
@@ -39,7 +37,6 @@ const FAST_FAILURE_MS = 1_000;
 // Old days are swept now and then rather than on every request, to keep writes down.
 const CLEANUP_CHANCE = 0.02;
 const DAY_MS = 86_400_000;
-const ISO_DATE_LENGTH = 10;
 
 /** @typedef {{ id: string, name: string, note: string, input: number, output: number, suffix?: string, options?: Record<string, any> }} CloudModel */
 
@@ -55,21 +52,6 @@ function limits(env, plan) {
     user: PLANS[plan].scribeNeurons,
     everyone: Number(env.SCRIBE_DAILY_NEURONS) || DEFAULT_DAILY_NEURONS,
   };
-}
-
-/**
- * Adds `neurons` to a row of today's usage only if the total stays within `cap`, in one statement, so two requests
- * can't both slip under it. Returns false when it would go over.
- * @param {Record<string, any>} env @param {string} day @param {string} userId @param {number} neurons @param {number} cap
- */
-async function reserve(env, day, userId, neurons, cap) {
-  if (neurons > cap) return false;
-  const row = await env.DB.prepare(
-    `INSERT INTO scribe_usage (day, user_id, neurons, requests) VALUES (?1, ?2, ?3, 1)
-     ON CONFLICT(day, user_id) DO UPDATE SET neurons = neurons + ?3, requests = requests + 1 WHERE neurons + ?3 <= ?4
-     RETURNING neurons`,
-  ).bind(day, userId, neurons, cap).first();
-  return Boolean(row);
 }
 
 /** Today's usage for this account and for everyone. @param {Record<string, any>} env @param {string} userId @param {string} day */
@@ -102,8 +84,7 @@ function tickets(value) {
 export async function onRequestGet(context) {
   const { user } = await requireAuth(context);
   const { env } = context;
-  const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
-  const { mine } = await usage(env, user.id, day);
+  const { mine } = await usage(env, user.id, today());
   return json({
     available: Boolean(env.AI),
     models: MODELS.map(({ id, name, note }) => ({ id, name, note })),
@@ -135,12 +116,12 @@ export async function onRequestPost(context) {
   // request can never cost more than it reserved and the caps hold whatever the language.
   const maxTokensIn = messages.reduce((sum, message) => sum + UTF8.encode(message.content).length + TEMPLATE_TOKENS_PER_MESSAGE, 0);
   const worst = (maxTokensIn * model.input + MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
-  const day = new Date().toISOString().slice(0, ISO_DATE_LENGTH);
+  const day = today();
   const cap = limits(env, user.plan);
   if (worst > Math.min(cap.user, cap.everyone)) throw new HttpError(413, 'This is more than one request may carry. Say less at once, or use fewer tickets.');
   if (!(await reserve(env, day, EVERYONE, worst, cap.everyone))) throw new HttpError(429, USED_UP_EVERYONE, ALLOWANCE_CODE);
   if (!(await reserve(env, day, user.id, worst, cap.user))) {
-    await env.DB.prepare(ADJUST).bind(day, EVERYONE, -worst, -1).run();
+    await adjust(env, day, [EVERYONE], -worst, -1);
     throw new HttpError(429, USED_UP_MINE, ALLOWANCE_CODE);
   }
 
@@ -157,14 +138,14 @@ export async function onRequestPost(context) {
       // An answer that doesn't say what it used counts as its whole reservation, so the count never runs low.
       const neurons = Number(answer?.usage?.neurons) || (tokensIn || tokensOut ? (tokensIn * model.input + tokensOut * model.output) / TOKENS_PER_MILLION : worst);
       // The reservation becomes what the request really cost.
-      await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, neurons - worst, 0), env.DB.prepare(ADJUST).bind(day, user.id, neurons - worst, 0)]);
+      await adjust(env, day, [EVERYONE, user.id], neurons - worst);
       return answer;
     } catch (error) {
       // A fast failure did no work and gives everything back; a slow one keeps the input's share.
       const fast = Date.now() - started < FAST_FAILURE_MS;
       const back = fast ? worst : (MAX_ANSWER_TOKENS * model.output) / TOKENS_PER_MILLION;
       const requests = fast ? -1 : 0;
-      await env.DB.batch([env.DB.prepare(ADJUST).bind(day, EVERYONE, -back, requests), env.DB.prepare(ADJUST).bind(day, user.id, -back, requests)]);
+      await adjust(env, day, [EVERYONE, user.id], -back, requests);
       throw error;
     }
   })();
@@ -172,7 +153,7 @@ export async function onRequestPost(context) {
   const answer = await settled;
   const content = answer?.choices?.[0]?.message?.content ?? answer?.response ?? '';
   if (Math.random() < CLEANUP_CHANCE) {
-    const oldest = new Date(Date.now() - KEEP_DAYS * DAY_MS).toISOString().slice(0, ISO_DATE_LENGTH);
+    const oldest = dayOf(Date.now() - KEEP_DAYS * DAY_MS);
     await env.DB.prepare('DELETE FROM scribe_usage WHERE day < ?').bind(oldest).run();
   }
   if (typeof content !== 'string' || !content) throw new HttpError(502, 'The model sent no answer; your words are kept for the next try');
