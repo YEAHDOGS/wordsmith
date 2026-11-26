@@ -5,7 +5,9 @@
   "start": "Start listening",
   "stop": "Stop listening",
   "listening": "Listening",
-  "thinking": "Writing tickets",
+  "thinking": "Looking for tickets",
+  "skipped": "Not sent: that didn't sound like work, so it stayed on this device.",
+  "sendSkipped": "Send anyway",
   "idle": "Press the mic and start talking",
   "idleNoMic": "No speech recognition here. Type below instead, download a speech model in Settings (desktop app), or open wordsmith in Chrome, Edge or Safari.",
   "typePlaceholder": "Or type a thought and press Enter",
@@ -57,7 +59,7 @@
   "cloudUnavailable": "wordsmith cloud is not set up on this server.",
   "key": "API key",
   "keyPlaceholder": "Only if the server needs one",
-  "privacyCloud": "Your browser turns speech into text (Chrome, Edge and Safari use their maker's speech service for that). With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "privacyCloud": "Your browser turns speech into text (Chrome, Edge and Safari use their maker's speech service for that). With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else (speech that doesn't sound like work stays here); tickets sync to wordsmith like anything you type.",
   "help": {
     "title": "Can't connect to a model on this computer?",
     "intro": "Your browser only lets a website talk to a model server on your computer if that server allows the site. Ollama allows only the sites listed in its OLLAMA_ORIGINS setting, so add this one and restart Ollama.",
@@ -77,8 +79,36 @@
     "copied": "Copied"
   },
   "made": "{count} tickets written this session",
-  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else; tickets sync to wordsmith like anything you type.",
+  "privacyCloudLocal": "Speech is turned into text on this device by the model you downloaded; no audio leaves it. With wordsmith cloud the text then goes to Cloudflare Workers AI through wordsmith, and nowhere else (speech that doesn't sound like work stays here); tickets sync to wordsmith like anything you type.",
   "cloudOffline": "Could not reach wordsmith cloud to check your allowance.",
+  "sides": "Scribe or Tapes",
+  "recorder": {
+    "modeLabel": "What the mic does",
+    "modes": {
+      "tickets": "Write tickets",
+      "record": "Just record"
+    },
+    "locked": "Stop the mic to switch",
+    "start": "Start recording",
+    "stop": "Stop recording",
+    "idle": "Just press to record",
+    "recording": "Recording {time}",
+    "recordingShort": "Recording",
+    "back": "Recording. Open Scribe",
+    "hint": "Saved to Tapes when you stop, about 11 MB an hour.",
+    "saving": "Saving to Tapes…",
+    "uploading": "Uploading to Tapes, {percent}%",
+    "saved": "Saved to Tapes",
+    "failed": "Not uploaded yet, kept on this device: {error}",
+    "transcriptEmpty": "Just recording: no transcript, no tickets.",
+    "pill": "Recording to Tapes. Open Scribe",
+    "problems": {
+      "mic-denied": "The microphone is blocked. Allow it for wordsmith (in your browser, or in your system's privacy settings for the app), then press record again.",
+      "mic": "The microphone couldn't start ({detail}). Press record to try again.",
+      "save": "The recording couldn't be saved ({detail}).",
+      "keep": "This recording couldn't be saved on the device ({detail}), so keep this tab open until it uploads."
+    }
+  },
   "mini": "Mini Scribe",
   "miniOpen": "Shrink to a mini Scribe that stays on top of your other apps",
   "miniClose": "Back to the full window",

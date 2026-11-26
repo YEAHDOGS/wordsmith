@@ -28,7 +28,8 @@
   import { RAIL_BORDER, STATE_STYLE } from '../lib/colors.js';
   import { reveal } from '../lib/reveal.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNotes, respace } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, followCreated, placeNotes, respace } from '../lib/reorder.svelte.js';
+  import { compareLevel, orderKey } from '../lib/order.js';
 
   /** @type {{ notes: any[], showProject?: boolean, empty?: string, projectId?: string | null }} */
   let { notes, showProject = true, empty = 'Nothing here yet.', projectId = null } = $props();
@@ -57,16 +58,17 @@
   const ORDER_HINTS = {
     updated: 'Newest updated first',
     created: 'Newest created first',
-    priority: 'Highest priority first, then your order',
-    difficulty: 'Hardest first, then your order',
+    priority: 'New on top, then highest priority, then your order',
+    difficulty: 'New on top, then hardest, then your order',
     manual: 'Your order: hold a note and slide it, or Alt+Arrow keys',
   };
   /** @type {Record<string, (a: any, b: any) => number>} */
   const COMPARE = {
     updated: (a, b) => b.updated_at - a.updated_at,
     created: (a, b) => b.created_at - a.created_at,
-    priority: (a, b) => b.priority_level - a.priority_level || orderKey(a) - orderKey(b),
-    difficulty: (a, b) => (b.difficulty ?? 0) - (a.difficulty ?? 0) || orderKey(a) - orderKey(b),
+    // Queue order (src/lib/order.js): new tickets on top, then the level. Manual order has them on top by position alone.
+    priority: (a, b) => compareLevel(a, b, 'priority_level'),
+    difficulty: (a, b) => compareLevel(a, b, 'difficulty'),
     manual: (a, b) => orderKey(a) - orderKey(b),
   };
   const GROUP_LABELS = { all: 'All', project: 'Projects', season: 'Seasons' };
@@ -338,7 +340,7 @@
 
 </script>
 
-<div bind:clientWidth={width} bind:this={root} class="px-2 sm:px-0">
+<div bind:clientWidth={width} bind:this={root} use:followCreated class="px-2 sm:px-0">
   {#if notes.length}
     <!-- Phones: Select all as an icon, then the toggles split the rest of the row evenly. From sm up: label, toggles on the right.
          With every shown note picked it becomes Deselect all; both icons and labels share one cell, so it never resizes. -->

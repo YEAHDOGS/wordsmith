@@ -24,19 +24,23 @@
   import Attention from './Attention.svelte';
   import LazyPage from './LazyPage.svelte';
   import DESIGN_TEXT from './design.json';
-  import Scribe from './Scribe.svelte';
-  import MiniScribe from './MiniScribe.svelte';
+  import ScribeTapes from './ScribeTapes.svelte';
   import SCRIBE_TEXT from './scribe.json';
   import TAPES_TEXT from './tapes.json';
+  import CALENDAR_TEXT from './calendar.json';
+  import PROJECTS_TEXT from './projects-board.json';
   import { scribe } from '../lib/scribe.svelte.js';
   import { mini } from '../lib/mini-scribe.svelte.js';
+  import { recorder } from '../lib/recorder.svelte.js';
+  import { tapeImport } from '../lib/tapes.svelte.js';
+  import { tour } from '../lib/tour.svelte.js';
+  import { clock } from '../lib/time.js';
   import { auth } from '../lib/auth.svelte.js';
   import ATTENTION_TEXT from './attention.json';
   import TRASH_TEXT from './trash.json';
   import { store } from '../lib/store.svelte.js';
   import { router } from '../lib/router.svelte.js';
   import { ui } from '../lib/ui.svelte.js';
-  import { topPosition } from '../lib/reorder.svelte.js';
   import { FEATURES_SCOPE, TRASH_DAYS } from '../lib/models.js';
   import { pageChange, pageIn, pageOut } from './page-carousel.js';
 
@@ -44,29 +48,46 @@
   const SEARCH_FIELDS = ['title', 'body', 'status', 'assignee'];
   // Switching project tabs: the new content fades in where the old was (no out transition, so nothing stacks).
   const loadDesign = () => import('./Design.svelte');
-  // Tapes (player, importer, encoders) load on first visit too.
-  const loadTapes = () => import('./Tapes.svelte');
+  // So does the ticket calendar, and the guided tour.
+  const loadCalendar = () => import('./Calendar.svelte');
+  const loadTour = () => import('./Tour.svelte');
+  // And the desktop apps' mini Scribe strip.
+  const loadMini = () => import('./MiniScribe.svelte');
+  const loadProjects = () => import('./ProjectsBoard.svelte');
   const TAB_IN = { duration: 160 };
   const DRAWER_IN = { x: -300, duration: 260, opacity: 1, easing: quintOut };
   const DRAWER_OUT = { x: -300, duration: 180, opacity: 1, easing: cubicIn };
   const PILL = { start: 0.6, duration: 200, easing: backOut };
+  const MS_PER_SECOND = 1_000;
+  // Scribe and Tapes are one page with a switch (ScribeTapes.svelte): flipping it keeps the page instead of replacing it.
+  const ONE_PAGE = { tapes: 'scribe' };
 
   // Signing out unmounts the shell: the microphone goes off with it.
   // The Scribe session and all it heard belong to one account. They go when the Shell does (sign-out, session ended),
   // and also when the account changes under a Shell that stays (another tab signed in as someone else).
+  // The tape queue follows the account too: another account's uploads go, and this one's unsent recordings come back.
   $effect.pre(() => {
     const userId = auth.user?.id;
-    untrack(() => scribe.claim(userId));
+    untrack(() => {
+      scribe.claim(userId);
+      tapeImport.claim(userId);
+      // The first time an account uses the app on this device, the guided tour opens.
+      tour.offer(userId);
+    });
   });
-  // The mini strip unfolds too: the next screen (sign-in) needs the whole window.
+  // A recording in progress is stopped and kept on the device for its account (it uploads when they sign back in),
+  // rather than left with the microphone on; the queue lets go of the account that left.
   onDestroy(() => {
     scribe.reset();
-    mini.exit();
+    recorder.stop();
+    tapeImport.claim('');
   });
+  // The mini strip unfolds too: the next screen (sign-in) needs the whole window.
+  onDestroy(() => mini.exit());
 
   let projectTab = $state('board');
   const route = $derived(router.route);
-  const pageKey = $derived(route.id ? `${route.view}/${route.id}` : route.view);
+  const pageKey = $derived(route.id ? `${route.view}/${route.id}` : ONE_PAGE[/** @type {keyof typeof ONE_PAGE} */ (route.view)] ?? route.view);
   const live = $derived(store.notes.filter((note) => !note.deleted_at));
   const project = $derived(route.view === 'project' || route.view === 'project-settings' ? store.find('projects', route.id) : null);
   const label = $derived(route.view === 'label' ? store.find('labels', route.id) : null);
@@ -93,6 +114,11 @@
       case 'label': return { title: label?.name || 'Label', subtitle: 'Label', notes: active.filter((note) => note.label_ids.includes(route.id)) };
       case 'archive': return { title: 'Archive', subtitle: 'Archived notes and shipped work', notes: matches.filter((note) => note.archived) };
       case 'attention': return { title: ATTENTION_TEXT.title, subtitle: ATTENTION_TEXT.subtitle };
+      case 'calendar': return { title: CALENDAR_TEXT.title, subtitle: CALENDAR_TEXT.subtitle };
+      case 'projects': {
+        const count = store.projects.filter((entry) => !entry.deleted_at).length;
+        return { title: PROJECTS_TEXT.title, subtitle: count === 1 ? PROJECTS_TEXT.subtitleOne : PROJECTS_TEXT.subtitle.replace('{count}', String(count)) };
+      }
       case 'design': return { title: DESIGN_TEXT.title, subtitle: DESIGN_TEXT.subtitle };
       case 'scribe': return { title: SCRIBE_TEXT.title, subtitle: SCRIBE_TEXT.subtitle };
       case 'tapes': return { title: TAPES_TEXT.title, subtitle: TAPES_TEXT.subtitle.replace('{count}', String(store.tapes.filter((tape) => !tape.deleted_at).length)) };
@@ -140,7 +166,6 @@
     const note = store.create('notes', {
       project_id: route.view === 'project' ? route.id : null,
       label_ids: route.view === 'label' ? [route.id] : [],
-      position: topPosition(),
     });
     router.openNote(note.id);
   }
@@ -191,13 +216,17 @@
             <Trash />
           {:else if route.view === 'attention'}
             <Attention />
+          {:else if route.view === 'calendar'}
+            <!-- Every live ticket, archived ones too, filtered by the search like every other page -->
+            <LazyPage load={loadCalendar} notes={matches} />
           {:else if route.view === 'design'}
             <!-- The canvas editor loads on first visit, keeping it out of the start-up bundle -->
             <LazyPage load={loadDesign} id={route.id} />
-          {:else if route.view === 'scribe'}
-            <Scribe />
-          {:else if route.view === 'tapes'}
-            <LazyPage load={loadTapes} />
+          {:else if route.view === 'projects'}
+            <!-- Every project as a thumbnail card; the search box filters them -->
+            <LazyPage load={loadProjects} />
+          {:else if route.view === 'scribe' || route.view === 'tapes'}
+            <ScribeTapes mode={route.view} />
           {:else if route.view === 'features-settings'}
             <BoardSettings />
           {:else if route.view === 'project-settings'}
@@ -275,12 +304,24 @@
     </button>
   {/if}
 
+  <!-- The recorder keeps going too: same corner, leading back to Scribe -->
+  {#if recorder.recording && route.view !== 'scribe' && route.view !== 'tapes'}
+    <button class="spring press fixed top-14 right-2 z-30 flex items-center gap-2 border border-accent bg-accent-soft px-2.5 py-1.5 text-xs text-ink sm:top-16 sm:right-4 tv:top-24 tv:text-lg"
+      aria-label={SCRIBE_TEXT.recorder.pill} title={SCRIBE_TEXT.recorder.pill} onclick={() => router.go('scribe')} transition:scale={PILL}>
+      <span class="live-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true"></span>
+      <span>{SCRIBE_TEXT.recorder.recordingShort}</span>
+      <span class="font-mono tabular-nums">{clock(recorder.elapsed / MS_PER_SECOND)}</span>
+    </button>
+  {/if}
+
   {#if route.note}
     {#key route.note}<NoteEditor id={route.note} />{/key}
   {/if}
+
+  {#if tour.open}<LazyPage load={loadTour} />{/if}
 
   {#if store.demo}<DemoGuard />{/if}
 </div>
 
 <!-- Desktop apps: the window folded into the always-on-top Scribe strip covers everything else -->
-{#if mini.on}<MiniScribe />{/if}
+{#if mini.on}<LazyPage load={loadMini} />{/if}

@@ -1,6 +1,6 @@
 <script>
   // Feature requests as board columns. The columns come from the page's board (src/lib/board.js): by default
-  // Requested (in the order agents will claim them), In progress and Complete, but any number of renamed columns, each
+  // Requested (in queue order, the order agents will claim them), In progress and Complete, but any number of renamed columns, each
   // playing one of those three roles. Desktop and tablet: side by side. Phones: swipe sideways or tap the tabs.
   // Hold and slide a card (or drag it with a mouse) to move it: within a Requested-role column it sets the claim order,
   // taking the priority of where it lands; into another column it moves there (and changes state if the role differs).
@@ -23,7 +23,8 @@
   import { columnOf } from '../lib/models.js';
   import { columnsFor } from '../lib/board.js';
   import { measure, play } from '../lib/flip.js';
-  import { drag, dropzone, orderKey, placeNotes } from '../lib/reorder.svelte.js';
+  import { drag, dropzone, followCreated, placeNotes } from '../lib/reorder.svelte.js';
+  import { compareQueue } from '../lib/order.js';
 
   /** @type {{ features: any[], scope: string, showProject?: boolean }} */
   let { features, scope, showProject = true } = $props();
@@ -36,10 +37,10 @@
   const FOLD_MS = 200;
   // Drop zone key of a note group inside a column: column id, this, group id.
   const GROUP_KEY = '|group:';
-  // Requested runs in claim order: priority first, then manual order (oldest first until moved), the same order the
-  // agent API uses for /features/next. The other two roles follow what agents did, newest first.
+  // Requested runs in queue order (src/lib/order.js): new tickets on top, then priority, then manual order, the same
+  // order the agent API uses for /features/next. The other two roles follow what agents did, newest first.
   const SORTS = {
-    requested: (/** @type {any} */ a, /** @type {any} */ b) => b.priority_level - a.priority_level || orderKey(a) - orderKey(b),
+    requested: compareQueue,
     in_progress: (/** @type {any} */ a, /** @type {any} */ b) => (b.started_at || 0) - (a.started_at || 0),
     complete: (/** @type {any} */ a, /** @type {any} */ b) => (b.completed_at || 0) - (a.completed_at || 0),
   };
@@ -185,7 +186,7 @@
 {/snippet}
 
 <!-- --lanes: how many columns this board has, read by the grid templates below -->
-<div class="flex h-full min-h-0 flex-col" bind:this={root} style:--lanes={columns.length}>
+<div class="flex h-full min-h-0 flex-col" bind:this={root} use:followCreated style:--lanes={columns.length}>
   <!-- Phone lane tabs -->
   <div class="grid grid-cols-[repeat(var(--lanes),minmax(0,1fr))] border-b border-line md:hidden" role="tablist" aria-label="Board columns">
     {#each columns as column (column.id)}

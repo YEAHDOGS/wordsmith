@@ -15,7 +15,7 @@ const OPUS_RATE = 48_000;
 // What the browser decodes to before encoding: Opus keeps speech and a beat at 24 kHz, and it halves the memory.
 const WEB_RATE = 24_000;
 const WEB_FRAME_US = 20_000;
-// Encode in 0.2 s pieces, and let at most this many wait in the encoder at once.
+// Encode imports in 0.2 s pieces, and let at most this many wait in the encoder at once.
 const WEB_CHUNK_FRAMES = 4_800;
 const MAX_QUEUED = 8;
 const US_PER_SECOND = 1_000_000;
@@ -72,7 +72,7 @@ export async function encodeTape(source, bytes) {
 /** @typedef {{ packets: import('./ogg-opus.js').OpusPacket[], preSkip: number, samples: number, inputRate: number }} Packets */
 
 /** Packets → the Ogg file to upload, checked against the size cap. @param {Packets} audio @param {string} name */
-function packed(audio, name) {
+export function packed(audio, name) {
   const blob = oggOpus(audio);
   if (blob.size > MAX_TAPE_BYTES) throw new Error(`${name} is still ${megabytes(blob.size)} after shrinking; tapes can be at most ${megabytes(MAX_TAPE_BYTES)} (about two hours).`);
   return { file: new File([blob], name, { type: TAPE_TYPE }), durationMs: Math.round((audio.samples / OPUS_RATE) * MS_PER_SECOND), encoded: true };
@@ -97,26 +97,23 @@ async function nativePackets(source, bytes) {
 let webSupport = null;
 
 /** Whether this browser can encode Opus (WebCodecs), asked once. */
-function webEncoderReady() {
+export function webEncoderReady() {
   webSupport ??= typeof AudioEncoder === 'undefined'
     ? Promise.resolve(false)
     : AudioEncoder.isConfigSupported(WEB_CONFIG).then((answer) => Boolean(answer.supported)).catch(() => false);
   return webSupport;
 }
 
-/** The browser's encoder. @param {ArrayBuffer} bytes @returns {Promise<Packets>} */
-async function webPackets(bytes) {
-  // decodeAudioData reads every format the browser plays and converts it to WEB_RATE on the way.
-  const decoded = await new OfflineAudioContext(1, 1, WEB_RATE).decodeAudioData(bytes.slice(0));
-  const mono = new Float32Array(decoded.length);
-  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
-    const data = decoded.getChannelData(channel);
-    for (let index = 0; index < data.length; index++) mono[index] += data[index] / decoded.numberOfChannels;
-  }
-
+/**
+ * A streaming Opus encoder for live audio at WEB_RATE (the tape recorder): feed it samples as they come, then finish
+ * for the packets. Same settings as an import, so a recorded tape matches an imported one.
+ * @returns {{ rate: number, feed: (samples: Float32Array) => void, drained: () => Promise<void>, samples: () => number, finish: () => Promise<Packets> }}
+ */
+export function liveEncoder() {
   /** @type {import('./ogg-opus.js').OpusPacket[]} */
   const packets = [];
   let preSkip = DEFAULT_PRE_SKIP;
+  let fed = 0;
   /** @type {Error | null} */
   let failure = null;
   const encoder = new AudioEncoder({
@@ -130,18 +127,45 @@ async function webPackets(bytes) {
     error: (error) => (failure = error),
   });
   encoder.configure(WEB_CONFIG);
-  for (let start = 0; start < mono.length && !failure; start += WEB_CHUNK_FRAMES) {
-    const frames = mono.subarray(start, start + WEB_CHUNK_FRAMES);
-    const audio = new AudioData({ format: 'f32', sampleRate: WEB_RATE, numberOfChannels: 1, numberOfFrames: frames.length, timestamp: Math.round((start * US_PER_SECOND) / WEB_RATE), data: frames });
-    encoder.encode(audio);
-    audio.close();
-    // Keep the encoder fed without queueing the whole recording at once.
-    while (encoder.encodeQueueSize > MAX_QUEUED) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+  return {
+    rate: WEB_RATE,
+    feed(samples) {
+      if (failure || !samples.length) return;
+      const audio = new AudioData({ format: 'f32', sampleRate: WEB_RATE, numberOfChannels: 1, numberOfFrames: samples.length, timestamp: Math.round((fed * US_PER_SECOND) / WEB_RATE), data: samples });
+      encoder.encode(audio);
+      audio.close();
+      fed += samples.length;
+    },
+    /** Resolves once at most MAX_QUEUED pieces wait in the encoder. */
+    async drained() {
+      while (encoder.encodeQueueSize > MAX_QUEUED) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+    },
+    samples: () => fed,
+    async finish() {
+      await encoder.flush();
+      encoder.close();
+      if (failure) throw failure;
+      return { packets, preSkip, samples: Math.round((fed * OPUS_RATE) / WEB_RATE), inputRate: WEB_RATE };
+    },
+  };
+}
+
+/** The browser's encoder. @param {ArrayBuffer} bytes @returns {Promise<Packets>} */
+async function webPackets(bytes) {
+  // decodeAudioData reads every format the browser plays and converts it to WEB_RATE on the way.
+  const decoded = await new OfflineAudioContext(1, 1, WEB_RATE).decodeAudioData(bytes.slice(0));
+  const mono = new Float32Array(decoded.length);
+  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+    const data = decoded.getChannelData(channel);
+    for (let index = 0; index < data.length; index++) mono[index] += data[index] / decoded.numberOfChannels;
   }
-  await encoder.flush();
-  encoder.close();
-  if (failure) throw failure;
-  return { packets, preSkip, samples: Math.round((mono.length * OPUS_RATE) / WEB_RATE), inputRate: decoded.sampleRate };
+  const encoder = liveEncoder();
+  for (let start = 0; start < mono.length; start += WEB_CHUNK_FRAMES) {
+    encoder.feed(mono.subarray(start, start + WEB_CHUNK_FRAMES));
+    // Keep the encoder fed without queueing the whole recording at once.
+    await encoder.drained();
+  }
+  return { ...(await encoder.finish()), inputRate: decoded.sampleRate };
 }
 
 /** How long a file plays, from the browser's own player (no decoding). 0 when it can't tell. @param {File} file */

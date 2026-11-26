@@ -47,12 +47,14 @@
   // Worker Previews: every pull request branch gets its own Preview (`npx wrangler preview`, run by Workers Builds and
   // scripts/preview.js) at <branch>-wordsmith.<subdomain>.workers.dev. Previews never inherit the production bindings
   // above, so they are pointed at the staging D1 database and R2 bucket here: PR code never touches production data.
+  // PAYWALL "optional": nobody is locked out on Previews or staging (api/lib/auth.js paywallOptional); Settings there
+  // has a switch to look at the paywall. Never set it at the top level.
   "previews": {
     "d1_databases": [
       { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations" }
     ],
     "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging" }],
-    "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000" },
+    "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000", "PAYWALL": "optional" },
     "ai": { "binding": "AI" }
   },
   "env": {
@@ -74,7 +76,7 @@
         { "binding": "DB", "database_name": "wordsmith-staging", "database_id": "9860bace-62c5-451c-94cf-4bc0ed882e6b", "migrations_dir": "api/migrations", "remote": true }
       ],
       "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "wordsmith-attachments-staging", "remote": true }],
-      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000" },
+      "vars": { "R2_MAX_GB": "0.5", "R2_MAX_MONTHLY_WRITES": "50000", "R2_MAX_MONTHLY_READS": "500000", "SCRIBE_DAILY_NEURONS": "2000", "PAYWALL": "optional" },
       "ai": { "binding": "AI" }
     }
   }

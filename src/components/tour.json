@@ -1,0 +1,122 @@
+{
+  "label": "wordsmith tour",
+  "progress": "{n} of {total}",
+  "back": "Back",
+  "next": "Next",
+  "finish": "Start writing",
+  "close": "Close the tour",
+  "copy": "Copy",
+  "copied": "Copied",
+  "steps": [
+    {
+      "view": "notes",
+      "title": "Welcome to wordsmith",
+      "body": "A notes app built around AI agents and tickets. Write down what you want built, your agents pick it up and open pull requests, and you review one a day.",
+      "points": [
+        "wordsmith is free for 5 days. After that it needs a DOGS membership: $1 a month or $5 a year. Settings shows how much of the trial is left.",
+        "Works on the web, Windows, macOS, Linux, Android and iOS, and offline: notes live on your device and sync when you're back.",
+        "This tour moves the app behind it to each part it explains. Use the arrow keys or the buttons below."
+      ]
+    },
+    {
+      "view": "notes",
+      "title": "Notes",
+      "body": "Capture anything in the box at the top: a title, Markdown, a checklist, or images, video, audio and documents dropped or pasted in.",
+      "points": [
+        "Pin, color and label notes; labels sit in the sidebar.",
+        "The search at the top finds text, statuses, pull requests and labels.",
+        "Archive keeps finished work. Trash keeps deletions for 30 days, then they're gone for good.",
+        "Open a note to edit it, share it publicly, or see its timeline: who did what, and when."
+      ]
+    },
+    {
+      "view": "features",
+      "title": "Every note is a ticket",
+      "body": "Features shows every ticket on one board: Requested, In progress, Complete. A new ticket always lands on top. Drag cards between columns, or up and down to set the order agents take them in.",
+      "points": [
+        "Give a ticket a priority and a difficulty, and a status line agents keep up to date.",
+        "Paste a pull request link and the ticket follows it: when the PR merges, the ticket completes itself.",
+        "The gear opens the board's settings: rename, add or reorder columns."
+      ]
+    },
+    {
+      "view": "project",
+      "title": "Projects",
+      "body": "Group tickets by project in the sidebar. Each project has tabs: Board, Notes, PRs, Media and Designs.",
+      "points": [
+        "Link a GitHub repo and the PRs tab lists its pull requests, ready to link to tickets.",
+        "Media gathers every image, video and file from the project's tickets.",
+        "Project settings hold a mission statement: what it is, why, and how to build it. Agents read it before they start."
+      ]
+    },
+    {
+      "view": "calendar",
+      "title": "Calendar",
+      "body": "Every ticket on the days it moved: created, started, completed, and each pull request merged.",
+      "points": [
+        "Pick a day to see what happened; pick a moment to open its ticket.",
+        "Switch kinds of moments on and off, and change months with the arrows, a swipe or the scroll wheel."
+      ]
+    },
+    {
+      "view": "design",
+      "title": "Design",
+      "body": "Draw how a system fits together: clients, services, databases, queues and the clouds they run in, joined by arrows.",
+      "points": [
+        "Or ask an agent: Claude, Codex and Muse can create and update designs over MCP.",
+        "Link a design to a project and it shows in that project's Designs tab too."
+      ]
+    },
+    {
+      "view": "scribe",
+      "title": "Scribe (beta)",
+      "body": "Talk, and tickets write themselves. Press the mic and speak: each finished thought goes to a language model, which creates or updates tickets while you keep talking.",
+      "points": [
+        "Undo anything Scribe did, right in the list beside your words.",
+        "The model runs on wordsmith cloud with no setup, or on your own computer with Ollama, LM Studio or llama.cpp.",
+        "Switch to Just record and the mic records straight to Tapes instead, with no tickets written.",
+        "Scribe is in beta: expect rough edges, and tell DOGS what breaks."
+      ]
+    },
+    {
+      "view": "tapes",
+      "title": "Tapes",
+      "body": "Your recordings, one switch away from Scribe in the top-left corner. Import a recorder's whole folder at once; importing it again only adds what's new.",
+      "points": [
+        "Every tape is shrunk to Opus, about 11 MB an hour, and kept in the cloud.",
+        "Rate tapes Gold, Maybe or Trash, add notes and lyrics, and search them all.",
+        "The desktop apps transcribe tapes on your own computer."
+      ]
+    },
+    {
+      "view": "attention",
+      "title": "Needs you",
+      "body": "Only what an agent is waiting on you for: questions it asked and pull requests ready to review.",
+      "points": [
+        "Reply right there; the agent reads your answer on the ticket.",
+        "Snooze what can wait, and undo with Z."
+      ]
+    },
+    {
+      "view": "settings",
+      "title": "Connect your agents over MCP",
+      "body": "wordsmith works with Claude Code, Codex, T3 Code and any MCP client. Set it up once, then your agents read your tickets, claim them, open pull requests and report back.",
+      "points": [
+        "Create an API token for each agent under Agent API tokens, and save it as WORDSMITH_TOKEN where the agent runs.",
+        "Add wordsmith as an MCP server. For Claude Code that's the command below; Settings has the block for Codex and any other client.",
+        "Ask the agent to call get_context to check. No MCP? Paste Agent setup into AGENTS.md or CLAUDE.md instead.",
+        "Schedule the triage prompt, and review one pull request a day. Standing context holds preferences every agent reads."
+      ],
+      "code": "claude mcp add --transport http wordsmith {endpoint} --header \"Authorization: Bearer $WORDSMITH_TOKEN\""
+    },
+    {
+      "view": "settings",
+      "title": "That's wordsmith",
+      "body": "Settings also has themes, colors and corner styles, the desktop and phone apps, and on-device speech models.",
+      "points": [
+        "Free for 5 days, then $1 a month or $5 a year with a DOGS membership. The meter under Account counts the trial down.",
+        "Open this tour again any time from Settings, under Account."
+      ]
+    }
+  ]
+}

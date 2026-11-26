@@ -6,11 +6,14 @@
   // "check again", asks the server whether that has happened. The plans (PLANS) are listed with what each unlocks.
   // The X in the corner doesn't let anyone in: one press gets an honest reply instead, and then the X is gone. The card
   // shakes and its words slide across; its height holds, so nothing jumps.
+  // On Worker Previews and staging nobody is locked out; Settings there can show this screen anyway (auth.showPaywall),
+  // and then a bar on top leads back to the app.
   // Layout: one centered card on the spine at every size; bigger type and spacing on TVs; compact on short screens.
   import { onMount, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import X from '@lucide/svelte/icons/x';
+  import Undo2 from '@lucide/svelte/icons/undo-2';
   import Coffee from '@lucide/svelte/icons/coffee';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import { auth, openExternal } from '../lib/auth.svelte.js';
@@ -18,6 +21,8 @@
   import { PLANS, SUBSCRIBE_URL } from '../lib/models.js';
   import { store } from '../lib/store.svelte.js';
   import { deleteLocalDb } from '../lib/idb.js';
+  import CoffeeButton from './CoffeeButton.svelte';
+  import ExportButton from './ExportButton.svelte';
   import TEXT from './paywall.json';
 
   const STAGES = TEXT.stages;
@@ -95,7 +100,18 @@
   }
 </script>
 
-<div class="relative flex h-dvh w-full justify-center overflow-y-auto bg-app px-3 py-6 short:py-2" role="dialog" aria-modal="true" aria-label={TEXT.label}>
+<!-- Two rows: the Previews bar (when on), then the page, which scrolls by itself, so the bar never covers the card -->
+<div class="flex h-dvh w-full flex-col bg-app" role="dialog" aria-modal="true" aria-label={TEXT.label}>
+  {#if auth.showPaywall}
+    <!-- Previews only: the way back, always in view -->
+    <div class="flex shrink-0 items-center justify-center gap-3 border-b border-accent bg-accent-soft px-3 py-1.5 text-xs text-ink tv:py-4 tv:text-xl">
+      <span class="min-w-0 truncate max-sm:hidden">{TEXT.previewNote}</span>
+      <button class="spring press flex shrink-0 items-center gap-1.5 border border-accent px-2.5 py-1 font-bold hover:bg-accent hover:text-accent-ink tv:px-5 tv:py-2" onclick={() => auth.setShowPaywall(false)}>
+        <Undo2 class="size-3.5 tv:size-6" />{TEXT.previewOff}
+      </button>
+    </div>
+  {/if}
+  <div class="relative flex min-h-0 w-full flex-1 justify-center overflow-y-auto px-3 py-6 short:py-2">
   <div class="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true"></div>
 
   <section bind:this={card} tabindex="-1" class="relative my-auto focus:outline-none flex h-fit w-full max-w-md flex-col gap-5 border border-line-strong bg-surface p-6 shadow-2xl short:gap-3 short:p-4 short:sm:max-w-3xl short:sm:flex-row short:sm:items-center short:sm:gap-4 short:sm:pr-12 tv:max-w-3xl tv:gap-10 tv:p-14 {shaking ? 'paywall-shake' : ''}" in:fly={CARD_IN}>
@@ -139,9 +155,10 @@
             <a class="spring flex h-full flex-col gap-0.5 p-2 text-[0.6875rem] leading-snug text-ink-faint hover:bg-surface-raised hover:text-ink-muted short:p-1.5 tv:gap-1 tv:p-4 tv:text-lg" href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" onclick={subscribe}>
               <span class="truncate text-xs font-bold text-ink tv:text-xl">{plan.name}</span>
               <span class="font-mono text-accent">{TEXT.price.replace('{price}', String(plan.monthly))}</span>
-              {#if plan.forLife}<span class="font-mono text-accent">{TEXT.priceYear.replace('{price}', String(plan.yearly))}</span>{/if}
+              <span class="font-mono text-accent">{TEXT.priceYear.replace('{price}', String(plan.yearly))}</span>
               <span class="short:hidden">{TEXT.scribe.replace('{neurons}', plan.scribeNeurons.toLocaleString())}</span>
               <span class="short:hidden">{TEXT.tapes.replace('{size}', size(plan.tapeBytes))}</span>
+              <span class="short:hidden">{TEXT.uploads.replace('{size}', size(plan.uploads.video))}</span>
             </a>
           </li>
         {/each}
@@ -149,6 +166,10 @@
       <button class="{BUTTON} border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60" disabled={checking} onclick={check}>
         <RefreshCw class="size-4 tv:size-7 {checking ? 'animate-spin' : ''}" />{checking ? TEXT.checking : TEXT.check}
       </button>
+      <!-- A one-time coffee, beside the plans: a thank you that unlocks nothing -->
+      <CoffeeButton class="{BUTTON} border border-line text-ink-muted hover:border-accent hover:text-ink" iconClass="size-4 tv:size-7" />
+      <!-- Or leave with everything: the one thing a locked account can still fetch -->
+      <ExportButton class="{BUTTON} border border-line text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-60" iconClass="size-4 tv:size-7" noteClass="text-xs short:text-[0.6875rem] tv:text-lg" />
     </div>
 
     <p class="min-h-[2.5em] text-xs leading-relaxed short:min-h-0 short:text-[0.6875rem] tv:text-lg {stillLocked || unreachable ? 'text-accent' : 'text-ink-faint'}" role="status">
@@ -157,4 +178,5 @@
     <button class="spring press -mt-2 self-center px-2 py-1 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline tv:text-lg" onclick={signOut}>{TEXT.signOut}</button>
     </div>
   </section>
+  </div>
 </div>
