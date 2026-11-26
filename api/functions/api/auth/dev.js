@@ -9,7 +9,8 @@ const DEV_USER = { id: 'local-dev-user', email: 'dev@localhost', name: 'Local de
 /** @param {{ request: Request, env: Record<string, any> }} context */
 export async function onRequestPost({ request, env }) {
   if (!devLoginEnabled(request, env)) throw new HttpError(404, 'Not found');
-  await env.DB.prepare('INSERT OR IGNORE INTO users (id, email, name, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)')
+  // A test account on local or staging data: never on the free trial (use scripts/access.js to try the lock).
+  await env.DB.prepare("INSERT OR IGNORE INTO users (id, email, name, avatar_url, created_at, access) VALUES (?, ?, ?, NULL, ?, 'member')")
     .bind(DEV_USER.id, DEV_USER.email, DEV_USER.name, Date.now()).run();
   const token = await createSession(env, DEV_USER.id, request);
   return json({ token }, 200, { 'Set-Cookie': cookie(request, SESSION_COOKIE, token, { maxAge: SESSION_MAX_AGE_SECONDS }) });

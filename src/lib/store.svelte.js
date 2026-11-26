@@ -10,6 +10,7 @@ import { LocalDb } from './idb.js';
 import { prepareForUpload } from './compress.js';
 import { diagramBase, mergeDiagram } from './diagram.js';
 import { LEGACY_PRIORITY, MAX_NAME, MAX_SYNC_BATCH, NAME_TAKEN, SYNCED_TABLES as SYNCED, newRow, projectKey } from './models.js';
+import { topPosition } from './order.js';
 
 const SYNC_DEBOUNCE_MS = 2_500;
 // Poll every minute while you're using the app, every five once you've been idle for five.
@@ -31,7 +32,7 @@ const FIRST_COPY = 2;
 const COPY_SUFFIX = / \(\d+\)$/;
 const BLOCKED_UPGRADE = 'Another wordsmith tab is open on an older version. Close or reload it to finish updating.';
 
-/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups' | 'diagrams'} Table */
+/** @typedef {'projects' | 'labels' | 'notes' | 'boards' | 'note_groups' | 'diagrams' | 'tapes'} Table */
 
 /** @param {any} value */
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -43,6 +44,7 @@ class Store {
   /** Custom feature boards, one per scope (models.js FEATURES_SCOPE or a project id). @type {any[]} */ boards = $state([]);
   /** Note groups in projects (src/lib/groups.js). @type {any[]} */ note_groups = $state([]);
   /** Design diagrams (src/lib/diagram.js). @type {any[]} */ diagrams = $state([]);
+  /** Voice recordings (src/lib/tapes.svelte.js), created by upload and edited through sync. @type {any[]} */ tapes = $state([]);
   /** @type {any[]} */ events = $state([]);
   /** @type {any[]} */ attachments = $state([]);
   /** Uploads in flight: { id, noteId, name, progress, error }. @type {any[]} */ uploads = $state([]);
@@ -51,6 +53,12 @@ class Store {
   lastSync = $state(0);
   pending = $state(0);
   error = $state('');
+  /** Demo mode: read-only sample rows in memory, with no local database, outbox or sync. Every write is refused. */
+  demo = $state(false);
+  /** When a write was last refused in demo mode; DemoGuard shows a notice for each. */
+  refusedAt = $state(0);
+  /** Id of the note last made on this device; the board and the notes list scroll it into view. */
+  createdNote = $state('');
   /** Called when the server says the session is gone. */
   onUnauthorized = () => {};
   /** Called when the server's signed-in user isn't the one this store opened for (start-up trusted a stale cache). */
@@ -88,20 +96,32 @@ class Store {
     if (this.online) this.sync();
   };
 
-  /** Loads the local copy for a user, then syncs. @param {string} userId */
-  async open(userId) {
+  /**
+   * Loads the local copy for a user, then syncs. With sample rows (demo mode) it shows those instead, read-only, and
+   * never touches IndexedDB or the network.
+   * @param {string} userId
+   * @param {Partial<Record<Table, any[]>>} [sample]
+   */
+  async open(userId, sample) {
     this.close();
     this.#userId = userId;
+    this.demo = Boolean(sample);
+    if (sample) {
+      this.#db = null;
+      Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, error: '' }, sample);
+      this.lastSync = Date.now();
+      return;
+    }
     this.#verified = false;
     // An older wordsmith tab holding the local database blocks its upgrade: say so instead of sitting empty.
     this.#db = new LocalDb(userId, () => (this.error = BLOCKED_UPGRADE));
-    const [projects, labels, notes, boards, note_groups, diagrams, events, attachments, cursor, outbox] = await Promise.all([
-      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('diagrams'), this.#db.all('events'), this.#db.all('attachments'),
+    const [projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments, cursor, outbox] = await Promise.all([
+      this.#db.all('projects'), this.#db.all('labels'), this.#db.all('notes'), this.#db.all('boards'), this.#db.all('note_groups'), this.#db.all('diagrams'), this.#db.all('tapes'), this.#db.all('events'), this.#db.all('attachments'),
       this.#db.getMeta('cursor'), this.#db.getMeta('outbox'),
     ]);
     // Notes cached before migration 20261027040000 only carry the old 0..3 priority; derive the 0..5 level.
     for (const note of notes) note.priority_level ??= Math.max(0, LEGACY_PRIORITY.indexOf(note.priority));
-    Object.assign(this, { projects, labels, notes, boards, note_groups, diagrams, events, attachments });
+    Object.assign(this, { projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments });
     this.#cursor = cursor || 0;
     this.#outbox = new Map((outbox || []).map((/** @type {string} */ key) => [key, 0]));
     this.pending = this.#outbox.size;
@@ -127,9 +147,16 @@ class Store {
     this.close();
     await this.#db?.destroy().catch(() => {});
     this.#db = null;
-    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
+    this.demo = false;
+    Object.assign(this, { projects: [], labels: [], notes: [], boards: [], note_groups: [], diagrams: [], tapes: [], events: [], attachments: [], uploads: [], pending: 0, lastSync: 0 });
     this.#outbox.clear();
     this.#cursor = 0;
+  }
+
+  /** True (and the read-only notice flashes) when demo mode refuses a write. */
+  blockedInDemo() {
+    if (this.demo) this.refusedAt = Date.now();
+    return this.demo;
   }
 
   /** @param {Table} table @param {string} id */
@@ -156,6 +183,8 @@ class Store {
    * @param {any} row
    */
   #save(table, row) {
+    // Demo mode is read-only: nothing changes, not even in memory. The row comes back unsaved so callers don't break.
+    if (this.blockedInDemo()) return this.find(table, row.id) ?? row;
     const next = { ...plain(row), updated_at: Date.now() };
     // A diagram's first edit since it synced notes what the server's copy looked like, and keeps that note until the
     // edit is saved: the server merges against it when an agent or another device changed the diagram meanwhile.
@@ -172,9 +201,27 @@ class Store {
     return next;
   }
 
-  /** @param {Table} table @param {Record<string, any>} [values] */
+  /**
+   * Takes in rows the server made outside sync (a tape created by its upload), unless a local edit is waiting.
+   * @param {Table} table @param {any[]} rows
+   */
+  adopt(table, rows) {
+    const fresh = rows.filter((row) => !this.#outbox.has(`${table}:${row.id}`));
+    for (const row of fresh) this.#upsertLocal(table, row);
+    this.#db?.put(table, fresh);
+  }
+
+  /**
+   * Makes a row. A new note goes on top of the queue (src/lib/order.js), wherever it is made: the composer, the "+"
+   * button, Scribe, a shared link. That is decided here, so no caller can forget it.
+   * @param {Table} table @param {Record<string, any>} [values]
+   */
   create(table, values = {}) {
-    return this.#save(table, newRow(table, values));
+    const row = newRow(table, values);
+    if (table === 'notes' && values.position === undefined) row.position = topPosition(this.notes.map((note) => (note.deleted_at ? null : note.position)));
+    const saved = this.#save(table, row);
+    if (table === 'notes') this.createdNote = saved.id;
+    return saved;
   }
 
   /** @param {Table} table @param {string} id @param {Record<string, any>} patch */
@@ -198,6 +245,7 @@ class Store {
    * @param {Partial<Record<Table, string[]>>} rows
    */
   async purge(rows) {
+    if (this.blockedInDemo()) return;
     const ids = Object.entries(rows).flatMap(([table, list]) => (list || []).map((id) => [table, id]));
     if (ids.some(([table, id]) => this.#outbox.has(`${table}:${id}`))) {
       const deadline = Date.now() + PURGE_SYNC_WAIT_MS;
@@ -330,6 +378,11 @@ class Store {
             this.#upsertLocal('diagrams', settled);
             await this.#db?.put('diagrams', [settled]);
             this.#refused = `A design change was not saved: ${error}`;
+          } else if (refusedTable === 'tapes') {
+            // Tapes only exist once uploaded, so a refused one is settled to the server's copy, or dropped.
+            this.#outbox.delete(key);
+            if (current) this.adopt('tapes', [current]);
+            else this.tapes = this.tapes.filter((tape) => tape.id !== id);
           } else {
             rejection = `A change was rejected: ${error}`;
           }
@@ -430,6 +483,7 @@ class Store {
    * @param {File[]} files
    */
   async upload(noteId, files) {
+    if (this.blockedInDemo()) return;
     if (this.#outbox.has(`notes:${noteId}`)) await this.sync();
     await Promise.all(files.map(async (file) => {
       const entry = { id: crypto.randomUUID(), noteId, name: file.name, progress: 0, error: '' };
@@ -457,6 +511,7 @@ class Store {
 
   /** Deletes an attachment everywhere (needs a connection). @param {string} id */
   async deleteAttachment(id) {
+    if (this.blockedInDemo()) return;
     await api(`/api/attachments/${id}`, { method: 'DELETE' });
     const row = this.attachments.find((file) => file.id === id);
     if (row) row.deleted_at = Date.now();

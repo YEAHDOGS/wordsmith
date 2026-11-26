@@ -2,12 +2,11 @@
 // per month). That allowance is shared by the whole Cloudflare account (other buckets, and wordsmith's staging and production),
 // so each environment gets its own slice via R2_MAX_GB / R2_MAX_MONTHLY_WRITES / R2_MAX_MONTHLY_READS in wrangler.jsonc.
 // When a cap is reached the request is refused with 507 instead of costing money. The bucket is private: every byte goes through here.
-import { AUDIO_TYPES, DOCUMENT_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_AUDIO_BYTES, MAX_DOCUMENT_BYTES, MAX_FILE_NAME, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, attachmentKind, audioType, documentType } from '../../src/lib/models.js';
+import { AUDIO_TYPES, DOCUMENT_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_FILE_NAME, attachmentKind, audioType, documentType, uploadLimits } from '../../src/lib/models.js';
 import { HttpError } from './http.js';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
-const MAX_BYTES = { image: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES, audio: MAX_AUDIO_BYTES, document: MAX_DOCUMENT_BYTES };
 const PLURAL = { image: 'Images', video: 'Videos', audio: 'Audio files', document: 'Documents' };
 const ERROR_TYPE = 'Only supported images, videos, audio files, and documents can be attached';
 // Conservative fallbacks if an environment forgets to set its slice.
@@ -15,6 +14,19 @@ const DEFAULT_MAX_GB = 1;
 const DEFAULT_MAX_MONTHLY_WRITES = 100_000;
 const DEFAULT_MAX_MONTHLY_READS = 1_000_000;
 const INSUFFICIENT_STORAGE = 507;
+// Stored files never change, so browsers cache them for a year and repeat views cost no requests.
+const CACHE_FOREVER = 'private, max-age=31536000, immutable';
+const NOT_MODIFIED = 304;
+const PARTIAL_CONTENT = 206;
+const RANGE_PATTERN = /^bytes=(\d*)-(\d*)$/;
+// Served from the app's origin, so never let a file act like a page. Browsers won't show a PDF in a sandboxed
+// document, and Chrome's viewer embeds the file itself, so PDFs drop the sandbox and allow only that embed; the
+// viewer runs apart from the app and can't reach it.
+const SANDBOXED = "default-src 'none'; sandbox";
+const PDF_POLICY = "default-src 'none'; object-src 'self'; form-action 'none'; frame-ancestors 'none'";
+const PDF = 'application/pdf';
+// Text is sent as UTF-8 so notes in any language read right.
+const TEXT_CHARSET = '; charset=utf-8';
 
 /** Throws 503 when no R2 bucket is bound (attachments switched off). @param {Record<string, any>} env */
 export function bucket(env) {
@@ -61,19 +73,21 @@ export async function release(env, bytes) {
 }
 
 /**
- * Validates an upload's type, size and name before any bytes are stored.
+ * Validates an upload's type, size and name before any bytes are stored. The size cap is the account's plan's
+ * (models.js uploadLimits).
  * @param {string} type
  * @param {number} size
  * @param {string} name
+ * @param {string | null} [plan] the uploader's plan (auth.user.plan)
  */
-export function checkUpload(type, size, name) {
+export function checkUpload(type, size, name, plan = null) {
   const kind = attachmentKind(type);
   if (!kind) throw new HttpError(415, ERROR_TYPE);
   if (kind === 'audio' && audioType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${AUDIO_TYPES[/** @type {keyof typeof AUDIO_TYPES} */ (type)].join(' or ')}`);
   // A document's name has to carry its type's extension, so a file can't claim to be text and download as something else.
   if (kind === 'document' && documentType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].join(' or ')}`);
   if (!Number.isFinite(size) || size <= 0) throw new HttpError(411, 'Content-Length is required');
-  const max = MAX_BYTES[kind];
+  const max = uploadLimits(plan)[kind];
   if (size > max) throw new HttpError(413, `${PLURAL[kind]} can be at most ${Math.round(max / MB)} MB`);
   return name.replace(/[\\/\r\n\t"]/g, '_').trim().slice(0, MAX_FILE_NAME) || kind;
 }
@@ -82,6 +96,49 @@ export function checkUpload(type, size, name) {
 export async function assertRoomOnNote(env, noteId) {
   const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM attachments WHERE note_id = ? AND deleted_at IS NULL').bind(noteId).first();
   if (Number(row?.n) >= MAX_ATTACHMENTS_PER_NOTE) throw new HttpError(400, `A note can hold at most ${MAX_ATTACHMENTS_PER_NOTE} attachments`);
+}
+
+/**
+ * Streams a stored file to its owner: Range requests (so audio and video seek), a year in the browser cache, and
+ * headers that keep it from ever running as a page. Attachments and tape audio both go through here.
+ * @param {{ request: Request, env: Record<string, any> }} context
+ * @param {{ key: string, size: number, type: string, name: string, etag: string }} file
+ */
+export async function streamFile({ request, env }, { key, size, type, name, etag }) {
+  const files = bucket(env);
+  if (request.headers.get('If-None-Match') === `"${etag}"`) return new Response(null, { status: NOT_MODIFIED });
+
+  /** @type {{ offset: number, length: number } | undefined} */
+  let range;
+  const match = RANGE_PATTERN.exec(request.headers.get('Range') || '');
+  if (match && (match[1] || match[2])) {
+    const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+    const end = match[1] && match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+    if (start <= end && start < size) range = { offset: start, length: end - start + 1 };
+  }
+
+  await reserve(env, { reads: 1 });
+  const object = await files.get(key, range ? { range } : undefined);
+  if (!object) throw new HttpError(404, 'File is missing from storage');
+
+  // Images, video, audio and PDFs show in the browser; other documents always download.
+  const disposition = attachmentKind(type) !== 'document' || type === PDF ? 'inline' : 'attachment';
+  const headers = new Headers({
+    'Content-Type': type.startsWith('text/') ? type + TEXT_CHARSET : type,
+    'Cache-Control': CACHE_FOREVER,
+    ETag: `"${etag}"`,
+    'Accept-Ranges': 'bytes',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': type === PDF ? PDF_POLICY : SANDBOXED,
+    'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`,
+  });
+  if (!range) {
+    headers.set('Content-Length', String(size));
+    return new Response(object.body, { headers });
+  }
+  headers.set('Content-Length', String(range.length));
+  headers.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${size}`);
+  return new Response(object.body, { status: PARTIAL_CONTENT, headers });
 }
 
 /** Attachment as clients see it. @param {Record<string, any>} row */

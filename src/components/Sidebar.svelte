@@ -6,6 +6,7 @@
   // sticker lives in Settings → About.
   import Inbox from '@lucide/svelte/icons/inbox';
   import Kanban from '@lucide/svelte/icons/kanban';
+  import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import Archive from '@lucide/svelte/icons/archive';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Settings from '@lucide/svelte/icons/settings';
@@ -19,6 +20,7 @@
   import BellDot from '@lucide/svelte/icons/bell-dot';
   import Network from '@lucide/svelte/icons/network';
   import Mic from '@lucide/svelte/icons/mic';
+  import LayoutGrid from '@lucide/svelte/icons/layout-grid';
   import { needsYou } from './attention.js';
   import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
@@ -48,8 +50,10 @@
     ...(NEEDS_YOU_ENABLED ? [{ view: 'attention', label: 'Needs you', icon: BellDot }] : []),
     { view: 'notes', label: 'All notes', icon: Inbox },
     { view: 'features', label: 'Features', icon: Kanban },
+    { view: 'calendar', label: 'Calendar', icon: CalendarDays },
     { view: 'design', label: 'Design', icon: Network },
-    { view: 'scribe', label: 'Scribe (beta)', icon: Mic },
+    // Scribe and Tapes are one page with a switch in its corner; either side lights this row.
+    { view: 'scribe', label: 'Scribe', icon: Mic, also: 'tapes' },
   ];
   const ITEM = 'transition-colors duration-150 ease-out group relative flex w-full items-center gap-3 px-4 py-2.5 short:py-1.5 text-left text-sm tv:text-xl text-ink-muted hover:bg-surface-raised hover:text-ink active:bg-accent-soft';
   const ACTIVE = 'bg-accent-soft text-ink';
@@ -58,9 +62,11 @@
   const INDICATOR = 'pointer-events-none absolute inset-y-0 left-0 w-0.5 origin-center bg-accent transition-transform duration-150 ease-out';
   // Section headers: the + sits in the count column (same right edge as the project counts), centered on the label.
   const SECTION = 'mt-3 flex items-center justify-between border-t border-line px-4 pt-3 pb-1';
-  const SECTION_LABEL = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest text-ink-faint';
+  const SECTION_LABEL_TEXT = 'font-mono text-[0.6875rem] tv:text-sm uppercase tracking-widest';
+  const SECTION_LABEL = `${SECTION_LABEL_TEXT} text-ink-faint`;
   const SECTION_BUTTON = 'spring press -my-1 p-1 text-ink-faint hover:text-accent';
-  // The section name folds its list; the chevron turns to point at the closed list.
+  // The section name folds its list; the chevron turns to point at the closed list. In Projects the chevron alone folds
+  // and the name opens the Projects page (every project as a card).
   const SECTION_TOGGLE = 'spring press -mx-1 -my-1 flex items-center gap-1 px-1 py-1 hover:text-ink';
   const FOLD_MS = 180;
   // Same heights as the TopBar header (h-12 sm:h-14 tv:h-20).
@@ -142,6 +148,8 @@
   });
 
   const active = (/** @type {string} */ view, id = '') => router.route.view === view && (!id || router.route.id === id);
+  /** A top nav row is lit by its own page, or the other side of a two-sided one. @param {{ view: string, also?: string }} item */
+  const lit = (item) => active(item.view) || (Boolean(item.also) && active(item.also ?? ''));
 </script>
 
 <nav class="flex h-full min-h-0 flex-col bg-app" aria-label="Main">
@@ -159,8 +167,8 @@
        window with both add forms open), the whole column scrolls, so nothing is ever cut off. -->
   <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2" bind:this={lists}>
     {#each NAV as item (item.view)}
-      <button class="{ITEM} {active(item.view) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.view === 'attention' && attentionCount ? `${item.label}, ${attentionCount}` : item.label} aria-current={active(item.view) ? 'page' : undefined}>
-        <span class="{INDICATOR} {active(item.view) ? 'scale-y-100' : 'scale-y-0'}"></span>
+      <button class="{ITEM} {lit(item) ? ACTIVE : ''} {compact ? 'justify-center px-0' : ''}" onclick={() => go(item.view)} title={item.view === 'attention' && attentionCount ? `${item.label}, ${attentionCount}` : item.label} aria-current={lit(item) ? 'page' : undefined}>
+        <span class="{INDICATOR} {lit(item) ? 'scale-y-100' : 'scale-y-0'}"></span>
         <span class="relative flex shrink-0">
           <item.icon class="size-4 tv:size-6 shrink-0" />
           {#if compact && item.view === 'attention' && attentionCount}<span class="absolute -top-1 -right-1 size-2 rounded-full bg-accent" in:fade={{ duration: 150 }}></span>{/if}
@@ -173,13 +181,20 @@
     {/each}
 
     {#if compact}
-      <!-- Rail: a plain divider. New projects and their counts live in the full sidebar (drawer), not floating here. -->
+      <!-- Rail: a plain divider, then the Projects page. New projects and their counts live in the full sidebar (drawer), not floating here. -->
       <div class="mx-3 my-2 border-t border-line" role="separator"></div>
+      <button class="{ITEM} {active('projects') ? ACTIVE : ''} justify-center px-0" onclick={() => go('projects')} title="Projects" aria-label="Projects" aria-current={active('projects') ? 'page' : undefined}>
+        <span class="{INDICATOR} {active('projects') ? 'scale-y-100' : 'scale-y-0'}"></span>
+        <LayoutGrid class="size-4 tv:size-6 shrink-0" />
+      </button>
     {:else}
       <div class={SECTION}>
-        <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-expanded={!ui.folded.has('projects')} aria-controls="sidebar-projects" onclick={() => ui.toggleFolded('projects')}>
-          <ChevronDown class="size-3 spring {ui.folded.has('projects') ? '-rotate-90' : ''}" />Projects
-        </button>
+        <div class="flex min-w-0 items-center gap-1">
+          <button class="{SECTION_LABEL} {SECTION_TOGGLE}" aria-label={ui.folded.has('projects') ? 'Show the project list' : 'Hide the project list'} aria-expanded={!ui.folded.has('projects')} aria-controls="sidebar-projects" onclick={() => ui.toggleFolded('projects')}>
+            <ChevronDown class="size-3 spring {ui.folded.has('projects') ? '-rotate-90' : ''}" />
+          </button>
+          <button class="{SECTION_LABEL_TEXT} {SECTION_TOGGLE} {active('projects') ? 'text-accent' : 'text-ink-faint'}" title="All projects" aria-current={active('projects') ? 'page' : undefined} onclick={() => go('projects')}>Projects</button>
+        </div>
         <button class="{SECTION_BUTTON} -mr-1" title="New project" aria-label="New project" aria-expanded={addingProject} onclick={() => { addingProject = !addingProject; projectError = ''; ui.toggleFolded('projects', true); }}>
           <span class="flex spring {addingProject ? 'rotate-45' : ''}"><Plus class="size-4" /></span>
         </button>

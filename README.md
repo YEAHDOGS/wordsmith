@@ -13,6 +13,8 @@ Google Keep style notes, labels and projects, plus feature requests that AI agen
 3. The agent reports `status` as it goes, attaches screenshots or videos, and links its PR with `pr_url`.
 4. **You** merge the PR on GitHub. The webhook (or a poll every couple of minutes while the app is open) marks the PR merged, and the feature completes itself with `completed_at` stamped.
 
+**Order.** One rule decides the order everywhere (`src/lib/order.js`): a new ticket always lands on top of its list, whoever makes it (the composer, Scribe, a shared link, an agent's `POST /api/v1/features`), above every priority and below any note groups and pins. It stays there until it is dragged somewhere else. Under those come the rest by priority, then by hand-placed order. The board's Requested columns, the notes list and the agent claim queue (`POST /api/v1/features/next`) all read that one order.
+
 Every step is written to an append-only, server-stamped `note_events` timeline showing who did it (you, the agent's token name, or GitHub) and when. Open any note to see it on the timeline spine.
 
 Sign in with GitHub, Google or Apple. Agents use personal API tokens from **Settings**. Its **Connect an agent** card walks through hooking up T3 Code (or any agent) and has two copy-paste prompts: the standing instructions for CLAUDE.md / AGENTS.md, and the triage prompt for scheduled runs. `GET /api/v1` describes the whole agent API.
@@ -44,6 +46,7 @@ For hot reload, run `npm run devVite` alongside it: Vite on :5173 proxies `/api`
 
 - Workers and D1 on the free plan stop at their limits instead of billing.
 - R2 (attachments) **can** bill past its free tier, so the app enforces hard caps in D1 (`storage_usage`, `api/lib/attachments.js`): 8 GB stored, 500k uploads and 5M reads a month. Past them, uploads and downloads return 507 instead of costing money. The bucket is private, and every byte goes through an authenticated Worker. Files are cached as immutable, so repeat views cost nothing.
+- Plans (`PLANS` in `src/lib/models.js`) set what one account may use: Scribe's daily cloud allowance, how much its tapes hold, and the largest video, audio file and document it may attach (10 MB videos on the free trial, 95 MB on the top plan; a Worker request tops out at 100 MB). The caps above still bound everyone together. A DOGS membership is $1 a month or $5 a year; the paywall and Settings also have a one-time **Buy DOGS a coffee** button (`COFFEE_URL`, `COFFEE_PRICE_USD`), which unlocks nothing. `npm run access -- approve <email> megaman` gives an account the top plan by hand, and `npm run access -- trial <email>` takes it back.
 - Login, token creation, uploads, PR refreshes and agent writes are rate limited. Queries and sync batches are bounded. The app polls once a minute, and only while visible.
 - If the `ATTACHMENTS` binding is missing, attachments switch off (503) and nothing else changes.
 
@@ -72,6 +75,7 @@ Never use production data in local development or staging. Staging contains synt
 
 - **Local (your laptop)**: Run the Worker with `npm run cloudflare:dev` (`npx wrangler dev` from the repo root). Wrangler uses Miniflare to simulate the Worker, D1 and R2. Local D1 uses a SQLite file under `.wrangler/state/`; it stays on your machine and is ignored by Git. Use SQL migrations and test data.
 - **Staging / Preview (pull requests and testing)**: Deploy the separate `wordsmith-preview` Worker by hand with `npm run cloudflare:deploy:preview`. All previews share a dedicated staging D1 database with synthetic test data; keep migrations additive and do not reset shared staging data.
+  Nobody is locked out on Previews or staging: `PAYWALL` is `"optional"` there (`wrangler.jsonc`, `paywallOptional` in `api/lib/auth.js`), so an account whose trial has ended still gets in, on the top plan. Settings shows a **Show the paywall** button there, and only there, to look at the paywall; the paywall then has a **Back to the app** bar. Production never has the var, and its domains are refused even if it did.
 - **Production (live users)**: the `wordsmith` Worker serves production traffic on Cloudflare's edge and uses a separate production D1 database. Workers Builds deploys the `wordsmith` Worker on every push to `master`.
 
 Configure separate preview and production D1 bindings in Cloudflare. Set a least-privilege Cloudflare API token and account ID as GitHub repository secrets; do not commit credentials. Fork pull requests cannot access deployment secrets and are not deployed.

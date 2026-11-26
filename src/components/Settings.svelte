@@ -13,12 +13,17 @@
   import LogOut from '@lucide/svelte/icons/log-out';
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import Compass from '@lucide/svelte/icons/compass';
+  import Lock from '@lucide/svelte/icons/lock';
+  import { tour } from '../lib/tour.svelte.js';
   import { fade, slide } from 'svelte/transition';
   import ProviderIcon from './ProviderIcon.svelte';
   import AppearanceSettings from './AppearanceSettings.svelte';
   import SpeechSettings from './SpeechSettings.svelte';
   import InstallApp from './InstallApp.svelte';
   import StandingContext from './StandingContext.svelte';
+  import CoffeeButton from './CoffeeButton.svelte';
+  import TrialMeter from './TrialMeter.svelte';
   import { auth, openExternal } from '../lib/auth.svelte.js';
   import { store } from '../lib/store.svelte.js';
   import { IS_NATIVE, api, apiUrl } from '../lib/api.js';
@@ -26,10 +31,11 @@
   import { DOT_BG, DOT_TEXT } from '../lib/colors.js';
   import { ago, fullTime } from '../lib/time.js';
   import { reveal } from '../lib/reveal.js';
-  import { githubProfileUrl } from './settings-data.js';
+  import { githubProfileUrl } from '../lib/github-public.js';
   import { agentInstructions, mcpSetup, triagePrompt } from './agent-prompts.js';
   import { BOX, BUTTON, CARD, HEADING, HINT } from './settings-styles.js';
   import TEXT from './settings.json';
+  import PAYWALL from './paywall.json';
 
   const COPIED_MS = 1400;
   const SWAP = { duration: 150 };
@@ -75,8 +81,8 @@
   }
   $effect(() => {
     loadTokens();
-    // Linked accounts come with the session, which start-up may have skipped.
-    if (!auth.sessionFetched) auth.load();
+    // Linked accounts come with the session, which start-up may have skipped. Not in the demo: a full load ends it.
+    if (!auth.sessionFetched && !auth.demo) auth.load();
   });
 
   $effect(() => {
@@ -162,6 +168,8 @@
           <p class="selectable truncate font-mono text-xs text-ink-muted">{auth.user?.email || ''}</p>
         </div>
       </div>
+      <!-- The free trial as a meter, while the account is on it -->
+      <TrialMeter />
       <p class="mb-2 text-xs text-ink-faint">{TEXT.linked}</p>
       <div class="mb-3 flex flex-wrap gap-2">
         {#each PROVIDERS.filter((provider) => auth.providers.includes(provider) || linkedProviders.includes(provider)) as provider (provider)}
@@ -181,6 +189,16 @@
       <p class={HINT}>{TEXT.linkHint}</p>
       <button class="{BUTTON} hover:text-accent" onclick={signOut}><LogOut class="size-4" />{TEXT.signOut}</button>
       <p class="mt-2 text-xs text-ink-faint">{TEXT.signOutHint}</p>
+      <!-- The guided tour again, from the start; it comes back here when it closes -->
+      <button class="{BUTTON} mt-4" onclick={() => tour.start()}><Compass class="size-4" />{TEXT.tour}</button>
+      <p class="mt-2 text-xs text-ink-faint">{TEXT.tourHint}</p>
+      <CoffeeButton class="{BUTTON} mt-4" />
+      <p class="mt-2 text-xs text-ink-faint">{PAYWALL.coffeeHint}</p>
+      {#if auth.paywallOptional}
+        <!-- Worker Previews and staging only: nobody is locked out there, so this is the way to look at the paywall -->
+        <button class="{BUTTON} mt-4" onclick={() => auth.setShowPaywall(true)}><Lock class="size-4" />{PAYWALL.previewOn}</button>
+        <p class="mt-2 text-xs text-ink-faint">{PAYWALL.previewHint}</p>
+      {/if}
     </section>
 
     <!-- Flex column so the token list can fill whatever height the Account card sets for this row -->

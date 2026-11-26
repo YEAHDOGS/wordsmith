@@ -4,7 +4,6 @@
 // "research" (no project) at the top of the list, and opened.
 import { store } from './lib/store.svelte.js';
 import { router } from './lib/router.svelte.js';
-import { topPosition } from './lib/reorder.svelte.js';
 import { MAX_BODY, MAX_TITLE } from './lib/models.js';
 
 const PARAMS = { title: 'share_title', text: 'share_text', url: 'share_url' };
@@ -33,6 +32,6 @@ export function fileShare() {
   const title = share.title || body.split('\n')[0];
   if (!title && !body) return;
   const label = store.labels.find((row) => !row.deleted_at && row.name.toLowerCase() === RESEARCH_LABEL) ?? store.create('labels', { name: RESEARCH_LABEL });
-  const note = store.create('notes', { title: title.slice(0, MAX_TITLE), body: body.slice(0, MAX_BODY), label_ids: [label.id], position: topPosition() });
+  const note = store.create('notes', { title: title.slice(0, MAX_TITLE), body: body.slice(0, MAX_BODY), label_ids: [label.id] });
   router.openNote(note.id);
 }

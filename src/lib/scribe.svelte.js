@@ -12,7 +12,6 @@
 import { auth } from './auth.svelte.js';
 import { api } from './api.js';
 import { store } from './store.svelte.js';
-import { topPosition } from './reorder.svelte.js';
 import { EARLIER_CHARS, MAX_SPEECH_CHARS, MAX_TICKET_BODY, MAX_TICKETS, NOT_CHAT, askModel, listModels, meaningfulWords, parseActions, scribeMessages, soundsLikeWork } from './scribe-llm.js';
 import { listen, listenEngine } from './listen.js';
 import PROVIDERS from './scribe-providers.json';
@@ -513,7 +512,7 @@ class Scribe {
   #apply(actions, tickets) {
     for (const action of actions) {
       if (action.op === 'create') {
-        const note = store.create('notes', { project_id: this.settings.projectId || null, title: action.title, body: action.body, priority_level: action.priority, position: topPosition() });
+        const note = store.create('notes', { project_id: this.settings.projectId || null, title: action.title, body: action.body, priority_level: action.priority });
         this.#record('created', note, null);
         continue;
       }

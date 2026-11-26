@@ -1,14 +1,18 @@
 <script>
   // Root: restores the session, reads one-time notices from OAuth redirects (?auth=, ?auth_error=, ?device=),
-  // opens the signed-in user's local store, and shows the sign-in screen or the app.
+  // opens the signed-in user's local store, and shows the sign-in screen, the paywall (free trial over) or the app. The native apps also look for
+  // updates in the background from here, signed in or not (src/lib/updates.svelte.js).
   import { fade } from 'svelte/transition';
   import { cubicIn } from 'svelte/easing';
   import Login from './components/Login.svelte';
   import Shell from './components/Shell.svelte';
   import LazyPage from './components/LazyPage.svelte';
+  import Paywall from './components/Paywall.svelte';
+  import UpdatePill from './components/UpdatePill.svelte';
   import { privacy } from './components/privacy-route.svelte.js';
   import { auth } from './lib/auth.svelte.js';
   import { store } from './lib/store.svelte.js';
+  import { updates } from './lib/updates.svelte.js';
   import { fileShare } from './share-capture.js';
 
   const NOTICE_PARAMS = ['auth', 'auth_error', 'device', 'provider', 'code'];
@@ -31,16 +35,22 @@
   store.onUnauthorized = () => auth.expired();
   store.onOtherUser = () => auth.load();
   auth.load(!returning);
+  updates.start();
 
   let openedFor = '';
   $effect(() => {
-    const userId = auth.status === 'signed_in' ? auth.user?.id ?? '' : '';
+    // A locked account (free trial over and no plan held, src/lib/models.js planOf) gets no store: it would only sync into 402s.
+    const userId = auth.status === 'signed_in' && !auth.locked ? auth.user?.id ?? '' : '';
     if (userId === openedFor) return;
     // Close, don't wipe: an expired session must not lose unsynced edits. Settings' sign out wipes explicitly.
     if (openedFor) store.close();
     openedFor = userId;
     // A page shared into the app (share-capture.js) becomes a note once the store has loaded.
-    if (userId) store.open(userId).then(fileShare);
+    if (userId && !auth.demo) store.open(userId).then(fileShare);
+    // The demo opens on the sample workspace staging is seeded with, held in memory only. Loaded on demand.
+    if (userId && auth.demo) {
+      import('./lib/sample-data.js').then(({ sampleRows }) => openedFor === userId && store.open(userId, sampleRows(userId, userId, Date.now())).then(fileShare));
+    }
   });
 </script>
 
@@ -58,7 +68,11 @@
     </div>
   {:else if auth.status === 'signed_out' || notice}
     <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Login {notice} {message} /></div>
+  {:else if auth.locked}
+    <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Paywall /></div>
   {:else}
     <div class="col-start-1 row-start-1 min-h-0" in:fade={SCREEN_IN} out:fade={SCREEN_OUT}><Shell /></div>
   {/if}
 </div>
+
+<UpdatePill />

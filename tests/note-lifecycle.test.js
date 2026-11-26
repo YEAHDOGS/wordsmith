@@ -6,6 +6,7 @@ import { saveNotes } from '../api/lib/notes.js';
 import { purgeRows } from '../api/lib/trash.js';
 import { toApi } from '../api/lib/rows.js';
 import { cleanRow, MAX_TITLE } from '../src/lib/models.js';
+import { TOP_LIMIT } from '../src/lib/order.js';
 
 const MIGRATIONS = new URL('../api/migrations/', import.meta.url);
 const OWNER = 'test-owner';
@@ -31,6 +32,7 @@ test('notes survive edit, archive, trash and restore; purged notes cannot be res
           return {
             run: async () => statement.run(...values),
             all: async () => ({ results: statement.all(...values) }),
+            first: async () => statement.get(...values) ?? null,
           };
         } };
       },
@@ -51,6 +53,10 @@ test('notes survive edit, archive, trash and restore; purged notes cannot be res
       return current;
     }
     await write({ id: 'test-note', title: 'Keep this title', body: 'Keep this body' });
+    // A note made without a position goes on top of the queue, and the next one above it.
+    assert.ok(current.position <= TOP_LIMIT);
+    const [later] = await saveNotes(env, OWNER, ACTOR, [{ before: null, patch: { id: 'later-note', title: 'Made later' } }]);
+    assert.ok(later.position < current.position);
     await write({ archived: true });
     assert.equal(current.archived, true);
     await write({ archived: false, deleted_at: Date.now() });

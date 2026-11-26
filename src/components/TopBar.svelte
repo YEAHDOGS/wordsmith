@@ -2,6 +2,8 @@
   // Title (with a settings gear on board pages) and search in one compact row. Search filters the current view on-device (no requests). On phones search
   // is an icon that expands over the row, so the header stays one slim line. Sync lives in the sidebar; the menu
   // button carries a yellow dot when sync has a problem, because the sidebar is a hidden drawer on phones.
+  // During the free trial a small pill at the end counts down to its end, to the second, and links to the DOGS
+  // memberships. At zero it asks the server again, which locks the app (the paywall).
   import Menu from '@lucide/svelte/icons/menu';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
@@ -12,6 +14,12 @@
   import { ui } from '../lib/ui.svelte.js';
   import { syncProblem } from './sync-problem.js';
   import { letterIn, letterOut } from './title-flip.js';
+  import Coffee from '@lucide/svelte/icons/coffee';
+  import { auth, openExternal } from '../lib/auth.svelte.js';
+  import { IS_NATIVE } from '../lib/api.js';
+  import { SUBSCRIBE_URL } from '../lib/models.js';
+  import PAYWALL from './paywall.json';
+  import { countdown } from './trial-countdown.js';
 
   /** @type {{ title: string, subtitle?: string, onsettings?: (() => void) | null }} */
   let { title, subtitle = '', onsettings = null } = $props();
@@ -20,11 +28,40 @@
   const SEARCH_IN = { x: 32, duration: 200, easing: backOut };
   const SEARCH_OUT = { x: 32, duration: 140, easing: cubicIn };
   const BADGE = { start: 0.3, duration: 200, easing: backOut };
+  const COUNTDOWN_TICK_MS = 1_000;
+  // Past zero, the server is asked again this often until it locks the app (a fast device clock gets there first).
+  const RECHECK_MS = 20_000;
 
   let searching = $state(false);
   const problem = $derived(syncProblem(store));
   // A phone search with text in it stays open, so the filter is never applied invisibly.
   const phoneSearch = $derived(searching || !!ui.query);
+
+  const trialEnds = $derived(auth.trialEndsAt);
+  let now = $state(Date.now());
+  // Ticks only while there is a trial to count down.
+  $effect(() => {
+    const ends = trialEnds;
+    if (ends === null) return;
+    now = Date.now();
+    let asked = 0;
+    const timer = setInterval(() => {
+      now = Date.now();
+      if (now < ends || now - asked < RECHECK_MS) return;
+      asked = now;
+      auth.refresh();
+    }, COUNTDOWN_TICK_MS);
+    return () => clearInterval(timer);
+  });
+  const left = $derived(trialEnds === null ? null : countdown(trialEnds - now, PAYWALL.units));
+  const trialText = $derived(left ? PAYWALL.trialLeft.replace('{time}', left.full) : '');
+
+  /** The membership page, in the system browser on the native apps. @param {MouseEvent} event */
+  function subscribe(event) {
+    if (!IS_NATIVE) return;
+    event.preventDefault();
+    openExternal(SUBSCRIBE_URL);
+  }
 
   function closeSearch() {
     ui.query = '';
@@ -33,11 +70,11 @@
 </script>
 
 <header class="relative flex h-12 shrink-0 items-center gap-1 border-b border-line bg-app px-1 sm:h-14 sm:gap-2 sm:px-4 tv:h-20">
-  <button class="{ICON_BUTTON} lg:hidden" aria-label={problem ? `Open navigation. Sync problem: ${problem.title}` : 'Open navigation'} onclick={() => (ui.drawerOpen = true)}>
+  <button class="{ICON_BUTTON} lg:hidden" aria-label={problem ? `Open navigation. ${problem.demo ? '' : 'Sync problem: '}${problem.title}` : 'Open navigation'} onclick={() => (ui.drawerOpen = true)}>
     <Menu class="size-5" />
     {#if problem}
       <span class="absolute top-2 right-2" aria-hidden="true" transition:scale={BADGE}>
-        <span class="badge-breathe block size-2.5 rounded-full bg-requested ring-2 ring-app"></span>
+        <span class="badge-breathe block size-2.5 rounded-full ring-2 ring-app {problem.demo ? 'bg-accent' : 'bg-requested'}"></span>
       </span>
     {/if}
   </button>
@@ -78,6 +115,13 @@
       <button class="absolute right-2 text-ink-faint hover:text-ink" aria-label="Clear search" onclick={() => (ui.query = '')} transition:scale={BADGE}><X class="size-4" /></button>
     {/if}
   </label>
+
+  {#if trialText}
+    <a class="spring press flex shrink-0 items-center gap-1.5 border border-accent px-2 py-1 font-mono text-[0.6875rem] text-accent hover:bg-accent-soft tv:px-3 tv:py-2 tv:text-base"
+      href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer" title="{trialText} · {PAYWALL.dollar}" aria-label="{trialText}. {PAYWALL.dollar}" onclick={subscribe} transition:scale={BADGE}>
+      <Coffee class="size-3.5 tv:size-5" /><span class="tabular-nums max-md:hidden">{trialText} ·</span><span class="tabular-nums md:hidden">{left?.short}<span class="max-sm:hidden"> ·</span></span><span class="max-sm:hidden">{PAYWALL.subscribe}</span>
+    </a>
+  {/if}
 
   <!-- Phones: a search icon in the same row; it expands over the header instead of taking a row of its own -->
   <button class="{ICON_BUTTON} sm:hidden" aria-label="Search" aria-expanded={phoneSearch} onclick={() => (searching = true)}><Search class="size-5" /></button>

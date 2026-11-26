@@ -1,9 +1,12 @@
 <script>
   // Sign-in screen, plus the two browser-side steps of a native-app login (confirm code, done).
   // Layout: a centered "wormhole" hero on a vertical spine, with the four steps of the agent loop strung along it.
+  // The wordmark is three grid cells ("word" | "s" | "mith") so the "s" sits on the spine whatever the font or width.
+  // The tagline gets the same treatment: two cells that meet on the spine, set in the equal-width font.
   import { fade, fly } from 'svelte/transition';
   import logo from '../assets/dogs-logo-cropped.png';
   import madeByDogs from '../assets/made-by-dogs-small.png';
+  import FlaskConical from '@lucide/svelte/icons/flask-conical';
   import ProviderIcon from './ProviderIcon.svelte';
   import { IS_NATIVE } from '../lib/api.js';
   import { auth } from '../lib/auth.svelte.js';
@@ -18,10 +21,17 @@
   const DOGS_URL = 'https://dogs.red';
   const REPO_URL = 'https://github.com/YEAHDOGS/wordsmith';
   const STEP_STAGGER_MS = 90;
+  // Always on the landing page, in this order, even before their credentials exist on a server; other providers only once configured.
+  const FEATURED_PROVIDERS = ['google', 'github'];
   const BUTTON_CLASS =
     'spring press flex w-full items-center justify-center gap-3 border border-line-strong bg-surface px-5 py-3.5 short:py-2.5 text-fluid-sm font-semibold text-ink hover:border-accent hover:bg-surface-raised disabled:opacity-50';
   const INPUT_CLASS =
     'bg-surface px-5 py-3.5 short:py-2.5 text-center text-fluid-sm text-ink placeholder:text-ink-faint focus:outline-none focus-visible:bg-surface-raised';
+
+  // The tagline splits in its middle: with an even count of characters the halves meet on the spine ("Speak yo" |
+  // "ur truth"), with an odd count the middle character sits on it.
+  const TAGLINE_MIDDLE = TEXT.tagline.length / 2;
+  const TAGLINE = [TEXT.tagline.slice(0, Math.floor(TAGLINE_MIDDLE)), TEXT.tagline.slice(Math.floor(TAGLINE_MIDDLE), Math.ceil(TAGLINE_MIDDLE)), TEXT.tagline.slice(Math.ceil(TAGLINE_MIDDLE))];
 
   let busy = $state('');
   let password = $state('');
@@ -36,6 +46,7 @@
     if (!auth.sessionFetched) auth.load();
   });
   const available = $derived(PROVIDERS.filter((provider) => auth.providers.includes(provider)));
+  const shown = $derived([...FEATURED_PROVIDERS, ...available.filter((provider) => !FEATURED_PROVIDERS.includes(provider))]);
   const confirmHref = $derived(
     notice?.kind === 'device_confirm' ? `/api/auth/${notice.provider}/start?device=${encodeURIComponent(notice.device || '')}&confirm=1` : '',
   );
@@ -68,6 +79,11 @@
 
   /** @param {string} provider */
   async function signIn(provider) {
+    const name = TEXT.providers[/** @type {keyof typeof TEXT.providers} */ (provider)];
+    if (!available.includes(provider)) {
+      auth.error = TEXT.notSetUp.replace('{provider}', name);
+      return;
+    }
     busy = provider;
     if (await unlockBeta()) await auth.signIn(provider);
     busy = '';
@@ -105,12 +121,26 @@
     </a>
   </header>
 
-  <section class="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-stretch justify-center gap-6 short:gap-3 overflow-y-auto px-4 py-6 short:py-2 tv:max-w-2xl">
+  <!-- Everything keeps its full height: when it doesn't all fit (a small phone, the keyboard open, a big system font)
+       the column scrolls, and safe centering keeps its top reachable instead of pushing it off the screen. -->
+  <!-- A scrollbar, when one appears, takes the same room on both edges, so the column stays centered on the spine. -->
+  <section class="relative z-10 mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col items-stretch justify-center-safe gap-6 short:gap-3 overflow-y-auto overscroll-contain px-4 py-6 short:py-2 tv:max-w-2xl *:shrink-0 [scrollbar-gutter:stable_both-edges]">
     <div class="relative overflow-hidden bg-app py-2 text-center sweep" in:fade={{ duration: 400 }}>
-      <h1 class="text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
-        word<span class="text-accent">smith</span>
+      <!-- "word" ends at the center line, "s" is its own centered cell, "mith" starts there. The side tracks are
+           minmax(0, 1fr), never min-content, so they stay equal and the s stays put even where a word is wider than its half. The "s" keeps no letter-spacing
+           so its box is just the glyph; "mith" takes that spacing as a margin so the gaps on both sides of the s match. -->
+      <h1 class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] text-fluid-display tv:text-display-tv font-black leading-none tracking-tight">
+        <span class="sr-only">wordsmith</span>
+        <span class="justify-self-end" aria-hidden="true">word</span><span class="tracking-normal text-accent" aria-hidden="true">s</span><span class="justify-self-start ml-(--tracking-tight) text-accent" aria-hidden="true">mith</span>
       </h1>
-      <p class="mt-3 short:mt-1 text-fluid-base font-medium text-ink-muted">{TEXT.tagline}</p>
+      <!-- The tagline, like the wordmark: cells that meet on the spine, so it is centered on the s whatever the font.
+           It is set in the equal-width font, so every letter takes the same room and the gaps between them match (the
+           o and u of "your" sit either side of the spine, the same distance from it). Same size and line height as
+           before, so nothing above or below it moves. -->
+      <p class="mt-3 short:mt-1 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] font-mono text-fluid-base whitespace-pre text-ink-muted">
+        <span class="sr-only">{TEXT.tagline}</span>
+        <span class="justify-self-end" aria-hidden="true">{TAGLINE[0]}</span><span aria-hidden="true">{TAGLINE[1]}</span><span class="justify-self-start" aria-hidden="true">{TAGLINE[2]}</span>
+      </p>
     </div>
 
     {#if notice?.kind === 'device_confirm'}
@@ -157,7 +187,7 @@
         <p class="short:hidden text-center text-fluid-sm text-ink-muted">{TEXT.previewHint}</p>
       {/if}
       <div class="flex flex-col gap-px border border-line bg-line">
-        {#if showBeta && available.length}
+        {#if showBeta}
           <form class="flex" onsubmit={submitBeta} in:fly={{ y: 8, delay: 150, duration: 300 }}>
             {@render betaInput('w-full')}
           </form>
@@ -165,19 +195,26 @@
             <p role="status" class="bg-complete-soft px-5 py-2 text-center text-fluid-sm text-complete" in:fade>{TEXT.betaAccepted}</p>
           {/if}
         {/if}
-        {#each available as provider, index (provider)}
+        {#each shown as provider, index (provider)}
           <button class={BUTTON_CLASS} disabled={Boolean(busy)} onclick={() => signIn(provider)} in:fly={{ y: 8, delay: 200 + index * STEP_STAGGER_MS, duration: 300 }}>
             <ProviderIcon {provider} />
             {TEXT.continue} {TEXT.providers[/** @type {keyof typeof TEXT.providers} */ (provider)]}
           </button>
         {/each}
+        <button class="{BUTTON_CLASS} border-accent" disabled={Boolean(busy)} onclick={() => auth.startDemo()}
+          in:fly={{ y: 8, delay: 200 + shown.length * STEP_STAGGER_MS, duration: 300 }}>
+          <FlaskConical class="size-5 text-accent" />
+          {TEXT.demo}
+        </button>
         {#if auth.devLogin}
           <button class="{BUTTON_CLASS} border-dashed font-mono text-ink-muted" onclick={() => auth.devSignIn()}>{TEXT.dev}</button>
         {/if}
       </div>
+      <!-- <p class="short:hidden -mt-4 text-center text-xs text-ink-faint">{TEXT.demoHint}</p> -->
       {#if !available.length && !auth.devLogin && !auth.previewLogin}
         <p class="text-center text-fluid-sm text-ink-muted">{TEXT.none}</p>
       {/if}
+      <!-- The free trial is explained in the guided tour and metered in Settings, not here -->
       <p class="short:hidden text-center text-fluid-sm leading-relaxed text-ink-muted">{TEXT.pitch}</p>
     {/if}
 

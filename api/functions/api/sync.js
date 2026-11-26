@@ -1,6 +1,8 @@
 // Delta sync for the offline-first app.
-// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, note_groups, events, attachments, cursor, more }
-// POST /api/sync { projects?, labels?, notes?, boards?, note_groups? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// GET  /api/sync?since=<ms>  -> { projects, labels, notes, boards, note_groups, diagrams, tapes, events, attachments, cursor, more }
+// POST /api/sync { projects?, labels?, notes?, boards?, note_groups?, diagrams?, tapes? } -> { saved: { table: rows }, rejected: [{ id, error }] }
+// Tapes are created by uploading their audio (POST /api/tapes), so sync only edits and deletes them; a deleted
+// tape's audio goes with it, and it can't come back.
 // The server stamps updated_at, so every device orders changes by server time. Pull again after a push.
 import { presentAttachment } from '../../lib/attachments.js';
 import { requireAuth } from '../../lib/auth.js';
@@ -12,6 +14,7 @@ import { schedulePurge, settleTrash } from '../../lib/trash.js';
 import { DIAGRAM_LIMIT, MAX_DIAGRAMS, MAX_PROJECTS, MAX_SYNC_BATCH, NAME_TAKEN, PROJECT_LIMIT, cleanRow, isId, newRow, projectKey } from '../../../src/lib/models.js';
 import { mergeDiagram } from '../../../src/lib/diagram.js';
 import { ERASED_DIAGRAM } from '../../lib/diagrams.js';
+import { eraseTapeAudio } from '../../lib/tapes.js';
 
 const PULL_LIMIT = 500;
 // Re-send a few seconds of changes on every pull so writes that commit while we read are never skipped.
@@ -117,6 +120,12 @@ export async function onRequestPost(context) {
     }
 
     const statements = [];
+    /**
+     * Tapes this push deletes, as they were, each with the batch position of the statement that claims the delete.
+     * Only a claim that matched a live row erases the audio, so a tape deleted twice (in one push, or by two devices at
+     * once) gives its storage back once. @type {{ tape: any, claim: number }[]}
+     */
+    const erased = [];
     // Room left under the diagram cap, counted only when this push brings a new diagram.
     let diagramRoom = Infinity;
     if (table === 'diagrams' && incoming.some((/** @type {any} */ row) => !row.deleted_at && !existing.has(row.id))) {
@@ -125,6 +134,15 @@ export async function onRequestPost(context) {
     }
     for (const pushed of incoming) {
       const before = existing.get(pushed.id) ?? null;
+      if (table === 'tapes' && !before) {
+        rejected.push({ id: pushed.id, table, error: 'Upload the recording first', current: null });
+        continue;
+      }
+      // A deleted tape's audio is gone, so it stays deleted: the device gets the stored row back.
+      if (table === 'tapes' && before?.deleted_at) {
+        saved[table].push(before);
+        continue;
+      }
       try {
         const row = table === 'diagrams' ? reconcileDiagram(before, pushed) : pushed;
         // A diagram deleted elsewhere since this device last saw it stays deleted: the device gets the stored row back.
@@ -140,6 +158,12 @@ export async function onRequestPost(context) {
         const next = settleTrash(table, { ...base, ...cleanRow(table, row), user_id: auth.user.id, updated_at: now, deleted_at: row.deleted_at ? Math.min(Number(row.deleted_at), now) : null }, before);
         // Diagrams have no Trash: a deleted one is erased at once, leaving only the marker other devices need.
         if (table === 'diagrams' && next.deleted_at) Object.assign(next, structuredClone(ERASED_DIAGRAM));
+        if (table === 'tapes' && next.deleted_at && before) {
+          next.audio_size = 0;
+          erased.push({ tape: before, claim: statements.length });
+          statements.push(env.DB.prepare('UPDATE tapes SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL RETURNING id')
+            .bind(next.deleted_at, before.id, auth.user.id));
+        }
         const upsert = upsertStatement(env, table, next, before);
         if (upsert) statements.push(upsert);
         const { user_id: _owner, ...apiRow } = next;
@@ -148,7 +172,14 @@ export async function onRequestPost(context) {
         rejected.push({ id: pushed.id, error: /** @type {Error} */ (error).message, ...(table === 'diagrams' && { table, current: before }) });
       }
     }
-    if (statements.length) await env.DB.batch(statements);
+    const results = statements.length ? await env.DB.batch(statements) : [];
+    const claimed = erased.filter(({ claim }) => results[claim]?.results?.length).map(({ tape }) => tape);
+    // The rows are saved: a failed R2 delete must not fail the push (the device would retry a delete that's done).
+    try {
+      await eraseTapeAudio(env, auth.user.id, claimed);
+    } catch (error) {
+      console.error('Tape audio erase failed', error);
+    }
   }
   return json({ saved, rejected, server_time: now });
 }

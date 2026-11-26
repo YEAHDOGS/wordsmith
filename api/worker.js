@@ -24,6 +24,8 @@ import * as githubRepo from './functions/api/github/repo.js';
 import * as projectPulls from './functions/api/projects/[id]/pulls.js';
 import * as noteAttachments from './functions/api/notes/[id]/attachments.js';
 import * as attachment from './functions/api/attachments/[id].js';
+import * as tapes from './functions/api/tapes/index.js';
+import * as tapeAudio from './functions/api/tapes/[id]/audio.js';
 import * as v1Index from './functions/api/v1/index.js';
 import * as v1Projects from './functions/api/v1/projects.js';
 import * as v1Features from './functions/api/v1/features/index.js';
@@ -36,6 +38,8 @@ import * as v1NoteAnalysis from './functions/api/v1/notes/[id]/analysis.js';
 import * as v1Batches from './functions/api/v1/batches.js';
 import * as v1Boards from './functions/api/v1/boards.js';
 import * as v1Labels from './functions/api/v1/labels.js';
+import * as v1Tapes from './functions/api/v1/tapes/index.js';
+import * as v1Tape from './functions/api/v1/tapes/[id].js';
 import * as v1Events from './functions/api/v1/events.js';
 import * as v1Context from './functions/api/v1/context.js';
 import * as v1Diagrams from './functions/api/v1/diagrams/index.js';
@@ -43,6 +47,7 @@ import * as v1Diagram from './functions/api/v1/diagrams/[id].js';
 import * as v1ProjectContext from './functions/api/v1/projects/[project]/context.js';
 import * as mcp from './functions/api/mcp.js';
 import * as scribe from './functions/api/scribe.js';
+import * as bmcWebhook from './functions/api/webhooks/bmc.js';
 import * as sharedNote from './functions/n/[id].js';
 import { APP_HOST, SHARE_PATH, SHORT_HOSTS } from '../src/lib/models.js';
 
@@ -72,11 +77,14 @@ const ROUTES = [
   ['/api/tokens/:id', token, false],
   ['/api/prs/refresh', prsRefresh, false],
   ['/api/github/webhook', githubWebhook, false],
+  ['/api/webhooks/bmc', bmcWebhook, false],
   ['/api/github/repos', githubRepos, false],
   ['/api/github/repo', githubRepo, false],
   ['/api/projects/:id/pulls', projectPulls, false],
   ['/api/notes/:id/attachments', noteAttachments, false],
   ['/api/attachments/:id', attachment, false],
+  ['/api/tapes', tapes, false],
+  ['/api/tapes/:id/audio', tapeAudio, false],
   ['/api/v1', v1Index, true],
   ['/api/v1/projects', v1Projects, true],
   ['/api/v1/features', v1Features, true],
@@ -89,6 +97,8 @@ const ROUTES = [
   ['/api/v1/batches', v1Batches, true],
   ['/api/v1/boards', v1Boards, true],
   ['/api/v1/labels', v1Labels, true],
+  ['/api/v1/tapes', v1Tapes, true],
+  ['/api/v1/tapes/:id', v1Tape, true],
   ['/api/v1/events', v1Events, true],
   ['/api/v1/context', v1Context, true],
   ['/api/v1/diagrams', v1Diagrams, true],

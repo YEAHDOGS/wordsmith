@@ -36,6 +36,7 @@
 
   /** A new design starts in the project being looked at, if any. */
   function create() {
+    if (store.blockedInDemo()) return;
     const diagram = store.create('diagrams', { project_id: filter !== ALL && filter !== UNLINKED ? filter : null });
     router.go('design', diagram.id);
   }

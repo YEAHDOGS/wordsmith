@@ -1,0 +1,46 @@
+{
+  "label": "Free trial ended",
+  "previewOn": "Show the paywall",
+  "previewHint": "Previews only. Nobody is locked out here, so this shows what an account sees once its free trial is over. The paywall has a button to come back.",
+  "previewNote": "Preview only: this account is not locked.",
+  "previewOff": "Back to the app",
+  "dismiss": "Close",
+  "stages": [
+    {
+      "title": "Your free trial is over",
+      "body": "Thanks for trying wordsmith for five days. It runs on cloud servers that cost real money every month, so keeping it going takes a DOGS membership on Buy Me a Coffee: $1 a month or $5 a year."
+    },
+    {
+      "title": "Alright. Same to you, pal.",
+      "body": "But honestly? I've been broke before too. I'm broke right now too. It's a dollar. The offer stands whenever you're ready."
+    }
+  ],
+  "dollar": "Join DOGS: $1 a month or $5 a year",
+  "check": "I subscribed: check again",
+  "checking": "Checking…",
+  "stillLocked": "No membership found for {email} yet. It usually shows up within a minute of joining; a different email gets linked by hand.",
+  "manual": "Join with the email you sign in with here ({email}) and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand.",
+  "signOut": "Sign out",
+  "trialLeft": "Free trial: {time} left",
+  "subscribe": "Subscribe",
+  "unreachable": "Couldn't reach wordsmith just now. Check your connection and try again.",
+  "plansLabel": "DOGS memberships",
+  "price": "${price}/mo",
+  "priceYear": "${price}/yr",
+  "coffee": "Buy DOGS a coffee: ${price}",
+  "coffeeHint": "One time, plus tax: a large pumpkin spice latte. A thank you, not a membership, so it unlocks nothing.",
+  "meter": "Free trial: {days} days",
+  "meterLeft": "{time} left",
+  "meterHint": "When it runs out, wordsmith locks until the account holds a DOGS membership: $1 a month or $5 a year.",
+  "scribe": "{neurons} Scribe AI neurons a day",
+  "tapes": "{size} of tapes",
+  "uploads": "Videos up to {size}",
+  "manualNoEmail": "Join with the email you sign in with here and wordsmith unlocks by itself, within a minute. Used a different email? Message DOGS on Buy Me a Coffee and it gets linked by hand.",
+  "units": {
+    "d": "d",
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  },
+  "stillLockedNoEmail": "No membership found yet. It usually shows up within a minute of joining; a different email gets linked by hand."
+}

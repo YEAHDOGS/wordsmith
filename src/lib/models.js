@@ -13,6 +13,85 @@ export const PROVIDERS = ['github', 'google', 'apple'];
 // The Needs you page (agent questions and the review queue, one card at a time). false hides it: no navigation entry,
 // and its address opens All notes, while its data and the agent API (ask, snooze) keep working.
 export const NEEDS_YOU_ENABLED = true;
+// Free trial and plans. New accounts get TRIAL_DAYS of full access from when they signed up, then every route but
+// sign-in and sign-out answers 402 with TRIAL_ENDED until the account holds a plan: a DOGS membership on Buy Me a
+// Coffee (the memberships table, kept by api/functions/api/webhooks/bmc.js), or one given by hand (users.access =
+// 'member' with users.plan, scripts/access.js). users.access = 'lapsed' locks an account whatever it holds.
+export const DAY_MS = 86_400_000;
+export const TRIAL_DAYS = 5;
+export const TRIAL_MS = TRIAL_DAYS * DAY_MS;
+export const TRIAL_ENDED = 'trial_ended';
+// DOGS's memberships on Buy Me a Coffee: $1 a month or $5 a year. No price is promised beyond the period paid for.
+export const SUBSCRIBE_URL = 'https://buymeacoffee.com/dogsdogsdogs/membership';
+// Buy DOGS a coffee (CoffeeButton.svelte): a one-time thank you, a large pumpkin spice latte, plus tax. It unlocks
+// nothing. Point COFFEE_URL at the Buy Me a Coffee item priced COFFEE_PRICE_USD once that exists; until then it is
+// DOGS's page, where a supporter picks the amount.
+export const COFFEE_URL = 'https://buymeacoffee.com/dogsdogsdogs';
+export const COFFEE_PRICE_USD = 6.96;
+const MB = 1024 * 1024;
+// What each plan unlocks, lowest first. `level` is the Buy Me a Coffee membership_level_id, and `monthly` and `yearly`
+// its prices in USD, which place a level added later (one with no id here) at the highest plan it pays for.
+// scribeNeurons: Scribe's daily wordsmith cloud allowance (Workers AI neurons, api/functions/api/scribe.js; everyone's
+// total is still capped by SCRIBE_DAILY_NEURONS in wrangler.jsonc). tapeBytes: the audio all of an account's tapes may
+// hold in R2 (api/functions/api/tapes/index.js; R2_MAX_GB caps everyone's total).
+// uploads: the largest video, audio file and document an account may attach to a note (uploadLimits below; images are
+// always shrunk to MAX_IMAGE_BYTES on the device). A Worker request tops out at 100 MB on the free plan, so nothing
+// goes past 95 MB, and the R2 caps in api/lib/attachments.js still bound what everyone stores together.
+export const PLANS = {
+  trial: { name: 'Free trial', level: null, monthly: 0, yearly: 0, scribeNeurons: 1_500, tapeBytes: 100 * MB, uploads: { video: 10 * MB, audio: 10 * MB, document: 5 * MB } },
+  rockstar: { name: 'Rockstar', level: 351680, monthly: 1, yearly: 5, scribeNeurons: 2_500, tapeBytes: 250 * MB, uploads: { video: 25 * MB, audio: 25 * MB, document: 10 * MB } },
+  animal: { name: 'Animal', level: 351681, monthly: 5, yearly: 50, scribeNeurons: 4_000, tapeBytes: 750 * MB, uploads: { video: 50 * MB, audio: 50 * MB, document: 25 * MB } },
+  megaman: { name: 'Megaman', level: 351700, monthly: 20, yearly: 200, scribeNeurons: 6_000, tapeBytes: 1_500 * MB, uploads: { video: 95 * MB, audio: 95 * MB, document: 50 * MB } },
+};
+/** @typedef {keyof typeof PLANS} Plan */
+const PLAN_RANK = /** @type {Plan[]} */ (Object.keys(PLANS));
+const PAID_PLANS = PLAN_RANK.filter((plan) => PLANS[plan].level !== null);
+// The currency of PLANS' prices.
+const PRICE_CURRENCY = 'USD';
+// The plan scripts/access.js gives when approving by hand without naming one.
+export const GRANTED_PLAN = 'rockstar';
+// The highest plan anyone can pay for: what the owner's own account runs on, and what Previews and staging give
+// everyone while their paywall is off (api/lib/auth.js paywallOptional).
+export const TOP_PLAN = PAID_PLANS[PAID_PLANS.length - 1];
+/** When an account's trial ends (ms). @param {{ created_at: number }} user */
+export const trialEndsAt = (user) => Number(user.created_at) + TRIAL_MS;
+
+/**
+ * The plan a Buy Me a Coffee membership pays for, or null while it isn't paid up (paused, or canceled and past the end
+ * of its paid period). A level not in PLANS gets the highest plan its price covers (prices are USD; another currency
+ * gets the lowest paid plan), and at least the lowest paid one.
+ * An active membership counts even past period_end: Buy Me a Coffee isn't documented to send an event on every
+ * renewal, so expiring on it could lock out paying members. A cancellation that never arrives (Buy Me a Coffee retries
+ * for hours and emails the owner when deliveries keep failing) shows in `npm run access -- list` instead.
+ * @param {{ level_id: number | null, duration: string, amount: number, currency?: string, status: string, period_end: number | null }} membership
+ * @param {number} now
+ * @returns {Plan | null}
+ */
+export function membershipPlan(membership, now) {
+  const paidUp = membership.status === 'active' || (membership.status === 'canceled' && Number(membership.period_end) > now);
+  if (!paidUp) return null;
+  const known = PAID_PLANS.find((plan) => PLANS[plan].level === Number(membership.level_id));
+  if (known) return known;
+  if (membership.currency && membership.currency.toUpperCase() !== PRICE_CURRENCY) return PAID_PLANS[0];
+  const price = (/** @type {Plan} */ plan) => (membership.duration === 'year' ? PLANS[plan].yearly : PLANS[plan].monthly);
+  // Not findLast: Firefox 97 (the Potato Target) lacks it.
+  return [...PAID_PLANS].reverse().find((plan) => Number(membership.amount) >= price(plan)) ?? PAID_PLANS[0];
+}
+
+/**
+ * The best plan an account holds now, or null when it is locked (the paywall). The server works this out
+ * (api/lib/auth.js) and sends it as user.plan, so the app never judges by its own clock.
+ * @param {{ access?: string, plan?: string | null, created_at: number, memberships?: any[] }} user @param {number} [now]
+ * @returns {Plan | null}
+ */
+export function planOf(user, now = Date.now()) {
+  if (user.access === 'lapsed') return null;
+  /** @type {Plan[]} */
+  const held = (user.memberships ?? []).map((membership) => membershipPlan(membership, now)).filter((plan) => plan !== null);
+  if (user.access === 'member') held.push(Object.hasOwn(PLANS, user.plan ?? '') ? /** @type {Plan} */ (user.plan) : GRANTED_PLAN);
+  if (now < trialEndsAt(user)) held.push('trial');
+  return held.sort((a, b) => PLAN_RANK.indexOf(b) - PLAN_RANK.indexOf(a))[0] ?? null;
+}
 // Longest Preview or beta password the sign-in screen accepts and the server checks.
 export const MAX_PASSWORD_LENGTH = 200;
 // Timeline entries in note_events, written by the server on every interaction.
@@ -33,10 +112,21 @@ export const AUDIO_TYPES = {
 // Kept small on purpose so R2 stays within the free tier: the app shrinks images to fit before uploading (src/lib/compress.js)
 // and the server rejects anything larger.
 export const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
-// Videos can't be re-encoded in the browser without a large library, so they're only capped: about a minute of 720p screen recording.
-export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
-// Audio stays capped at 10 MB to keep recordings useful without making storage costly.
-export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+// Videos, audio and documents can't be shrunk in the browser without a large library, so they're only capped, by plan
+// (PLANS[plan].uploads). These are the free trial's caps, the lowest: about a minute of 720p screen recording.
+export const MAX_VIDEO_BYTES = PLANS.trial.uploads.video;
+export const MAX_AUDIO_BYTES = PLANS.trial.uploads.audio;
+
+/**
+ * The largest file of each kind an account on a plan may attach to a note, in bytes. No plan, or one this build
+ * doesn't know, gets the free trial's. The app checks before uploading and the server checks again (checkUpload).
+ * @param {string | null | undefined} plan
+ * @returns {{ image: number, video: number, audio: number, document: number }}
+ */
+export function uploadLimits(plan) {
+  const known = /** @type {Plan} */ (Object.hasOwn(PLANS, plan ?? '') ? plan : 'trial');
+  return { image: MAX_IMAGE_BYTES, ...PLANS[known].uploads };
+}
 // Images up to this size are accepted for shrinking on the device before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Documents: each type and the file extensions it may carry. The server requires both to match, and never serves
@@ -48,8 +138,8 @@ export const DOCUMENT_TYPES = {
   'text/markdown': ['.md', '.markdown'],
   'text/plain': ['.txt'],
 };
-// Documents aren't shrunk on the device, so they're only capped; 5 MB covers long specs and exported PDFs.
-export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+// Documents aren't shrunk on the device, so they're only capped; the trial's 5 MB covers long specs and exported PDFs.
+export const MAX_DOCUMENT_BYTES = PLANS.trial.uploads.document;
 // The file pickers' accept list: every type, plus document extensions for systems that don't know the types.
 export const ACCEPT_ATTACHMENTS = [...IMAGE_TYPES, ...VIDEO_TYPES, ...Object.keys(AUDIO_TYPES), ...Object.values(AUDIO_TYPES).flat(), ...Object.keys(DOCUMENT_TYPES), ...Object.values(DOCUMENT_TYPES).flat()].join(',');
 
@@ -85,6 +175,28 @@ export function attachmentKind(type) {
  * extension. '' when the file can't be attached. @param {{ name: string, type: string }} file
  */
 export const uploadType = (file) => (IMAGE_TYPES.includes(file.type) || VIDEO_TYPES.includes(file.type) ? file.type : audioType(file.name) || documentType(file.name));
+// Tapes (the tapes table, the Tapes page): voice recordings shrunk to Opus on the device before they upload
+// (src/lib/tape-encode.js). At TAPE_BITRATE an hour is about 11 MB, so MAX_TAPE_BYTES holds a two-hour session.
+export const TAPE_TYPE = 'audio/ogg';
+export const TAPE_EXTENSION = '.ogg';
+export const TAPE_BITRATE = 24_000;
+export const MAX_TAPE_BYTES = 25 * 1024 * 1024;
+// Originals this large are still read on the device to be shrunk; anything bigger isn't a phone recording.
+export const MAX_TAPE_SOURCE_BYTES = 500 * 1024 * 1024;
+export const MAX_TAPES = 20_000;
+export const TAPE_EXISTS = 'tape_exists';
+export const TAPE_LIMIT = 'tape_limit';
+// The account's tapes already hold its plan's tapeBytes (PLANS above).
+export const TAPE_STORAGE = 'tape_storage';
+// A SHA-256 in hex: how a tape remembers which original file it came from.
+export const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
+// Longest recording a tape can say it is (ms): past this a duration is a mistake, not a recording.
+export const MAX_TAPE_DURATION_MS = 24 * 3_600_000;
+// The owner's verdict on a tape (tapes.rating). Index = stored value; GOLD_RATING is the one worth going back to.
+export const TAPE_RATINGS = ['Unrated', 'Trash', 'Maybe', 'Gold'];
+export const GOLD_RATING = TAPE_RATINGS.indexOf('Gold');
+// An hour of fast rap is about 10,000 words; this holds several.
+export const MAX_TRANSCRIPT = 100_000;
 export const MAX_ATTACHMENTS_PER_NOTE = 20;
 export const MAX_FILE_NAME = 200;
 export const ACTOR_TYPES = ['user', 'agent', 'github'];
@@ -133,7 +245,6 @@ export const SMALL_DIFFICULTY = DIFFICULTY_LABELS.indexOf('Easy');
 export const MAX_ANALYSIS = 20_000;
 // Trash: deleted rows of these tables stay recoverable for TRASH_DAYS, then the server purges them (api/lib/trash.js).
 export const TRASH_DAYS = 30;
-export const DAY_MS = 86_400_000;
 export const TRASH_MS = TRASH_DAYS * DAY_MS;
 export const TRASH_TABLES = ['notes', 'projects', 'labels', 'note_groups'];
 // Design diagrams (the Design page; the diagrams table; src/lib/diagram.js draws them). A node is one box; its kind picks the
@@ -221,6 +332,17 @@ export const MODELS = {
     // Board column ids (boards.columns[].id) where it's folded: each column folds its own copy of the group
     folded_columns: { type: 'ids', max: MAX_COLUMNS, default: [] },
   },
+  // Voice recordings. Created only by uploading their audio (POST /api/tapes); sync edits these fields.
+  tapes: {
+    title: { type: 'text', max: MAX_TITLE, default: '' },
+    // The owner's notes or lyrics, Markdown.
+    body: { type: 'text', max: MAX_BODY, default: '' },
+    rating: { type: 'int', min: 0, max: TAPE_RATINGS.length - 1, default: 0 },
+    // Written by the desktop app's local speech engine (src/lib/tape-transcribe.svelte.js); the owner may correct it.
+    transcript: { type: 'text', max: MAX_TRANSCRIPT, default: '' },
+    transcript_model: { type: 'text', max: MAX_NAME, default: '' },
+    transcribed_at: { type: 'real', nullable: true, default: null },
+  },
   // Design diagrams: boxes (nodes) joined by arrows (edges). Shapes are checked by cleanNodes and cleanEdges.
   diagrams: {
     project_id: { type: 'id', nullable: true, default: null },
@@ -234,12 +356,14 @@ export const MODELS = {
 // Columns only the server writes (lifecycle timestamps). Clients read them but never send them.
 // purged_at: when a deleted row left the trash for good (migration 20261028100000); restoring it clears it.
 /** @type {Record<string, string[]>} */
-export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [] };
+export const SERVER_FIELDS = { projects: ['name_key', 'purged_at'], labels: ['purged_at'], notes: ['started_at', 'completed_at', 'prs_checked_at', 'analyzed_at', 'purged_at', 'created_by', 'created_by_type'], boards: [], note_groups: ['purged_at'], diagrams: [],
+  // Set from the upload (POST /api/tapes); audio_size drops to 0 once a deleted tape's audio is gone.
+  tapes: ['source_name', 'source_hash', 'source_size', 'recorded_at', 'duration_ms', 'audio_type', 'audio_size'] };
 
 // Columns stored as JSON text in D1 and as real arrays everywhere else.
 export const JSON_FIELDS = ['label_ids', 'pull_requests', 'columns', 'folded_columns', 'nodes', 'edges'];
 // Every table the app keeps on the device and syncs (api/functions/api/sync.js, src/lib/store.svelte.js).
-export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams']);
+export const SYNCED_TABLES = /** @type {const} */ (['projects', 'labels', 'notes', 'boards', 'note_groups', 'diagrams', 'tapes']);
 export const BOOL_FIELDS = ['pinned', 'archived', 'public', 'collapsed'];
 // Public notes are served at this path on the app's origin.
 export const SHARE_PATH = '/n/';

@@ -1,0 +1,134 @@
+// The Tapes page's player: one audio element for every tape, so starting one stops the last. Next and previous
+// follow the list as it's shown (sorted and searched). On phones the lock screen and headphone buttons drive it
+// too (Media Session). The Tapes page pauses it when you leave.
+import { mediaUrl } from '../lib/api.js';
+
+const SKIP_SECONDS = 10;
+// Pressing previous this far into a tape starts it over instead of going back.
+const RESTART_AFTER_S = 3;
+const MEDIA_ACTIONS = /** @type {const} */ (['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward']);
+
+
+class TapePlayer {
+  /** The tape playing or paused, or null when the player is closed. @type {any} */
+  tape = $state(null);
+  playing = $state(false);
+  loading = $state(false);
+  time = $state(0);
+  duration = $state(0);
+  error = $state('');
+  /** The tapes in the order the page shows them: next and previous walk this. @type {any[]} */
+  order = [];
+
+  /** @type {HTMLAudioElement | null} */ #audio = null;
+  #url = '';
+
+  #element() {
+    if (this.#audio) return this.#audio;
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.addEventListener('timeupdate', () => (this.time = audio.currentTime));
+    audio.addEventListener('durationchange', () => (this.duration = Number.isFinite(audio.duration) ? audio.duration : this.duration));
+    audio.addEventListener('play', () => (this.playing = true));
+    audio.addEventListener('pause', () => (this.playing = false));
+    audio.addEventListener('ended', () => this.next());
+    audio.addEventListener('error', () => {
+      if (this.tape) this.error = 'error';
+    });
+    this.#audio = audio;
+    this.#mediaSession();
+    return audio;
+  }
+
+  /** Plays a tape from the start, or toggles it when it's the one loaded. @param {any} tape */
+  async play(tape) {
+    if (this.tape?.id === tape.id) return this.toggle();
+    const audio = this.#element();
+    audio.pause();
+    this.#release();
+    Object.assign(this, { tape, time: 0, duration: (tape.duration_ms || 0) / 1000, error: '', loading: true });
+    try {
+      const url = await mediaUrl(`/api/tapes/${tape.id}/audio`);
+      // Another tape was picked while this one loaded.
+      if (this.tape?.id !== tape.id) {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+        return;
+      }
+      this.#url = url;
+      audio.src = url;
+      await audio.play();
+      if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: tape.title || tape.source_name, artist: 'wordsmith' });
+    } catch {
+      // Only for the tape still loaded: a tape picked meanwhile has its own load to report.
+      if (this.tape?.id === tape.id) this.error = 'error';
+    } finally {
+      if (this.tape?.id === tape.id) this.loading = false;
+    }
+  }
+
+  toggle() {
+    const audio = this.#audio;
+    if (!audio || !this.tape) return;
+    if (audio.paused) audio.play().catch(() => (this.error = 'error'));
+    else audio.pause();
+  }
+
+  pause() {
+    this.#audio?.pause();
+  }
+
+  /** @param {number} seconds */
+  seek(seconds) {
+    if (!this.#audio) return;
+    this.#audio.currentTime = Math.max(0, Math.min(seconds, this.duration || seconds));
+  }
+
+  next() {
+    const index = this.order.findIndex((tape) => tape.id === this.tape?.id);
+    // The tape playing isn't in the list any more (filtered or searched away): stop rather than jump to the top.
+    const following = index < 0 ? null : this.order[index + 1];
+    if (following) this.play(following);
+    else this.#audio?.pause();
+  }
+
+  previous() {
+    if (this.time > RESTART_AFTER_S) return this.seek(0);
+    const index = this.order.findIndex((tape) => tape.id === this.tape?.id);
+    if (index > 0) this.play(this.order[index - 1]);
+  }
+
+  /** Stops and hides the player. */
+  close() {
+    this.#audio?.pause();
+    this.#release();
+    this.tape = null;
+  }
+
+  #release() {
+    if (this.#audio) this.#audio.removeAttribute('src');
+    if (this.#url.startsWith('blob:')) URL.revokeObjectURL(this.#url);
+    this.#url = '';
+  }
+
+  #mediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    /** @type {Record<(typeof MEDIA_ACTIONS)[number], () => void>} */
+    const handlers = {
+      play: () => this.toggle(),
+      pause: () => this.pause(),
+      previoustrack: () => this.previous(),
+      nexttrack: () => this.next(),
+      seekbackward: () => this.seek(this.time - SKIP_SECONDS),
+      seekforward: () => this.seek(this.time + SKIP_SECONDS),
+    };
+    for (const action of MEDIA_ACTIONS) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handlers[action]);
+      } catch {
+        // This browser doesn't offer that action.
+      }
+    }
+  }
+}
+
+export const player = new TapePlayer();
