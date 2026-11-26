@@ -9,6 +9,7 @@
   import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import Archive from '@lucide/svelte/icons/archive';
   import Building2 from '@lucide/svelte/icons/building-2';
+  import Sprout from '@lucide/svelte/icons/sprout';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import Settings from '@lucide/svelte/icons/settings';
   import Plus from '@lucide/svelte/icons/plus';
