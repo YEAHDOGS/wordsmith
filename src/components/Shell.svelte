@@ -15,7 +15,6 @@
   import ProjectHeader from './ProjectHeader.svelte';
   import NoteEditor from './NoteEditor.svelte';
   import DemoGuard from './DemoGuard.svelte';
-  import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
   import ProjectDesigns from './ProjectDesigns.svelte';
@@ -51,6 +50,8 @@
   // So does the ticket calendar, and the guided tour.
   const loadCalendar = () => import('./Calendar.svelte');
   const loadTour = () => import('./Tour.svelte');
+  // Settings too: its cards (appearance, speech models, agent setup) are only needed on that page.
+  const loadSettings = () => import('./Settings.svelte');
   // And the AI Garden preview.
   const loadGarden = () => import('./AIGarden.svelte');
   // And the desktop apps' mini Scribe strip.
@@ -222,7 +223,7 @@
       {#key pageKey}
         <div class="absolute inset-0 flex flex-col" in:pageIn out:pageOut>
           {#if route.view === 'settings'}
-            <Settings />
+            <LazyPage load={loadSettings} />
           {:else if route.view === 'trash'}
             <Trash />
           {:else if route.view === 'attention'}
