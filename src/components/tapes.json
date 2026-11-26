@@ -6,7 +6,7 @@
   "dropHere": "Drop recordings to import them",
   "dropHint": "MP3, M4A, WAV, FLAC or Ogg. Each one is shrunk to about a fifth before it uploads; the originals stay on this device.",
   "search": "Search titles, notes and transcripts",
-  "empty": "No tapes yet. Import your recorder's folder: a thousand files is fine, and importing it again only adds new ones.",
+  "empty": "No tapes yet. Record one on the Scribe side with Just record, or import your recorder's folder: a thousand files is fine, and importing it again only adds new ones.",
   "noMatches": "No tapes match.",
   "importing": "Importing {done} of {total}",
   "imported": "Imported {done} of {total}",
@@ -16,6 +16,9 @@
   "retry": "Retry failed",
   "cancel": "Stop after these",
   "dismiss": "Clear",
+  "discard": "Discard",
+  "discardYes": "Delete recording",
+  "discardHint": "Delete this recording for good. It was never uploaded, so there is no other copy.",
   "status": {
     "waiting": "Waiting",
     "reading": "Reading",

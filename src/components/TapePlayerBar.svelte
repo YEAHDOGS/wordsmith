@@ -9,7 +9,8 @@
   import SkipForward from '@lucide/svelte/icons/skip-forward';
   import LoaderCircle from '@lucide/svelte/icons/loader-circle';
   import X from '@lucide/svelte/icons/x';
-  import { clock, player } from './tape-player.svelte.js';
+  import { player } from './tape-player.svelte.js';
+  import { clock } from '../lib/time.js';
   import TEXT from './tapes.json';
 
   const ENTER = { y: 24, duration: 220, easing: quintOut };

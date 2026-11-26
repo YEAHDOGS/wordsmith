@@ -2,12 +2,11 @@
 // per month). That allowance is shared by the whole Cloudflare account (other buckets, and wordsmith's staging and production),
 // so each environment gets its own slice via R2_MAX_GB / R2_MAX_MONTHLY_WRITES / R2_MAX_MONTHLY_READS in wrangler.jsonc.
 // When a cap is reached the request is refused with 507 instead of costing money. The bucket is private: every byte goes through here.
-import { AUDIO_TYPES, DOCUMENT_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_AUDIO_BYTES, MAX_DOCUMENT_BYTES, MAX_FILE_NAME, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, attachmentKind, audioType, documentType } from '../../src/lib/models.js';
+import { AUDIO_TYPES, DOCUMENT_TYPES, MAX_ATTACHMENTS_PER_NOTE, MAX_FILE_NAME, attachmentKind, audioType, documentType, uploadLimits } from '../../src/lib/models.js';
 import { HttpError } from './http.js';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
-const MAX_BYTES = { image: MAX_IMAGE_BYTES, video: MAX_VIDEO_BYTES, audio: MAX_AUDIO_BYTES, document: MAX_DOCUMENT_BYTES };
 const PLURAL = { image: 'Images', video: 'Videos', audio: 'Audio files', document: 'Documents' };
 const ERROR_TYPE = 'Only supported images, videos, audio files, and documents can be attached';
 // Conservative fallbacks if an environment forgets to set its slice.
@@ -74,19 +73,21 @@ export async function release(env, bytes) {
 }
 
 /**
- * Validates an upload's type, size and name before any bytes are stored.
+ * Validates an upload's type, size and name before any bytes are stored. The size cap is the account's plan's
+ * (models.js uploadLimits).
  * @param {string} type
  * @param {number} size
  * @param {string} name
+ * @param {string | null} [plan] the uploader's plan (auth.user.plan)
  */
-export function checkUpload(type, size, name) {
+export function checkUpload(type, size, name, plan = null) {
   const kind = attachmentKind(type);
   if (!kind) throw new HttpError(415, ERROR_TYPE);
   if (kind === 'audio' && audioType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${AUDIO_TYPES[/** @type {keyof typeof AUDIO_TYPES} */ (type)].join(' or ')}`);
   // A document's name has to carry its type's extension, so a file can't claim to be text and download as something else.
   if (kind === 'document' && documentType(name) !== type) throw new HttpError(415, `${type} files need a name ending in ${DOCUMENT_TYPES[/** @type {keyof typeof DOCUMENT_TYPES} */ (type)].join(' or ')}`);
   if (!Number.isFinite(size) || size <= 0) throw new HttpError(411, 'Content-Length is required');
-  const max = MAX_BYTES[kind];
+  const max = uploadLimits(plan)[kind];
   if (size > max) throw new HttpError(413, `${PLURAL[kind]} can be at most ${Math.round(max / MB)} MB`);
   return name.replace(/[\\/\r\n\t"]/g, '_').trim().slice(0, MAX_FILE_NAME) || kind;
 }

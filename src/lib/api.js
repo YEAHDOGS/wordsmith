@@ -1,12 +1,24 @@
 // Fetch wrapper for the wordsmith API. The web app uses its HttpOnly session cookie; native apps send a bearer token.
 import { isTauri } from '@tauri-apps/api/core';
+import { TRIAL_ENDED } from './models.js';
 
 // Native bundles have no same-origin API, so they are built with VITE_API_BASE=https://wordsmith.dogs.red.
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const TOKEN_KEY = 'ws_session_token';
+const DEMO_KEY = 'ws_demo';
 const NO_CONTENT = 204;
+const DEMO_STATUS = 403;
+export const DEMO_CODE = 'demo';
+const DEMO_MESSAGE = 'This is the demo: nothing is sent to the server. Sign in to use this.';
 
 export const IS_NATIVE = isTauri();
+const PAYMENT_REQUIRED = 402;
+/** Called when the server says the free trial is over (auth.svelte.js shows the paywall). @type {() => void} */
+let onTrialEnded = () => {};
+/** @param {() => void} handler */
+export function whenTrialEnds(handler) {
+  onTrialEnded = handler;
+}
 
 /** API error with the HTTP status, and the server's code when it sent one (src/lib/models.js). */
 export class ApiError extends Error {
@@ -25,12 +37,25 @@ export const sessionToken = {
   set: (token) => (token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY)),
 };
 
+/** Demo mode: the app runs on sample data in memory and no request ever leaves the device. */
+export const demoMode = {
+  get: () => localStorage.getItem(DEMO_KEY) === '1',
+  /** @param {boolean} on */
+  set: (on) => (on ? localStorage.setItem(DEMO_KEY, '1') : localStorage.removeItem(DEMO_KEY)),
+};
+
+/** Refuses a request in demo mode, before anything reaches the network. */
+function refuseInDemo() {
+  if (demoMode.get()) throw new ApiError(DEMO_STATUS, DEMO_MESSAGE, DEMO_CODE);
+}
+
 /**
  * Calls the API and returns parsed JSON (null for 204).
  * @param {string} path
  * @param {{ method?: string, body?: any, signal?: AbortSignal }} [options] `signal` gives the request up early
  */
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  refuseInDemo();
   /** @type {Record<string, string>} */
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -45,6 +70,8 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   });
   if (response.status === NO_CONTENT) return null;
   const data = await response.json().catch(() => ({}));
+  // Only the trial's own refusal locks the app, never some other payment-required answer passed along.
+  if (response.status === PAYMENT_REQUIRED && data.code === TRIAL_ENDED) onTrialEnded();
   if (!response.ok && response.status !== 202) throw new ApiError(response.status, data.error || `Request failed (${response.status})`, data.code);
   return data;
 }
@@ -58,6 +85,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
  * @returns {Promise<any>}
  */
 export function uploadFile(path, file, onProgress, headers = {}) {
+  refuseInDemo();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API_BASE + path);
@@ -90,6 +118,7 @@ export function uploadFile(path, file, onProgress, headers = {}) {
  * @param {string} path
  */
 export async function mediaUrl(path) {
+  refuseInDemo();
   const token = sessionToken.get();
   if (!token && !API_BASE) return path;
   const response = await fetch(API_BASE + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

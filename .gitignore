@@ -28,9 +28,7 @@ src/tauri/gen/
 src/tauri/tauri.release.conf.json
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -42,3 +40,5 @@ src/tauri/tauri.release.conf.json
 # Local Worker secrets
 .dev.vars
 
+# Agent tools' local files (launch configs, worktrees); nothing in them belongs in the repo
+.claude/

@@ -43,6 +43,17 @@ export async function hmacSha256(keyText, message) {
   return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Constant-time check of a webhook's hex HMAC-SHA-256 signature over its raw body (GitHub, Buy Me a Coffee).
+ * @param {string} keyText @param {string} body @param {string} hex
+ */
+export async function verifyHmacSha256(keyText, body, hex) {
+  if (!/^[0-9a-f]{64}$/i.test(hex)) return false;
+  const key = await crypto.subtle.importKey('raw', encoder.encode(keyText), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  const bytes = Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, 16));
+  return crypto.subtle.verify('HMAC', key, bytes, encoder.encode(body));
+}
+
 /** PKCE S256 challenge for a verifier. @param {string} verifier */
 export async function pkceChallenge(verifier) {
   return base64url(await crypto.subtle.digest('SHA-256', encoder.encode(verifier)));

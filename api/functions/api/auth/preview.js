@@ -16,7 +16,8 @@ export async function onRequestPost({ request, env }) {
   const password = (await readJson(request))?.password;
   if (typeof password !== 'string' || !password || password.length > MAX_PASSWORD_LENGTH) throw new HttpError(400, 'Enter the Preview password');
   if (!(await sameSecret(password, env.PREVIEW_PASSWORD))) throw new HttpError(403, 'Wrong password');
-  await env.DB.prepare('INSERT OR IGNORE INTO users (id, email, name, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)')
+  // A test account on local or staging data: never on the free trial (use scripts/access.js to try the lock).
+  await env.DB.prepare("INSERT OR IGNORE INTO users (id, email, name, avatar_url, created_at, access) VALUES (?, ?, ?, NULL, ?, 'member')")
     .bind(PREVIEW_USER.id, PREVIEW_USER.email, PREVIEW_USER.name, Date.now()).run();
   const token = await createSession(env, PREVIEW_USER.id, request);
   return json({ token }, 200, { 'Set-Cookie': cookie(request, SESSION_COOKIE, token, { maxAge: SESSION_MAX_AGE_SECONDS }) });

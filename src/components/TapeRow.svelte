@@ -15,7 +15,8 @@
   import { CLOUD_TRANSCRIPT_MODEL, TAPE_TYPE, GOLD_RATING, MAX_BODY, MAX_TITLE, MAX_TRANSCRIPT } from '../lib/models.js';
   import { speech } from '../lib/speech.svelte.js';
   import { transcriber } from '../lib/tape-transcribe.svelte.js';
-  import { clock, player } from './tape-player.svelte.js';
+  import { player } from './tape-player.svelte.js';
+  import { clock } from '../lib/time.js';
   import TEXT from './tapes.json';
 
   /** @type {{ tape: any, open: boolean, ontoggle: () => void }} */

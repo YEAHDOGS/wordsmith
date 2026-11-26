@@ -6,15 +6,15 @@
 // Keyboard: Alt+Arrow on a focused card moves it one step (or one board column sideways).
 // Order is stored in notes.position (REAL, lower first) with fractional indexing: a moved note takes the midpoint of
 // its new neighbours, so a drop writes one row. Notes never placed by hand sort by a key implied by their age.
+// What the order means (the top stack of new tickets, then priority, then position) is in src/lib/order.js.
 import { tick } from 'svelte';
-import { MAX_DIFFICULTY, MAX_PRIORITY } from './models.js';
+import { POSITION_STEP, TOP_LIMIT, TOP_RUN, onTop, orderKey } from './order.js';
 import { buzz } from './press.js';
 import { store } from './store.svelte.js';
 import { ui } from './ui.svelte.js';
 
 const ZONE_ATTR = 'data-drop-zone';
 const CARD_SELECTOR = '[data-flip-id]';
-const POSITION_STEP = 1024;
 // Smallest gap a respace leaves between two notes whose keys were equal (keys are millisecond-sized, so 1 is tiny).
 const MIN_GAP = 1;
 // Auto-scroll: within EDGE_PX of a list's edge it scrolls, faster the closer the pointer, up to MAX_SCROLL_PX a frame.
@@ -49,31 +49,33 @@ const SIDEWAYS_KEYS = ['ArrowLeft', 'ArrowRight'];
  * @property {() => boolean | undefined} [unchanged] whether the drop shown would leave the zone as it is (undefined: judge by index)
  */
 
-/**
- * Sort key for manual order: the stored position, else one implied by age in the same number space. Features run
- * oldest first (claim order; matches COALESCE(position, created_at) in api/lib/agent.js), notes newest first.
- * @param {any} note
- */
-export function orderKey(note) {
-  return note.position ?? (note.kind === 'feature' ? note.created_at : -note.created_at);
-}
-
-// Level fields a zone can sort by, with each one's top level. `true` for byLevel means priority (the feature board).
-const LEVEL_MAX = { priority_level: MAX_PRIORITY, difficulty: MAX_DIFFICULTY };
+// Level fields a zone can sort by. `true` for byLevel means priority (the feature board).
 const DEFAULT_LEVEL = 'priority_level';
 
-/** Position for a new note: one step ahead of every note's key, so it lands first in manual order, board and claim queue. */
-export function topPosition() {
-  const keys = store.notes.filter((note) => !note.deleted_at).map(orderKey);
-  return (keys.length ? Math.min(...keys) : Date.now()) - POSITION_STEP;
+/**
+ * A position between two neighbours' keys (either may be missing), or null when there is no room left between them.
+ * A slot between the top stack's last ticket and the first one under it takes its place just above that one, so it
+ * never lands in the stack by accident; after the stack's last ticket with nothing under it, it stays in the stack.
+ * @param {number | null} low @param {number | null} high @param {number} fallback used when it has no neighbours
+ */
+function between(low, high, fallback) {
+  if (low !== null && high !== null && low <= TOP_LIMIT && high > TOP_LIMIT) return high - POSITION_STEP > TOP_LIMIT ? high - POSITION_STEP : null;
+  if (low !== null && high !== null) {
+    const middle = low + (high - low) / 2;
+    return middle > low && middle < high ? middle : null;
+  }
+  if (low !== null) return low > TOP_LIMIT || low + POSITION_STEP <= TOP_LIMIT ? low + POSITION_STEP : null;
+  if (high !== null) return high - POSITION_STEP;
+  return fallback;
 }
 
 /**
  * The writes for dropping `note` at `index` of `list` (the zone's order without it). With byLevel (a level field, or
- * true for priority) the list runs highest level first: the note keeps its level when that fits between its
- * neighbours, else takes the nearest one that does, then gets a position among the notes of that level. When the
- * doubles between two neighbours have run out (or they share a key), the whole zone is respaced in its new order
- * (rare; see respace).
+ * true for priority) the list runs in queue order (src/lib/order.js): the top stack, then highest level first. The
+ * note joins the run it lands in: dropped among stacked tickets it is stacked, keeping its level; dropped under them
+ * it keeps its level when that fits between its neighbours, else takes the nearest one that does. Then it gets a
+ * position among the notes of that run. When the doubles between two neighbours have run out (or they share a key),
+ * the whole zone is respaced in its new order (rare; see respace).
  * @param {any[]} list
  * @param {any} note
  * @param {number} index
@@ -85,26 +87,24 @@ export function placeNote(list, note, index, byLevel = false) {
   const after = list[index] ?? null;
   const field = byLevel === true ? DEFAULT_LEVEL : byLevel || null;
   const levelOf = (/** @type {any} */ entry) => (field ? entry[field] ?? 0 : 0);
-  const level = field ? Math.min(Math.max(levelOf(note), after ? levelOf(after) : 0), before ? levelOf(before) : LEVEL_MAX[field]) : 0;
-  // A neighbour bounds the position only when it sorts in the same run (same level, when sorting by one).
-  const bounds = (/** @type {any} */ neighbour) => neighbour && (!field || levelOf(neighbour) === level);
+  // The run a note sorts in: the top stack, or its level.
+  const runOf = (/** @type {any} */ entry) => (onTop(entry) ? TOP_RUN : levelOf(entry));
+  // It lands in the stack when the ticket under the slot is stacked, or when it is stacked itself and nothing
+  // unstacked sits above the slot. Otherwise it takes the level nearest its own that fits between its neighbours.
+  const stacked = Boolean(field) && ((after && onTop(after)) || (onTop(note) && (!before || onTop(before))));
+  const run = !field ? 0 : stacked ? TOP_RUN : Math.min(Math.max(levelOf(note), after ? levelOf(after) : 0), before ? runOf(before) : TOP_RUN);
+  // A neighbour bounds the position only when it sorts in the same run.
+  const bounds = (/** @type {any} */ neighbour) => neighbour && (!field || runOf(neighbour) === run);
   const low = bounds(before) ? orderKey(before) : null;
   const high = bounds(after) ? orderKey(after) : null;
-  /** @type {number | null} */
-  let position = orderKey(note);
-  if (low !== null && high !== null) {
-    const middle = low + (high - low) / 2;
-    position = middle > low && middle < high ? middle : null;
-  } else if (low !== null) {
-    position = low + POSITION_STEP;
-  } else if (high !== null) {
-    position = high - POSITION_STEP;
-  }
-  const extra = field && level !== levelOf(note) ? { [field]: level } : {};
+  // Alone in its run it keeps its own key, unless that key belongs to the stack it just left.
+  const own = field && run !== TOP_RUN && onTop(note) ? note.created_at : orderKey(note);
+  const position = between(low, high, own);
+  const extra = field && run !== TOP_RUN && run !== levelOf(note) ? { [field]: run } : {};
   if (position !== null) return [{ id: note.id, patch: { ...extra, position } }];
   const writes = respace([...list.slice(0, index), note, ...list.slice(index)]);
-  const own = writes.find((write) => write.id === note.id);
-  if (own) Object.assign(own.patch, extra);
+  const moved = writes.find((write) => write.id === note.id);
+  if (moved) Object.assign(moved.patch, extra);
   else writes.push({ id: note.id, patch: extra });
   return writes;
 }
@@ -128,14 +128,17 @@ export function placeNotes(list, notes, index, byLevel = false) {
   if (!notes.some(levelSort)) {
     const before = list[index - 1] ?? null;
     const after = list[index] ?? null;
-    const low = before ? orderKey(before) : null;
     const high = after ? orderKey(after) : null;
+    // Between the top stack's last ticket and the first one under it, the block sits just above that one (see between).
+    const low = before && !(high !== null && high > TOP_LIMIT && onTop(before)) ? orderKey(before) : null;
     const count = notes.length;
     const positions = notes.map((_, slot) => (low !== null && high !== null ? low + ((high - low) * (slot + 1)) / (count + 1)
       : low !== null ? low + POSITION_STEP * (slot + 1)
         : high !== null ? high - POSITION_STEP * (count - slot) : null));
     const fits = positions.every((position, slot) => position !== null && (low === null || position > low) && (high === null || position < high)
-      && (slot === 0 || position > /** @type {number} */ (positions[slot - 1])));
+      && (slot === 0 || position > /** @type {number} */ (positions[slot - 1]))
+      // The spacing alone never pushes a block into the stack, or out of it.
+      && (position <= TOP_LIMIT) === ((low ?? high ?? 0) <= TOP_LIMIT));
     if (fits) return notes.map((note, slot) => ({ id: note.id, patch: { position: /** @type {number} */ (positions[slot]) } }));
     return respace([...list.slice(0, index), ...notes, ...list.slice(index)]);
   }
@@ -554,6 +557,21 @@ class Drag {
 }
 
 export const drag = new Drag();
+
+/**
+ * Svelte action for a list of cards: a note made on this device while the list is showing is scrolled into view, so a
+ * new ticket is seen landing on top even when the list was scrolled down (on phones the board swipes to its lane).
+ * @param {HTMLElement} node
+ */
+export function followCreated(node) {
+  let seen = store.createdNote;
+  $effect(() => {
+    const id = store.createdNote;
+    if (!id || id === seen) return;
+    seen = id;
+    tick().then(() => node.querySelector(`[data-flip-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }));
+  });
+}
 
 /**
  * Svelte action: makes a list a drop zone for dragged cards.

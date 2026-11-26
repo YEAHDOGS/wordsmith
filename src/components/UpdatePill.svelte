@@ -7,6 +7,7 @@
   import ArrowUpCircle from '@lucide/svelte/icons/circle-arrow-up';
   import X from '@lucide/svelte/icons/x';
   import { updates } from '../lib/updates.svelte.js';
+  import { mini } from '../lib/mini-scribe.svelte.js';
   import TEXT from './updates.json';
 
   const PILL = { start: 0.6, duration: 200, easing: backOut };
@@ -15,7 +16,8 @@
   const action = $derived(updates.status === 'installing' ? TEXT.restarting : updates.status === 'available' ? TEXT.get : TEXT.restart);
 </script>
 
-{#if updates.showPill}
+<!-- Not while the window is the Mini Scribe strip: it would sit hidden under it, still reachable by keyboard -->
+{#if updates.showPill && !mini.on}
   <div class="fixed right-2 bottom-20 z-30 flex max-w-[calc(100vw-1rem)] items-stretch border border-accent bg-surface text-xs text-ink shadow-md sm:right-4 md:bottom-4 tv:text-lg"
     role="status" aria-label={TEXT.pillLabel} transition:scale={PILL}>
     <button class="spring press group flex min-w-0 items-center gap-2 py-1.5 pr-2 pl-2.5 hover:bg-accent-soft disabled:opacity-60"

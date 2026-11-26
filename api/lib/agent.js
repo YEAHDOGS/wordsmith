@@ -5,6 +5,7 @@ import { HttpError } from './http.js';
 import { refreshPullRequests } from './github.js';
 import { saveNotes } from './notes.js';
 import { safeJson, toApi } from './rows.js';
+import { QUEUE_ORDER_SQL } from '../../src/lib/order.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -18,8 +19,9 @@ const TRIAGE_FIELDS = ['difficulty', 'analysis', 'batch'];
 // A GitHub repo as owner/name, the form the app stores in projects.repo: owner letters, digits and hyphens; the repo
 // name not '.' or '..'.
 const REPO_PATTERN = /^[A-Za-z0-9-]+\/(?!\.\.?$)[\w.-]+$/;
-// Claim order for features: priority first, then hand-placed order (src/lib/reorder.svelte.js orderKey), then age.
-const CLAIM_ORDER = 'priority_level DESC, COALESCE(position, created_at) ASC, created_at ASC';
+// Claim order for features: queue order, the same as the board's Requested columns (src/lib/order.js): new tickets
+// on top, then priority, then hand-placed order, then age.
+const CLAIM_ORDER = QUEUE_ORDER_SQL;
 
 /**
  * Finds a project by id or case-insensitive name.
@@ -320,7 +322,7 @@ export async function claimFeature(env, userId, actor, id) {
 }
 
 /**
- * Claims the most important, oldest requested feature (optionally within one project).
+ * Claims the requested feature at the top of the queue (optionally within one project).
  * @param {Record<string, any>} env
  * @param {string} userId
  * @param {import('./notes.js').Actor} actor
