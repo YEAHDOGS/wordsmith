@@ -15,7 +15,6 @@
   import ProjectHeader from './ProjectHeader.svelte';
   import NoteEditor from './NoteEditor.svelte';
   import DemoGuard from './DemoGuard.svelte';
-  import Settings from './Settings.svelte';
   import PullRequests from './PullRequests.svelte';
   import ProjectMedia from './ProjectMedia.svelte';
   import ProjectDesigns from './ProjectDesigns.svelte';
@@ -51,6 +50,10 @@
   // So does the ticket calendar, and the guided tour.
   const loadCalendar = () => import('./Calendar.svelte');
   const loadTour = () => import('./Tour.svelte');
+  // Settings too: its cards (appearance, speech models, agent setup) are only needed on that page.
+  const loadSettings = () => import('./Settings.svelte');
+  // And the AI Garden preview.
+  const loadGarden = () => import('./AIGarden.svelte');
   // And the desktop apps' mini Scribe strip.
   const loadMini = () => import('./MiniScribe.svelte');
   const loadProjects = () => import('./ProjectsBoard.svelte');
@@ -86,6 +89,12 @@
   onDestroy(() => mini.exit());
 
   let projectTab = $state('board');
+  let gardenMode = $state(false);
+  // Latches once the garden has been opened: from then on it stays mounted.
+  let gardenSeen = $state(false);
+  $effect.pre(() => {
+    if (gardenMode) gardenSeen = true;
+  });
   const route = $derived(router.route);
   const pageKey = $derived(route.id ? `${route.view}/${route.id}` : ONE_PAGE[/** @type {keyof typeof ONE_PAGE} */ (route.view)] ?? route.view);
   const live = $derived(store.notes.filter((note) => !note.deleted_at));
@@ -197,21 +206,24 @@
 <!-- Inert behind the Mini Scribe strip, so keyboard focus can't wander into the hidden app -->
 <div class="flex h-dvh w-full overflow-hidden bg-app text-ink" inert={mini.on}>
   <aside class="hidden w-16 shrink-0 border-r border-line md:block lg:w-64 ultrawide:w-72 tv:w-80">
-    <div class="h-full lg:hidden"><Sidebar compact /></div>
-    <div class="hidden h-full lg:block"><Sidebar /></div>
+    <div class="h-full lg:hidden"><Sidebar compact bind:gardenMode /></div>
+    <div class="hidden h-full lg:block"><Sidebar bind:gardenMode /></div>
   </aside>
 
   <div class="flex min-w-0 flex-1 flex-col">
     <div class="relative">
-      <TopBar title={view.title} subtitle={view.subtitle} onsettings={openSettings} />
+      <TopBar title={gardenMode ? 'AI Garden' : view.title} subtitle={gardenMode ? '' : view.subtitle} onsettings={gardenMode ? null : openSettings} />
       {#if ui.selected.size}<SelectionBar notes={visible} archiveView={route.view === 'archive'} projectId={route.view === 'project' ? (project?.id ?? null) : null} />{/if}
     </div>
 
     <main class="relative min-h-0 flex-1 overflow-hidden">
+      <!-- The AI Garden preview loads on first visit and then stays mounted, so its scene keeps its state while you look at notes -->
+      {#if gardenSeen}<div class="h-full {gardenMode ? '' : 'hidden'}"><LazyPage load={loadGarden} onleave={() => (gardenMode = false)} /></div>{/if}
+      {#if !gardenMode}
       {#key pageKey}
         <div class="absolute inset-0 flex flex-col" in:pageIn out:pageOut>
           {#if route.view === 'settings'}
-            <Settings />
+            <LazyPage load={loadSettings} />
           {:else if route.view === 'trash'}
             <Trash />
           {:else if route.view === 'attention'}
@@ -272,6 +284,7 @@
           {/if}
         </div>
       {/key}
+      {/if}
     </main>
 
     <div class="md:hidden"><BottomNav onnew={newNote} /></div>
@@ -281,7 +294,7 @@
     <div class="fixed inset-0 z-40 flex lg:hidden">
       <button class="absolute inset-0 bg-scrim" aria-label="Close navigation" onclick={() => (ui.drawerOpen = false)} in:fade={{ duration: 220 }} out:fade={{ duration: 180 }}></button>
       <div class="relative h-full w-72 max-w-[85vw] border-r border-line" in:fly={DRAWER_IN} out:fly={DRAWER_OUT}>
-        <Sidebar />
+        <Sidebar bind:gardenMode />
       </div>
     </div>
   {/if}
